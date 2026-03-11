@@ -8,7 +8,7 @@ export const DOWNLOAD_CONFIG = {
   baseUrl: 'https://xiuer.work',
 
   // OSS 直连地址（备用）
-  ossBaseUrl: 'https://xiuer-download.oss-cn-hangzhou.aliyuncs.com',
+  ossBaseUrl: 'https://xiuer-live-tools-download.oss-cn-hangzhou.aliyuncs.com',
 
   // GitHub Release（海外备用）
   githubBaseUrl: 'https://github.com/Xiuer-Chinese/Xiuer-live-tools/releases',

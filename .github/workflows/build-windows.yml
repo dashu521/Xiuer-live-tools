@@ -131,7 +131,7 @@ jobs:
         run: |
           $version = "${{ github.ref_name }}"
           $localPath = "release\$version"
-          $remotePath = "oss://xiuer-download/releases/$version/"
+          $remotePath = "oss://xiuer-live-tools-download/releases/$version/"
 
           Write-Host "========================================"
           Write-Host "Uploading to versioned path: $remotePath"
@@ -149,7 +149,7 @@ jobs:
         run: |
           $version = "${{ github.ref_name }}"
           $localPath = "release\$version"
-          $latestPath = "oss://xiuer-download/releases/latest/"
+          $latestPath = "oss://xiuer-live-tools-download/releases/latest/"
 
           Write-Host "========================================"
           Write-Host "Uploading to latest path: $latestPath"
@@ -160,7 +160,7 @@ jobs:
           .\ossutil64\ossutil.exe cp $localPath $latestPath -r -f
 
           # 同时上传 latest.yml 到根目录（用于自动更新）
-          .\ossutil64\ossutil.exe cp "$localPath\latest.yml" "oss://xiuer-download/releases/latest.yml" -f
+          .\ossutil64\ossutil.exe cp "$localPath\latest.yml" "oss://xiuer-live-tools-download/releases/latest.yml" -f
 
           Write-Host "Latest directory updated successfully"
 
@@ -180,6 +180,6 @@ jobs:
           Write-Host "  Latest:    https://xiuer.work/releases/latest/"
           Write-Host ""
           Write-Host "Direct OSS URLs:"
-          Write-Host "  https://xiuer-download.oss-cn-hangzhou.aliyuncs.com/releases/$version/"
-          Write-Host "  https://xiuer-download.oss-cn-hangzhou.aliyuncs.com/releases/latest/"
+          Write-Host "  https://xiuer-live-tools-download.oss-cn-hangzhou.aliyuncs.com/releases/$version/"
+          Write-Host "  https://xiuer-live-tools-download.oss-cn-hangzhou.aliyuncs.com/releases/latest/"
           Write-Host "========================================"
