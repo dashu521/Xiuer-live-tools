@@ -132,8 +132,8 @@
     "differentialPackage": true
   },
   "publish": {
-    "provider": "github",
-    "owner": "Xiuer-Chinese",
-    "repo": "Xiuer-live-tools"
+    "provider": "generic",
+    "url": "https://xiuer.work/releases/latest",
+    "channel": "latest"
   }
 }

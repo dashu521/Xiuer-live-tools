@@ -124,8 +124,8 @@ jobs:
         run: |
           .\ossutil64\ossutil.exe config -e oss-cn-hangzhou.aliyuncs.com -i $env:ALIYUN_ACCESS_KEY_ID -k $env:ALIYUN_ACCESS_KEY_SECRET -L CH
 
-      # 13. 上传构建产物到 OSS
-      - name: Upload build to OSS
+      # 13. 上传构建产物到 OSS - 版本目录
+      - name: Upload build to OSS (versioned)
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: |
@@ -133,19 +133,53 @@ jobs:
           $localPath = "release\$version"
           $remotePath = "oss://xiuer-download/releases/$version/"
 
-          Write-Host "Uploading from $localPath to $remotePath"
+          Write-Host "========================================"
+          Write-Host "Uploading to versioned path: $remotePath"
+          Write-Host "========================================"
           .\ossutil64\ossutil.exe cp $localPath $remotePath -r -f
 
-          # 同时上传 latest.yml 到根目录
+          # 验证上传
+          Write-Host "Uploaded files:"
+          .\ossutil64\ossutil.exe ls $remotePath
+
+      # 14. 上传构建产物到 OSS - latest 目录（仅 tag 构建）
+      - name: Upload build to OSS (latest)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}"
+          $localPath = "release\$version"
+          $latestPath = "oss://xiuer-download/releases/latest/"
+
+          Write-Host "========================================"
+          Write-Host "Uploading to latest path: $latestPath"
+          Write-Host "========================================"
+
+          # 清空 latest 目录并重新上传
+          .\ossutil64\ossutil.exe rm $latestPath -r -f
+          .\ossutil64\ossutil.exe cp $localPath $latestPath -r -f
+
+          # 同时上传 latest.yml 到根目录（用于自动更新）
           .\ossutil64\ossutil.exe cp "$localPath\latest.yml" "oss://xiuer-download/releases/latest.yml" -f
 
-      # 14. 输出下载地址
+          Write-Host "Latest directory updated successfully"
+
+      # 15. 输出下载地址
       - name: Output download URL
         if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
         run: |
-          echo "========================================"
-          echo "Build completed successfully!"
-          echo "========================================"
-          echo "GitHub Release: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
-          echo "OSS Download: https://xiuer-download.oss-cn-hangzhou.aliyuncs.com/releases/${{ github.ref_name }}/"
-          echo "========================================"
+          $version = "${{ github.ref_name }}"
+          Write-Host "========================================"
+          Write-Host "Build completed successfully!"
+          Write-Host "========================================"
+          Write-Host "GitHub Release: https://github.com/${{ github.repository }}/releases/tag/$version"
+          Write-Host ""
+          Write-Host "OSS Download URLs:"
+          Write-Host "  Versioned: https://xiuer.work/releases/$version/"
+          Write-Host "  Latest:    https://xiuer.work/releases/latest/"
+          Write-Host ""
+          Write-Host "Direct OSS URLs:"
+          Write-Host "  https://xiuer-download.oss-cn-hangzhou.aliyuncs.com/releases/$version/"
+          Write-Host "  https://xiuer-download.oss-cn-hangzhou.aliyuncs.com/releases/latest/"
+          Write-Host "========================================"
