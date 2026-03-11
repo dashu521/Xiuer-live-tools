@@ -246,17 +246,24 @@ function checkConfig() {
     if (!publish) {
       log('electron-builder.json 缺少 publish 配置', 'BLOCKER');
       addBlocker('配置', '缺少 publish 配置');
-    } else if (publish.provider !== 'github') {
-      log('electron-builder.json publish.provider 必须是 github', 'BLOCKER', `实际: ${publish.provider}`);
-      addBlocker('配置', 'publish.provider 错误', `实际: ${publish.provider}`);
-    } else if (publish.owner !== 'Xiuer-Chinese') {
-      log('electron-builder.json publish.owner 错误', 'BLOCKER', `期望: Xiuer-Chinese, 实际: ${publish.owner}`);
-      addBlocker('配置', 'publish.owner 错误');
-    } else if (publish.repo !== 'Xiuer-live-tools') {
-      log('electron-builder.json publish.repo 错误', 'BLOCKER', `期望: Xiuer-live-tools, 实际: ${publish.repo}`);
-      addBlocker('配置', 'publish.repo 错误');
+    } else if (publish.provider === 'generic') {
+      // 支持 generic provider（用于 CDN 分发）
+      log(`electron-builder.json publish.provider: generic (CDN 模式)`, 'PASS');
+      addInfo('配置', `更新源: ${publish.url || '未设置'}`);
+    } else if (publish.provider === 'github') {
+      // GitHub provider 模式
+      if (publish.owner !== 'Xiuer-Chinese') {
+        log('electron-builder.json publish.owner 错误', 'BLOCKER', `期望: Xiuer-Chinese, 实际: ${publish.owner}`);
+        addBlocker('配置', 'publish.owner 错误');
+      } else if (publish.repo !== 'Xiuer-live-tools') {
+        log('electron-builder.json publish.repo 错误', 'BLOCKER', `期望: Xiuer-live-tools, 实际: ${publish.repo}`);
+        addBlocker('配置', 'publish.repo 错误');
+      } else {
+        log('electron-builder.json publish 配置正确 (GitHub 模式)', 'PASS');
+      }
     } else {
-      log('electron-builder.json publish 配置正确', 'PASS');
+      log(`electron-builder.json publish.provider 不支持: ${publish.provider}`, 'BLOCKER');
+      addBlocker('配置', 'publish.provider 错误', `实际: ${publish.provider}`);
     }
   } catch (error) {
     log('无法读取 electron-builder.json', 'BLOCKER', error.message);
