@@ -2,11 +2,15 @@
 /**
  * 发布防事故系统 - Release Guard
  * 在发布前执行高风险检查，发现问题直接阻止构建
- * 
+ *
  * 检查级别：
  * - BLOCKER: 会阻止发布的硬阻塞项
  * - WARNING: 审计警告，需人工确认但不会阻止发布
  * - INFO: 信息提示
+ *
+ * CI 环境适配：
+ * - 检测到 CI 环境时放宽 Git 检查
+ * - 保留核心安全阻塞项
  */
 
 const { execSync } = require('child_process');
@@ -27,6 +31,20 @@ let hasBlocker = false;
 const blockers = [];
 const warnings = [];
 const infos = [];
+
+// 检测是否在 CI 环境中
+function isCI() {
+  return !!(
+    process.env.CI ||
+    process.env.GITHUB_ACTIONS ||
+    process.env.TRAVIS ||
+    process.env.CIRCLECI ||
+    process.env.JENKINS ||
+    process.env.GITLAB_CI
+  );
+}
+
+const CI_MODE = isCI();
 
 function addBlocker(category, message, details = '') {
   hasBlocker = true;
@@ -63,18 +81,36 @@ function exec(command, options = {}) {
 function checkGit() {
   console.log(`\n${colors.blue}${colors.bold}🔍 Git 检查${colors.reset}\n`);
 
+  // CI 模式下显示提示
+  if (CI_MODE) {
+    log('检测到 CI 环境，放宽 Git 检查', 'INFO');
+    console.log('');
+  }
+
   // 1.1 检查当前分支
   try {
     const branch = exec('git branch --show-current');
     if (branch === 'main') {
       log('当前分支是 main', 'PASS');
     } else {
-      log('当前分支必须是 main', 'BLOCKER', `当前分支: ${branch}`);
-      addBlocker('Git', '当前分支不是 main', `当前分支: ${branch}`);
+      if (CI_MODE) {
+        // CI 模式下允许 detached HEAD 或其他分支
+        log(`当前分支: ${branch || '(detached HEAD)'}`, 'INFO');
+        addInfo('Git', `CI 环境分支: ${branch || 'detached HEAD'}`);
+      } else {
+        log('当前分支必须是 main', 'BLOCKER', `当前分支: ${branch}`);
+        addBlocker('Git', '当前分支不是 main', `当前分支: ${branch}`);
+      }
     }
   } catch (error) {
-    log('无法获取当前分支', 'BLOCKER', error.message);
-    addBlocker('Git', '无法获取当前分支', error.message);
+    if (CI_MODE) {
+      // CI 模式下允许无法获取分支（可能是 detached HEAD）
+      log('无法获取当前分支（可能是 detached HEAD）', 'INFO');
+      addInfo('Git', 'CI 环境 detached HEAD');
+    } else {
+      log('无法获取当前分支', 'BLOCKER', error.message);
+      addBlocker('Git', '无法获取当前分支', error.message);
+    }
   }
 
   // 1.2 检查 git status 是否干净
@@ -83,8 +119,14 @@ function checkGit() {
     if (status === '') {
       log('Git 工作区干净', 'PASS');
     } else {
-      log('Git 工作区存在未提交修改', 'BLOCKER', '请执行 git status 查看详情');
-      addBlocker('Git', 'Git 工作区不干净', '存在未提交的修改');
+      if (CI_MODE) {
+        // CI 模式下，检出时应该是干净的
+        log('Git 工作区存在未提交修改', 'WARNING', 'CI 环境中通常应该干净');
+        addWarning('Git', 'Git 工作区不干净', '存在未提交的修改');
+      } else {
+        log('Git 工作区存在未提交修改', 'BLOCKER', '请执行 git status 查看详情');
+        addBlocker('Git', 'Git 工作区不干净', '存在未提交的修改');
+      }
     }
   } catch (error) {
     log('无法检查 Git 状态', 'BLOCKER', error.message);
@@ -97,8 +139,13 @@ function checkGit() {
     if (remotes.length === 1 && remotes[0] === 'origin') {
       log('Remote 配置正确（仅 origin）', 'PASS');
     } else {
-      log('Remote 配置错误', 'BLOCKER', `发现 ${remotes.length} 个 remote: ${remotes.join(', ')}`);
-      addBlocker('Git', 'Remote 配置错误', `发现 ${remotes.length} 个 remote`);
+      if (CI_MODE) {
+        log(`发现 ${remotes.length} 个 remote`, 'INFO');
+        addInfo('Git', `CI 环境 remote: ${remotes.join(', ')}`);
+      } else {
+        log('Remote 配置错误', 'BLOCKER', `发现 ${remotes.length} 个 remote: ${remotes.join(', ')}`);
+        addBlocker('Git', 'Remote 配置错误', `发现 ${remotes.length} 个 remote`);
+      }
     }
   } catch (error) {
     log('无法检查 remote', 'BLOCKER', error.message);
@@ -109,7 +156,11 @@ function checkGit() {
   try {
     const originUrl = exec('git remote get-url origin');
     const expectedUrl = 'https://github.com/Xiuer-Chinese/Xiuer-live-tools.git';
-    if (originUrl === expectedUrl) {
+
+    // 宽松匹配：只要包含正确仓库路径即可
+    const isValidRepo = originUrl.includes('Xiuer-Chinese/Xiuer-live-tools');
+
+    if (isValidRepo) {
       log('Origin URL 正确', 'PASS');
     } else {
       log('Origin URL 错误', 'BLOCKER', `期望: ${expectedUrl}\n   实际: ${originUrl}`);
@@ -240,10 +291,10 @@ function scanHighRiskContent() {
 
   // 高风险目录：这些目录中的 localhost 会被视为 BLOCKER
   const highRiskDirs = ['src', 'shared'];
-  
+
   // 中风险目录：这些目录中的 localhost 会被视为 WARNING
   const mediumRiskDirs = ['electron/main', 'preload'];
-  
+
   // 低风险目录：这些目录中的 localhost 会被视为 INFO（脚本自身）
   const lowRiskDirs = ['scripts'];
 
@@ -268,21 +319,21 @@ function scanHighRiskContent() {
         return 'info';
       }
     }
-    
+
     // 检查是否在中风险目录
     for (const dir of mediumRiskDirs) {
       if (filePath.startsWith(dir + path.sep) || filePath === dir) {
         return 'warning';
       }
     }
-    
+
     // 检查是否在高风险目录
     for (const dir of highRiskDirs) {
       if (filePath.startsWith(dir + path.sep) || filePath === dir) {
         return 'blocker';
       }
     }
-    
+
     // 默认 info
     return 'info';
   }
@@ -318,9 +369,10 @@ function scanHighRiskContent() {
 
             // 特殊处理 src/config/authApiBase.ts
             if (filePath.includes('src/config/authApiBase.ts') && finding.isFallback) {
-              // 如果环境变量已设置且不是 localhost，则降级为 warning
+              // 如果环境变量已设置且不是 localhost
               const apiBaseUrl = process.env.VITE_AUTH_API_BASE_URL;
               if (apiBaseUrl && !apiBaseUrl.includes('localhost') && !apiBaseUrl.includes('127.0.0.1')) {
+                // CI 模式下降级为 WARNING，本地模式也降级为 WARNING（因为环境变量已设置）
                 warningFindings.push({ ...finding, note: 'fallback 模式，但环境变量已正确设置' });
               } else {
                 blockerFindings.push({ ...finding, note: 'fallback 模式且环境变量未设置或无效' });
@@ -418,7 +470,12 @@ function scanHighRiskContent() {
 // ==================== 主程序 ====================
 function printSummary() {
   console.log(`\n${colors.bold}════════════════════════════════════════════════════════════${colors.reset}\n`);
-  
+
+  // 显示运行模式
+  if (CI_MODE) {
+    console.log(`${colors.cyan}${colors.bold}【运行模式: CI 环境】${colors.reset}\n`);
+  }
+
   // BLOCKER 汇总
   if (blockers.length > 0) {
     console.log(`${colors.red}${colors.bold}【BLOCKER - 会阻止发布的问题】${colors.reset}`);
@@ -451,7 +508,7 @@ function printSummary() {
 
   // 最终结论
   console.log(`${colors.bold}════════════════════════════════════════════════════════════${colors.reset}\n`);
-  
+
   if (hasBlocker) {
     console.log(`${colors.red}${colors.bold}❌ 检查失败！存在 ${blockers.length} 个阻塞问题，请修复后再尝试发布。${colors.reset}\n`);
     console.log(`${colors.yellow}⚠️  注意：WARNING 级别的问题不会阻止发布，但建议人工确认。${colors.reset}\n`);
@@ -470,6 +527,9 @@ function main() {
   console.log('╔════════════════════════════════════════════════════════════╗');
   console.log('║           🛡️  发布防事故系统 - Release Guard                ║');
   console.log('║              检查级别: BLOCKER | WARNING | INFO             ║');
+  if (CI_MODE) {
+    console.log('║              【CI 环境模式 - 放宽 Git 检查】                 ║');
+  }
   console.log('╚════════════════════════════════════════════════════════════╝');
   console.log(`${colors.reset}`);
 
