@@ -95,7 +95,11 @@
     "!**/*.ai",
     "!**/*.sketch",
     "!remotion-video/**",
-    "!**/remotion-video/**"
+    "!**/remotion-video/**",
+    "!auth-api/data/**",
+    "!**/*.db",
+    "!**/*.sqlite",
+    "!**/*.sqlite3"
   ],
   "afterPack": "scripts/electron-after-pack.js",
   "extraMetadata": {
@@ -110,14 +114,14 @@
         "arch": ["x64", "arm64"]
       }
     ],
-    "icon": "public/favicon.png"
+    "icon": "public/icon.png"
   },
   "win": {
     "target": [
       { "target": "nsis", "arch": ["x64"] },
       { "target": "zip", "arch": ["x64"] }
     ],
-    "icon": "public/favicon.png",
+    "icon": "public/icon.png",
     "artifactName": "秀儿直播助手_${version}_win-x64.${ext}"
   },
   "nsis": {
@@ -126,5 +130,10 @@
     "allowToChangeInstallationDirectory": true,
     "deleteAppDataOnUninstall": false,
     "differentialPackage": true
+  },
+  "publish": {
+    "provider": "github",
+    "owner": "Xiuer-Chinese",
+    "repo": "Xiuer-live-tools"
   }
 }
