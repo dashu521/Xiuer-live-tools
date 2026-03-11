@@ -1,13 +1,13 @@
-# 秀儿直播助手 - 自动发布工作流
+# 秀儿直播助手 - Windows 自动发布工作流
 # 触发条件：推送 v* 标签（如 v1.2.1）
-# 功能：自动构建 Windows/macOS 安装包并发布到 GitHub Releases
+# 功能：自动构建 Windows 安装包并发布到 GitHub Releases
+#
+# 注意：macOS 安装包由本地 Mac (M3 Ultra) 构建，不在 CI 中构建
 #
 # 发布前检查清单：
 # 1. 确保 package.json 中的 version 与 tag 一致
 # 2. 确保已配置 GitHub Secrets: GITHUB_TOKEN (自动提供)
-# 3. 可选：配置 macOS 签名密钥（有 Apple 开发者账号时）
-#    - CSC_LINK, CSC_KEY_PASSWORD, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
-# 4. 确保已打 tag: git tag v1.2.1 && git push origin v1.2.1
+# 3. 确保已打 tag: git tag v1.2.1 && git push origin v1.2.1
 
 name: Release 秀儿直播助手
 
@@ -20,19 +20,9 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    name: Build and Release (${{ matrix.name }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: macOS arm64
-            os: macos-14
-            build_args: --mac dmg --arm64
-          - name: Windows x64
-            os: windows-latest
-            build_args: --win nsis zip --x64
+  release-windows:
+    name: Build Windows x64
+    runs-on: windows-latest
 
     steps:
       # 1. 检出代码
@@ -50,8 +40,7 @@ jobs:
         run: |
           node --version
           npm --version
-          echo "Platform: ${{ matrix.name }}"
-        shell: bash
+          echo "Platform: Windows x64"
 
       # 4. 同步 package.json 版本到 tag（v1.2.3 -> 1.2.3）
       - name: Sync package version with tag
@@ -60,59 +49,34 @@ jobs:
       # 5. 安装依赖
       - name: Install dependencies
         run: npm install
-        shell: bash
 
       # 6. 构建应用
       - name: Build application
         run: npx tsc --noEmitOnError false && npx vite build
         env:
           NODE_OPTIONS: --max-old-space-size=4096
-        shell: bash
 
       # 7. 复制运行时文件
       - name: Copy runtime files
         run: node scripts/copy-runtime-files.cjs
-        shell: bash
 
       # 8. 检查构建目录
       - name: Check dist directory
         run: node scripts/dist-check-appdir.js
-        shell: bash
 
-      # 9. 打包并发布（macOS - 无签名）
-      # 注意：macOS 无签名构建的 DMG 可能需要在系统设置中允许"任何来源"才能安装
-      # 用户安装时如遇提示，请前往 系统设置 > 隐私与安全性 > 安全性 中允许
-      - name: Build and release (macOS)
-        if: matrix.os == 'macos-14'
-        run: npx electron-builder ${{ matrix.build_args }} --publish always
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # 完全禁用 macOS 签名
-          CSC_IDENTITY_AUTO_DISCOVERY: false
-          CSC_LINK: ''
-          CSC_KEY_PASSWORD: ''
-          APPLE_ID: ''
-          APPLE_APP_SPECIFIC_PASSWORD: ''
-          APPLE_TEAM_ID: ''
-        shell: bash
-
-      # 10. 打包并发布（Windows）
+      # 9. 打包并发布（Windows）
       - name: Build and release (Windows)
-        if: matrix.os == 'windows-latest'
-        run: npx electron-builder ${{ matrix.build_args }} --publish always
+        run: npx electron-builder --win nsis zip --x64 --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
 
-      # 11. 上传构建产物（备用）
+      # 10. 上传构建产物（备用）
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: build-${{ matrix.os }}
+          name: build-windows-latest
           path: |
             release/**/*.exe
-            release/**/*.dmg
             release/**/*.zip
             release/**/latest.yml
-            release/**/latest-mac.yml
