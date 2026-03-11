@@ -2,8 +2,9 @@
 # 专门用于在 GitHub Actions 上构建 Windows 安装包并自动发布到 GitHub Release
 #
 # 触发方式：
-# 1. 推送 v* 标签（如 v1.2.1）- 自动构建并发布到 Release
-# 2. 手动触发 workflow_dispatch - 仅构建，不自动发布
+# 1. 推送 v* 标签（如 v1.2.1）- 自动构建并发布到 Release + OSS
+# 2. 手动触发 workflow_dispatch - 构建并上传 OSS，便于验证链路
+# 3. main 分支 push - 仅构建，不发布
 #
 # 注意：
 # - 本工作流仅构建 Windows 版本
@@ -110,8 +111,9 @@ jobs:
 
       # 11. 安装并配置 ossutil，然后上传 OSS
       # 只上传发布成品文件，严禁递归上传整个 release 目录
+      # 触发条件：tag 推送（正式发布）或 workflow_dispatch（手动验证）
       - name: Install ossutil and upload to OSS
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         env:
           ALIYUN_ACCESS_KEY_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
@@ -268,19 +270,23 @@ jobs:
           Write-Host "版本目录: https://xiuer.work/releases/$version/"
           Write-Host "Latest:   https://xiuer.work/releases/latest/"
 
-      # 12. 输出下载地址
+      # 12. 输出下载地址（tag 触发或 workflow_dispatch 触发时）
       - name: Output download URL
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}"
           Write-Host "========================================"
           Write-Host "Build completed successfully!"
           Write-Host "========================================"
-          Write-Host "GitHub Release: https://github.com/${{ github.repository }}/releases/tag/$version"
-          Write-Host ""
+          if (startsWith($env:GITHUB_REF, 'refs/tags/v')) {
+            Write-Host "GitHub Release: https://github.com/${{ github.repository }}/releases/tag/$version"
+            Write-Host ""
+          }
           Write-Host "Download URLs:"
-          Write-Host "  GitHub:  https://github.com/${{ github.repository }}/releases/tag/$version"
+          if (startsWith($env:GITHUB_REF, 'refs/tags/v')) {
+            Write-Host "  GitHub:  https://github.com/${{ github.repository }}/releases/tag/$version"
+          }
           Write-Host "  Version: https://xiuer.work/releases/$version/"
           Write-Host "  Latest:  https://xiuer.work/releases/latest/"
           Write-Host "========================================"
