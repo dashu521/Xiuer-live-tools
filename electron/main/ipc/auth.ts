@@ -1,0 +1,281 @@
+import { ipcMain } from 'electron'
+import { AUTH_API_BASE } from '../../../src/config/authApiBase'
+import type { LoginCredentials, RegisterData, User } from '../../../src/types/auth'
+import { AuthService } from '../services/AuthService'
+import { clearStoredTokens, getStoredTokens, setStoredTokens } from '../services/CloudAuthStorage'
+import { cloudLogin, cloudMe, cloudRefresh, cloudRegister } from '../services/cloudAuthClient'
+import { cloudUserToSafeUser } from '../services/cloudAuthMappers'
+
+const getEffectiveBase = (): string => {
+  let base = process.env.AUTH_API_BASE_URL ?? process.env.VITE_AUTH_API_BASE_URL ?? AUTH_API_BASE
+  base = base.replace(/\/$/, '')
+  if (base.includes(':8080')) {
+    base = base.replace(/:8080(\/|$)/, ':8000$1')
+    console.warn('[auth] 认证 API 应在 8000 端口，已自动将 8080 纠正为 8000')
+  }
+  return base
+}
+const USE_CLOUD_AUTH = !!getEffectiveBase()
+
+/** [AUTH-AUDIT] 启动时打印当前鉴权配置 */
+function logAuthAuditConfig(): void {
+  const base = getEffectiveBase() || '(none)'
+  console.log('[AUTH-AUDIT] startup config:', {
+    USE_CLOUD_AUTH,
+    AUTH_API_BASE,
+    effectiveBase: base,
+  })
+}
+
+export function setupAuthHandlers() {
+  logAuthAuditConfig()
+  // ----- 云鉴权：恢复会话（启动时 refresh -> me） -----
+  ipcMain.handle('auth:restoreSession', async () => {
+    if (!USE_CLOUD_AUTH) {
+      return { success: false, user: null, token: null }
+    }
+    const { refresh_token } = await getStoredTokens()
+    if (!refresh_token) return { success: false, user: null, token: null }
+    const refreshRes = await cloudRefresh(refresh_token)
+    if (!refreshRes.success || !refreshRes.access_token) {
+      clearStoredTokens()
+      return { success: false, user: null, token: null }
+    }
+    const meRes = await cloudMe(refreshRes.access_token)
+    if (!meRes.success || !meRes.user) {
+      return { success: false, user: null, token: null }
+    }
+    await setStoredTokens({
+      access_token: refreshRes.access_token,
+      refresh_token,
+    })
+    return {
+      success: true,
+      user: cloudUserToSafeUser(meRes.user),
+      token: refreshRes.access_token,
+    }
+  })
+
+  // Register
+  ipcMain.handle('auth:register', async (_, data: RegisterData) => {
+    if (USE_CLOUD_AUTH) {
+      const identifier = (data.email || '').trim()
+      if (!identifier) {
+        return { success: false, error: '请输入手机号或邮箱' }
+      }
+      const res = await cloudRegister(identifier, data.password)
+      if (!res.success) {
+        return {
+          success: false,
+          error: res.error,
+          requestUrl: res.requestUrl,
+          status: res.status,
+          detail: res.responseDetail,
+        }
+      }
+      // 成功条件与后端一致：res.status==200 且 res.data.success===true；不要求 user/access_token/refresh_token 全有
+      if (res.access_token && res.refresh_token) {
+        await setStoredTokens({
+          access_token: res.access_token,
+          refresh_token: res.refresh_token,
+        })
+      }
+      return {
+        success: true,
+        user: res.user ? cloudUserToSafeUser(res.user) : undefined,
+        token: res.access_token,
+        refresh_token: res.refresh_token,
+      }
+    }
+    return await AuthService.register(data)
+  })
+
+  // Login
+  ipcMain.handle('auth:login', async (_, credentials: LoginCredentials) => {
+    if (USE_CLOUD_AUTH) {
+      const identifier = (credentials.username || '').trim()
+      if (!identifier) {
+        return { success: false, error: '请输入手机号或邮箱' }
+      }
+      const res = await cloudLogin(identifier, credentials.password)
+      if (!res.success) {
+        // 根据后端返回的错误信息判断错误类型
+        let errorType: string | undefined
+        // error 可能是字符串或对象 {code, message}
+        const errorStr = typeof res.error === 'string' ? res.error : JSON.stringify(res.error || '')
+        const errorMsg = errorStr.toLowerCase()
+        const responseDetail = (res.responseDetail || '').toLowerCase()
+        const combinedError = `${errorMsg} ${responseDetail}`
+
+        // 调试日志：查看实际返回的错误信息
+        console.error('[AUTH-DEBUG] Login error:', {
+          status: res.status,
+          error: res.error,
+          errorStr,
+          responseDetail: res.responseDetail,
+          combinedError,
+        })
+
+        // 根据状态码和错误信息判断错误类型
+        // 注意：后端对于"账号不存在"和"密码错误"都返回 401 + "Invalid credentials"
+        // 所以无法准确区分，不设置具体的 errorType，让前端显示通用提示
+        if (res.status === 403) {
+          errorType = 'ACCOUNT_DISABLED'
+        }
+        // 401 错误不设置 errorType，前端会显示"账号或密码错误"并引导注册
+
+        console.error('[AUTH-DEBUG] Determined errorType:', errorType)
+
+        // 提取友好的错误消息
+        let errorMessage: string
+        if (typeof res.error === 'string') {
+          errorMessage = res.error
+        } else if (res.error && typeof res.error === 'object' && 'message' in res.error) {
+          errorMessage = (res.error as { message: string }).message
+        } else {
+          errorMessage = res.responseDetail || '登录失败'
+        }
+
+        return {
+          success: false,
+          error: errorMessage,
+          errorType,
+          requestUrl: res.requestUrl,
+          status: res.status,
+          detail: res.responseDetail,
+        }
+      }
+      // 成功条件与后端一致：res.status==200 且 res.data.token 存在；不要求 refresh_token/user 全有
+      if (res.access_token) {
+        await setStoredTokens({
+          access_token: res.access_token,
+          refresh_token: res.refresh_token ?? res.access_token,
+        })
+      }
+      return {
+        success: true,
+        user: res.user ? cloudUserToSafeUser(res.user) : undefined,
+        token: res.access_token,
+        refresh_token: res.refresh_token ?? res.access_token,
+      }
+    }
+    return await AuthService.login(credentials)
+  })
+
+  // Logout
+  ipcMain.handle('auth:logout', async (_, token: string) => {
+    if (USE_CLOUD_AUTH) {
+      clearStoredTokens()
+      return true
+    }
+    return await AuthService.logout(token)
+  })
+
+  // Get current user（401 时自动 refresh 并重试一次）
+  ipcMain.handle('auth:getCurrentUser', async (_, token: string) => {
+    if (USE_CLOUD_AUTH) {
+      if (!token) return null
+      let meRes = await cloudMe(token)
+      if (meRes.success && meRes.user) {
+        return cloudUserToSafeUser(meRes.user)
+      }
+      const { refresh_token } = await getStoredTokens()
+      if (!refresh_token) return null
+      const refreshRes = await cloudRefresh(refresh_token)
+      if (!refreshRes.success || !refreshRes.access_token) return null
+      meRes = await cloudMe(refreshRes.access_token)
+      if (!meRes.success || !meRes.user) return null
+      await setStoredTokens({
+        access_token: refreshRes.access_token,
+        refresh_token,
+      })
+      return cloudUserToSafeUser(meRes.user)
+    }
+    return AuthService.getCurrentUser(token)
+  })
+
+  // Validate token
+  ipcMain.handle('auth:validateToken', async (_, token: string) => {
+    if (USE_CLOUD_AUTH) {
+      const meRes = await cloudMe(token)
+      return meRes.success && meRes.user ? cloudUserToSafeUser(meRes.user) : null
+    }
+    return AuthService.validateToken(token)
+  })
+
+  // Check feature access（IPC 只暴露 SafeUser；本地 AuthService 返回 User 时在此映射为 SafeUser）
+  ipcMain.handle('auth:checkFeatureAccess', async (_, token: string, feature: string) => {
+    const rawUser = await (async () => {
+      if (USE_CLOUD_AUTH && token) {
+        const meRes = await cloudMe(token)
+        if (meRes.success && meRes.user) return cloudUserToSafeUser(meRes.user)
+      }
+      if (USE_CLOUD_AUTH) return null
+      return AuthService.getCurrentUser(token)
+    })()
+    const user: Omit<User, 'passwordHash'> | null =
+      rawUser == null
+        ? null
+        : 'passwordHash' in rawUser
+          ? AuthService.sanitizeUser(rawUser as User)
+          : (rawUser as Omit<User, 'passwordHash'>)
+    const requiresAuth = AuthService.requiresAuthentication(feature)
+    const requiredPlan = AuthService.getRequiredPlan(feature)
+    return {
+      canAccess: !requiresAuth || AuthService.hasPlanLevel(user, requiredPlan),
+      requiresAuth,
+      requiredPlan,
+      user,
+    }
+  })
+
+  ipcMain.handle('auth:requiresAuthentication', async (_, feature: string) => {
+    return AuthService.requiresAuthentication(feature)
+  })
+
+  ipcMain.handle('auth:updateUserProfile', async (_, _token: string, _data: unknown) => {
+    return { success: false, error: '功能开发中' }
+  })
+
+  ipcMain.handle('auth:changePassword', async (_, _token: string, _data: unknown) => {
+    return { success: false, error: '功能开发中' }
+  })
+
+  // Token 管理接口（安全存储在主进程）
+  ipcMain.handle('auth:getTokens', async () => {
+    console.log('[Auth IPC] Getting tokens from storage')
+    const tokens = await getStoredTokens()
+    console.log('[Auth IPC] Tokens retrieved:', {
+      hasAccessToken: !!tokens.access_token,
+      hasRefreshToken: !!tokens.refresh_token,
+    })
+    return {
+      token: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+    }
+  })
+
+  ipcMain.handle(
+    'auth:setTokens',
+    async (_, tokens: { token: string | null; refreshToken: string | null }) => {
+      console.log('[Auth IPC] Setting tokens:', {
+        hasAccessToken: !!tokens.token,
+        hasRefreshToken: !!tokens.refreshToken,
+      })
+      try {
+        setStoredTokens({
+          access_token: tokens.token,
+          refresh_token: tokens.refreshToken,
+        })
+        console.log('[Auth IPC] Tokens saved successfully')
+      } catch (err) {
+        console.error('[Auth IPC] Failed to set tokens:', err)
+        throw err
+      }
+    },
+  )
+
+  ipcMain.handle('auth:clearTokens', async () => {
+    await clearStoredTokens()
+  })
+}

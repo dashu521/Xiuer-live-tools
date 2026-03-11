@@ -1,0 +1,105 @@
+# 忘记密码（人工支持版）与管理员重置
+
+## 概述
+
+- **桌面端**：登录页提供「忘记密码？」入口，点击后弹窗说明「请联系微信客服重置密码」并展示微信二维码（本地 `public/support-wechat-qr.png`）。不引入短信/邮件服务。
+- **管理员后台**：在 `/admin/app` 用户列表中可对每行执行「重置密码」「生成临时密码」「禁用/启用」；仅允许来自 `ADMIN_ALLOWED_IPS` 的请求访问重置/禁用接口。
+- **auth-api**：新增 `POST /admin/reset-password`、`POST /admin/toggle-disabled`，需管理员 JWT + IP 白名单，审计日志不记录明文密码。
+
+## 安全
+
+- **IP 白名单**：`ADMIN_ALLOWED_IPS`（逗号分隔，默认 `127.0.0.1`）。仅白名单内 IP 可调用 `POST /admin/reset-password`、`POST /admin/toggle-disabled`。
+- **审计日志**：每次操作记录 `requestId`、操作类型、`username`、来源 IP、结果；不记录明文密码。
+- **密码**：DB 写入使用 bcrypt hash；用户不存在时返回 404 + 友好 `detail`。
+
+## 本机 curl 自测（127.0.0.1）
+
+假设 auth-api 运行在 `http://127.0.0.1:8000`，且 `ADMIN_ALLOWED_IPS=127.0.0.1`（默认）。
+
+### 1. 管理员登录获取 token
+
+```bash
+TOKEN=$(curl -s -X POST http://127.0.0.1:8000/admin/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"change-me-admin"}' | python3 -c "import sys,json; print(json.load(sys.stdin).get('token',''))")
+echo "Token: ${TOKEN:0:20}..."
+```
+
+### 2. 重置密码（指定新密码）
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/admin/reset-password \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"username":"user@example.com","new_password":"newpass123"}' | python3 -m json.tool
+```
+
+预期：`{"success": true}`
+
+### 3. 生成临时密码
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/admin/reset-password \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"username":"user@example.com","generate_temp":true}' | python3 -m json.tool
+```
+
+预期：`{"success": true, "temp_password": "随机12位"}`（仅返回一次，请妥善保管）
+
+### 4. 禁用用户
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/admin/toggle-disabled \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"username":"user@example.com","disabled":true}' | python3 -m json.tool
+```
+
+预期：`{"success": true}`
+
+### 5. 启用用户
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/admin/toggle-disabled \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"username":"user@example.com","disabled":false}' | python3 -m json.tool
+```
+
+预期：`{"success": true}`
+
+### 6. 用户不存在时的响应
+
+```bash
+curl -s -X POST http://127.0.0.1:8000/admin/reset-password \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"username":"nonexistent@example.com","new_password":"newpass123"}' | python3 -m json.tool
+```
+
+预期：HTTP 404，`{"detail": {"code": "user_not_found", "message": "用户不存在"}}`
+
+## 管理员 UI
+
+- **地址**：`http://127.0.0.1:8000/admin/app`（与 auth-api 同机时）。**请求从浏览器发出，来源 IP 为访问者 IP**，需将管理员所在 IP 加入 `ADMIN_ALLOWED_IPS`。
+- **操作流程**：
+  1. 打开 `/admin/app`，输入管理员账号密码，登录。
+  2. 用户列表展示：账号、状态、创建时间、试用截止（不展示 password 哈希）。
+  3. 每行操作：
+     - **重置密码**：弹窗输入新密码（≥8 位），确认后提交。
+     - **生成临时密码**：后端生成 12 位临时密码，弹窗仅显示一次，提供复制按钮。
+     - **禁用/启用**：二次确认后切换 `users.status`（disabled/active）。
+
+## 环境变量
+
+| 变量 | 说明 | 默认 |
+|------|------|------|
+| `ADMIN_ALLOWED_IPS` | 逗号分隔的 IP 白名单，允许调用 `/admin/reset-password`、`/admin/toggle-disabled` | `127.0.0.1` |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | 管理员登录账号密码 | 见 config |
+
+## 改动文件一览
+
+- **auth-api**：`config.py`（ADMIN_ALLOWED_IPS）、`deps.py`（require_admin_ip）、`routers/admin.py`（POST /admin/reset-password、POST /admin/toggle-disabled、GET /admin/app）、`schemas_admin.py`（ResetPasswordBody/Resp、ToggleDisabledBody/Resp）、`static/admin_ui.html`（管理员 UI 单页）
+- **桌面端**：`src/components/auth/AuthDialog.tsx`（忘记密码入口 + 弹窗展示微信二维码与说明）
+- **文档**：`auth-api/docs/ADMIN_RESET_PASSWORD.md`（本文件）、可选更新 `README` 或部署说明

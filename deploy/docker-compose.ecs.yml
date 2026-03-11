@@ -1,0 +1,7 @@
+# ECS 上使用 compose 内置 MySQL 时：不把 3306 暴露到主机，仅容器内网访问。
+# 使用：docker compose -f docker-compose.yml -f docker-compose.ecs.yml up -d
+version: "3.8"
+
+services:
+  mysql:
+    ports: []

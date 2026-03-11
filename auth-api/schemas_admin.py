@@ -1,0 +1,68 @@
+"""Admin API 请求/响应模型"""
+from typing import List, Optional
+
+from pydantic import BaseModel, Field
+
+
+class AdminLoginBody(BaseModel):
+    username: str
+    password: str
+
+
+class AdminLoginResponse(BaseModel):
+    token: str
+
+
+class AdminUserListItem(BaseModel):
+    username: str
+    user_id: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    created_at: Optional[str] = None
+    disabled: bool = False
+    is_online: bool = False
+    last_active_at: Optional[str] = None
+    trial_end: Optional[int] = None
+    plan: str = "free"
+
+
+class AdminUserDetail(AdminUserListItem):
+    last_login_at: Optional[str] = None
+    trial_start: Optional[int] = None
+
+
+class PaginatedUserList(BaseModel):
+    items: List[AdminUserListItem]
+    total: int
+    page: int
+    size: int
+
+
+class AdminResetPasswordBody(BaseModel):
+    new_password: Optional[str] = Field(None, min_length=6)
+
+
+class AdminResetPasswordResponse(BaseModel):
+    ok: bool = True
+    temp_password: Optional[str] = None
+    message: str = ""
+
+
+class ExtendTrialBody(BaseModel):
+    days: int = Field(..., ge=1, le=365)
+
+
+class AuditLogItem(BaseModel):
+    id: int
+    action: str
+    target_user: Optional[str] = None
+    status: str
+    response: Optional[str] = None
+    created_at: Optional[str] = None
+
+
+class PaginatedAuditLogs(BaseModel):
+    items: List[AuditLogItem]
+    total: int
+    page: int
+    size: int

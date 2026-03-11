@@ -1,0 +1,400 @@
+"""手机验证码登录/注册路由：/auth/sms/send, /auth/sms/login"""
+import logging
+import re
+import time
+import uuid
+from datetime import datetime, timedelta
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy.orm import Session
+from sqlalchemy import or_
+
+from config import settings
+from database import get_db, is_mysql
+from deps import (
+    create_access_token,
+    create_refresh_token,
+    hash_password,
+    token_hash,
+)
+from models import RefreshToken, SMSCode, Subscription, User
+from schemas import (
+    LoginResponse,
+    UserOut,
+)
+from sms_service import (
+    SMS_CODE_EXPIRE_SECONDS,
+    SMS_CODE_RESEND_COOLDOWN,
+    generate_sms_code,
+    get_sms_service,
+    mask_phone,
+)
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/auth/sms", tags=["sms"])
+
+
+@router.get("/status")
+def sms_status():
+    """诊断用：查看当前短信服务模式与是否已配置，便于排查收不到验证码。不返回密钥等敏感信息。"""
+    import os
+    mode = (os.getenv("SMS_MODE") or "dev").strip().lower()
+    has_key = bool(os.getenv("ALIYUN_ACCESS_KEY_ID") and os.getenv("ALIYUN_ACCESS_KEY_SECRET"))
+    has_sign = bool(os.getenv("ALIYUN_SMS_SIGN_NAME"))
+    has_tpl = bool(os.getenv("ALIYUN_SMS_TEMPLATE_CODE"))
+    configured = has_key and has_sign and has_tpl
+    return {
+        "mode": mode,
+        "configured": configured,
+        "has_key": has_key,
+        "has_sign": has_sign,
+        "has_template": has_tpl,
+    }
+
+
+def is_valid_phone(phone: str) -> bool:
+    return bool(re.match(r"^1[3-9]\d{9}$", phone))
+
+
+def get_client_ip(request: Request) -> str:
+    x_forwarded_for = request.headers.get("X-Forwarded-For")
+    if x_forwarded_for:
+        return x_forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else ""
+
+
+def check_rate_limit(db: Session, phone: str) -> tuple[bool, Optional[str]]:
+    now = int(time.time())
+
+    recent = db.query(SMSCode).filter(
+        SMSCode.phone == phone,
+        SMSCode.created_at >= now - SMS_CODE_RESEND_COOLDOWN
+    ).first()
+
+    if recent:
+        remaining = SMS_CODE_RESEND_COOLDOWN - (now - recent.created_at)
+        return False, f"too_many_requests"
+
+    return True, None
+
+
+SMS_CODE_DAILY_LIMIT = 10
+SMS_CODE_LOCKOUT_AFTER_FAILURES = 5
+SMS_CODE_LOCKOUT_DURATION = 600
+
+
+def check_daily_limit(db: Session, phone: str) -> tuple[bool, Optional[str]]:
+    today = datetime.now().strftime("%Y%m%d")
+    count = db.query(SMSCode).filter(
+        SMSCode.phone == phone,
+        SMSCode.date_str == today
+    ).count()
+
+    if count >= SMS_CODE_DAILY_LIMIT:
+        return False, "daily_limit_exceeded"
+    return True, None
+
+
+def check_brute_force(db: Session, phone: str) -> tuple[bool, Optional[str]]:
+    now = int(time.time())
+    recent_failures = db.query(SMSCode).filter(
+        SMSCode.phone == phone,
+        SMSCode.used == 1,
+        SMSCode.created_at >= now - SMS_CODE_LOCKOUT_DURATION
+    ).count()
+
+    if recent_failures >= SMS_CODE_LOCKOUT_AFTER_FAILURES:
+        return False, "too_many_failures"
+    return True, None
+
+
+def create_user_for_phone(phone: str, db: Session) -> User:
+    """为手机号创建用户，与密码注册逻辑保持一致"""
+    now = datetime.utcnow()
+    pw = hash_password("!")
+    
+    user_id = str(uuid.uuid4())
+    from sqlalchemy import text as sa_text
+    db.execute(
+        sa_text(
+            "INSERT INTO users (id, username, email, phone, password_hash, created_at, updated_at, status, plan) "
+            "VALUES (:id, :u, NULL, :p, :pw, :ca, :ua, 'active', 'free')"
+        ),
+        {"id": user_id, "u": phone, "p": phone, "pw": pw, "ca": now, "ua": now},
+    )
+    db.commit()
+
+    user = db.query(User).filter(User.phone == phone).first()
+
+    try:
+        from sqlalchemy import text as sa_text2
+        _sub_sql = (
+            "INSERT IGNORE INTO subscriptions (id, user_id, plan, status) "
+            "VALUES (:sid, :uid, 'free', 'active')"
+        ) if is_mysql() else (
+            "INSERT OR IGNORE INTO subscriptions (id, user_id, plan, status) "
+            "VALUES (:sid, :uid, 'free', 'active')"
+        )
+        db.execute(sa_text2(_sub_sql), {"sid": str(uuid.uuid4()), "uid": str(user.id)})
+        db.commit()
+    except Exception:
+        db.rollback()
+
+    logger.info(f"[SMS] Auto-created user: username={phone}, phone={mask_phone(phone)}")
+    return user
+
+
+@router.post("/send")
+def send_sms(
+    request: Request,
+    db: Session = Depends(get_db),
+    phone: str = Query(..., description="11 位手机号"),
+):
+    request_id = getattr(request.state, "request_id", "unknown")
+    client_ip = get_client_ip(request)
+
+    logger.info(f"[SMS][{request_id}] send request: phone={mask_phone(phone)}, ip={client_ip}")
+
+    if not is_valid_phone(phone):
+        logger.warning(f"[SMS][{request_id}] invalid phone format: {phone}")
+        raise HTTPException(status_code=422, detail="invalid_phone")
+
+    allowed, error = check_rate_limit(db, phone)
+    if not allowed:
+        logger.warning(f"[SMS][{request_id}] rate limit: phone={mask_phone(phone)}")
+        raise HTTPException(status_code=429, detail=error)
+
+    allowed, error = check_daily_limit(db, phone)
+    if not allowed:
+        logger.warning(f"[SMS][{request_id}] daily limit: phone={mask_phone(phone)}")
+        raise HTTPException(status_code=429, detail=error)
+
+    sms_service = get_sms_service()
+    code = "" if getattr(sms_service, "mode", "") == "aliyun_dypns" else generate_sms_code(6)
+    now = int(time.time())
+    today = datetime.now().strftime("%Y%m%d")
+
+    sms_code = SMSCode(
+        phone=phone,
+        code=code or "dypns",
+        expire_at=now + SMS_CODE_EXPIRE_SECONDS,
+        created_at=now,
+        used=0,
+        date_str=today
+    )
+    db.add(sms_code)
+    db.commit()
+
+    success, error_msg = False, None
+
+    try:
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        success, error_msg = loop.run_until_complete(sms_service.send(phone, code or "0"))
+    except Exception as e:
+        logger.exception(f"[SMS][{request_id}] send exception: {e}")
+        success = False
+        error_msg = str(e)
+
+    mode = getattr(sms_service, "mode", "")
+    has_local_code = bool(code)
+
+    if not success:
+        logger.error(f"[SMS][{request_id}] send failed: {error_msg}")
+        # 有本地验证码时兜底：返回 200 + dev_code
+        if has_local_code:
+            logger.warning(f"[SMS][{request_id}] returning dev_code fallback after send failure")
+            return {
+                "success": True,
+                "dev_code": code,
+                "sms_failed": True,
+                "sms_failed_message": error_msg or "sms_send_failed",
+            }
+        # aliyun_dypns 发送失败时无本地 code：生成兜底验证码并更新刚写入的记录，保证该手机号仍可登录
+        fallback_code = generate_sms_code(6)
+        latest = db.query(SMSCode).filter(SMSCode.phone == phone).order_by(SMSCode.created_at.desc()).first()
+        if latest and latest.created_at == now:
+            latest.code = fallback_code
+            db.commit()
+            logger.warning(f"[SMS][{request_id}] dypns send failed, returning dev_code fallback: phone={mask_phone(phone)}")
+            return {
+                "success": True,
+                "dev_code": fallback_code,
+                "sms_failed": True,
+                "sms_failed_message": error_msg or "sms_send_failed",
+            }
+        raise HTTPException(
+            status_code=500,
+            detail=error_msg if error_msg else "sms_send_failed",
+        )
+
+    logger.info(f"[SMS][{request_id}] code sent: phone={mask_phone(phone)}")
+    # 有本地验证码时均返回 dev_code：dev 模式或 aliyun 国内短信，供构建安装后界面兜底展示
+    if has_local_code:
+        return {"success": True, "dev_code": code}
+    return {"success": True}
+
+
+@router.post("/login")
+def login_with_sms(
+    db: Session = Depends(get_db),
+    phone: str = Query(..., description="11 位手机号"),
+    code: str = Query(..., description="6 位验证码"),
+):
+    allowed, error = check_brute_force(db, phone)
+    if not allowed:
+        logger.warning(f"[SMS] brute force check failed: phone={mask_phone(phone)}")
+        raise HTTPException(status_code=429, detail=error)
+
+    sms_service = get_sms_service()
+    verified_ok = False
+    now = int(time.time())
+    # 先查库：兜底验证码（send 失败时写入的 fallback）或 dev/aliyun 模式均存库，可由此核验
+    sms_code = db.query(SMSCode).filter(
+        SMSCode.phone == phone,
+        SMSCode.code == code,
+        SMSCode.expire_at > now,
+        SMSCode.used == 0
+    ).first()
+    if sms_code:
+        sms_code.used = 1
+        db.commit()
+        verified_ok = True
+    if not verified_ok and getattr(sms_service, "mode", "") == "aliyun_dypns":
+        # dypns 且库中无此 code：走阿里云核验（真实短信下发的码）
+        verify_success, verify_msg = sms_service.verify(phone, code)
+        if verify_success:
+            verified_ok = True
+        if not verified_ok:
+            raise HTTPException(status_code=400, detail=verify_msg or "invalid_code")
+    elif not verified_ok:
+        verify_success, verify_msg = sms_service.verify(phone, code)
+        if verify_msg == "not_supported":
+            pass  # 已在上方查库处理
+        elif verify_success:
+            verified_ok = True
+        if not verified_ok:
+            raise HTTPException(status_code=400, detail=verify_msg or "invalid_code")
+
+    if not verified_ok:
+        raise HTTPException(status_code=400, detail="invalid_code")
+
+    user = db.query(User).filter(User.phone == phone).first()
+
+    if not user:
+        user = create_user_for_phone(phone, db)
+
+    if user.status != "active":
+        raise HTTPException(status_code=403, detail="account_disabled")
+
+    user.last_login_at = datetime.utcnow()
+    db.commit()
+
+    user_id_str = str(user.id)
+    token = create_access_token(user_id_str)
+    refresh_raw = create_refresh_token(user_id_str)
+    refresh_hashed = token_hash(refresh_raw)
+    expires_at = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+
+    try:
+        from sqlalchemy import text as sa_text
+        db.execute(
+            sa_text(
+                "INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at) "
+                "VALUES (:rid, :uid, :th, :ea)"
+            ),
+            {"rid": str(uuid.uuid4()), "uid": str(user.id), "th": refresh_hashed, "ea": expires_at},
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+
+    logger.info(f"[SMS] login success: phone={mask_phone(phone)}, username={user.username}")
+
+    from deps import verify_password as _vp
+    _has_real_password = not _vp("!", user.password_hash)
+
+    # 统一返回格式与密码登录一致
+    now = datetime.utcnow()
+    created_at = getattr(user, "created_at", None)
+    if created_at is None or not hasattr(created_at, "year"):
+        created_at = now
+    last_login_at = getattr(user, "last_login_at", None)
+    status_str = (getattr(user, "status", None) or "active").strip() or "active"
+
+    return LoginResponse(
+        user=UserOut(
+            id=user_id_str,
+            email=getattr(user, "email", None),
+            phone=getattr(user, "phone", None),
+            created_at=created_at,
+            last_login_at=last_login_at,
+            status=status_str,
+        ),
+        token=token,
+        refresh_token=refresh_raw,
+        needs_password=not _has_real_password,
+    )
+
+
+@router.post("/reset-password")
+def reset_password_sms(
+    db: Session = Depends(get_db),
+    phone: str = Query(..., description="11 位手机号"),
+    code: str = Query(..., description="6 位验证码"),
+    new_password: str = Query(..., description="新密码（至少 6 位）"),
+):
+    """POST /auth/sms/reset-password：通过手机验证码重置密码（忘记密码）"""
+    if not is_valid_phone(phone):
+        raise HTTPException(status_code=422, detail="invalid_phone")
+
+    if len(new_password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "invalid_params", "message": "密码至少 6 位"},
+        )
+
+    sms_service = get_sms_service()
+    verified_ok = False
+    now = int(time.time())
+    sms_code = db.query(SMSCode).filter(
+        SMSCode.phone == phone,
+        SMSCode.code == code,
+        SMSCode.expire_at > now,
+        SMSCode.used == 0,
+    ).first()
+    if sms_code:
+        sms_code.used = 1
+        db.commit()
+        verified_ok = True
+    if not verified_ok and getattr(sms_service, "mode", "") == "aliyun_dypns":
+        verify_success, verify_msg = sms_service.verify(phone, code)
+        if verify_success:
+            verified_ok = True
+        if not verified_ok:
+            raise HTTPException(status_code=400, detail=verify_msg or "invalid_code")
+    elif not verified_ok:
+        verify_success, verify_msg = sms_service.verify(phone, code)
+        if verify_msg == "not_supported":
+            pass
+        elif verify_success:
+            verified_ok = True
+        if not verified_ok:
+            raise HTTPException(status_code=400, detail=verify_msg or "invalid_code")
+
+    if not verified_ok:
+        raise HTTPException(status_code=400, detail="invalid_code")
+
+    user = db.query(User).filter(User.phone == phone).first()
+    if not user:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "phone_not_registered", "message": "该手机号未注册"},
+        )
+
+    user.password_hash = hash_password(new_password)
+    db.commit()
+    logger.info(f"[SMS] password reset: phone={mask_phone(phone)}, username={user.username}")
+    return {"ok": True, "message": "密码重置成功"}

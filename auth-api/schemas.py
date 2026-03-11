@@ -1,0 +1,294 @@
+"""请求/响应 Pydantic 模型，预留订阅字段。
+登录/注册请求体兼容 username 与 identifier 二选一（Pydantic v2：validation_alias=AliasChoices）。
+"""
+from datetime import datetime
+from typing import Any, List, Optional
+
+from pydantic import AliasChoices, BaseModel, Field
+
+
+# ----- 请求（兼容 username / identifier，统一为 username 供路由使用） -----
+def _username_field(**kwargs: Any) -> Any:
+    """邮箱或手机号：请求体可传 username 或 identifier，内部统一为 username。"""
+    return Field(..., description="邮箱或手机号", validation_alias=AliasChoices("username", "identifier"), **kwargs)
+
+
+class RegisterBody(BaseModel):
+    username: str = _username_field()
+    password: str = Field(..., min_length=6)
+
+
+class LoginBody(BaseModel):
+    username: str = _username_field()
+    password: str = Field(..., min_length=6)
+
+
+class RefreshBody(BaseModel):
+    refresh_token: Optional[str] = None
+
+
+# ----- 响应：用户（不含密码） -----
+class UserOut(BaseModel):
+    id: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    created_at: datetime
+    last_login_at: Optional[datetime] = None
+    status: str
+
+    class Config:
+        from_attributes = True
+
+
+# ----- 订阅预留 -----
+class SubscriptionOut(BaseModel):
+    plan: str = "free"
+    status: str = "active"
+    current_period_end: Optional[datetime] = None
+    features: List[str] = Field(default_factory=list)
+
+
+# ----- 认证响应 -----
+class TokensOut(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
+class AuthResponse(BaseModel):
+    user: UserOut
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
+class LoginResponse(BaseModel):
+    """/login 和 /auth/sms/login 统一响应格式"""
+    user: UserOut
+    token: str
+    token_type: str = "bearer"
+    refresh_token: Optional[str] = None  # 短信登录返回
+    needs_password: Optional[bool] = None  # 短信登录返回，标识是否需要设置密码
+
+
+class RefreshResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+# ----- GET /me -----
+class MeResponse(BaseModel):
+    user: UserOut
+    subscription: SubscriptionOut
+
+
+# ----- GET /auth/status（用户状态，只读） -----
+class TrialOut(BaseModel):
+    start_at: Optional[str] = None
+    end_at: Optional[str] = None
+    is_active: bool = False
+    is_expired: bool = False
+
+
+class UserStatusResponse(BaseModel):
+    username: str
+    status: str = "active"
+    plan: str = "free"
+    max_accounts: int = 1  # 新增：最大账号数
+    has_password: bool = True
+    created_at: Optional[str] = None
+    last_login_at: Optional[str] = None
+    trial: Optional[TrialOut] = None
+
+
+# ----- 错误规范 -----
+class ErrorDetail(BaseModel):
+    code: str
+    message: str
+
+
+# 统一错误码：account_exists | wrong_password | invalid_params | token_invalid
+def err_account_exists() -> dict:
+    return {"code": "account_exists", "message": "账号已存在"}
+
+
+def err_wrong_password() -> dict:
+    return {"code": "wrong_password", "message": "用户名或密码错误"}
+
+
+def err_invalid_params(msg: str = "参数错误") -> dict:
+    return {"code": "invalid_params", "message": msg}
+
+
+def err_token_invalid() -> dict:
+    return {"code": "token_invalid", "message": "token 失效或已过期"}
+
+
+# ----- 手机验证码相关 -----
+class SendCodeBody(BaseModel):
+    phone: str = Field(..., pattern=r"^1[3-9]\d{9}$", description="手机号")
+    purpose: str = Field(default="login", description="用途: login | register | reset_password")
+
+
+class SendCodeResponse(BaseModel):
+    success: bool = True
+    message: str = "验证码已发送"
+    expires_in: Optional[int] = Field(default=300, description="验证码有效期(秒)")
+
+
+class PhoneLoginBody(BaseModel):
+    phone: str = Field(..., pattern=r"^1[3-9]\d{9}$", description="手机号")
+    code: str = Field(..., min_length=6, max_length=6, description="验证码")
+
+
+class PhoneRegisterBody(BaseModel):
+    phone: str = Field(..., pattern=r"^1[3-9]\d{9}$", description="手机号")
+    code: str = Field(..., min_length=6, max_length=6, description="验证码")
+    password: str = Field(..., min_length=6, description="密码")
+
+
+class PhoneLoginResponse(BaseModel):
+    user: UserOut
+    token: str
+    refresh_token: Optional[str] = None
+    token_type: str = "bearer"
+
+
+class PhoneRegisterResponse(BaseModel):
+    user: UserOut
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
+# ----- 验证码错误码 -----
+def err_sms_code_invalid() -> dict:
+    return {"code": "sms_code_invalid", "message": "验证码错误"}
+
+
+def err_sms_code_expired() -> dict:
+    return {"code": "sms_code_expired", "message": "验证码已过期"}
+
+
+def err_sms_code_used() -> dict:
+    return {"code": "sms_code_used", "message": "验证码已使用"}
+
+
+def err_phone_format_error() -> dict:
+    return {"code": "phone_format_error", "message": "手机号格式不正确"}
+
+
+def err_phone_not_registered() -> dict:
+    return {"code": "phone_not_registered", "message": "该手机号未注册"}
+
+
+def err_phone_already_registered() -> dict:
+    return {"code": "phone_already_registered", "message": "该手机号已注册"}
+
+
+def err_rate_limit_exceeded() -> dict:
+    return {"code": "rate_limit_exceeded", "message": "发送过于频繁，请稍后再试"}
+
+
+def err_sms_send_failed() -> dict:
+    return {"code": "sms_send_failed", "message": "短信发送失败"}
+
+
+# ----- 礼品卡相关 -----
+class RedeemGiftCardBody(BaseModel):
+    code: str = Field(..., min_length=1, max_length=14, description="兑换码")
+
+
+class GiftCardOut(BaseModel):
+    id: str
+    code: str
+    type: str = "membership"
+    tier: Optional[str] = None  # 新增：pro/pro_max/ultra
+    membership_type: Optional[str] = None
+    membership_days: int = 0
+    status: str = "active"
+    batch_id: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: Optional[str] = None
+    expires_at: Optional[str] = None
+    redeemed_at: Optional[str] = None
+    redeemed_by: Optional[str] = None
+
+
+class RedeemResultOut(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    error: Optional[str] = None
+    data: Optional[dict] = None
+
+
+class CreateGiftCardBody(BaseModel):
+    type: str = Field(default="membership", description="membership")
+    tier: str = Field(default="pro", description="pro | pro_max | ultra")  # 新增：档位
+    membership_type: str = Field(default="trial", description="trial | pro")
+    membership_days: int = Field(default=3, ge=1, le=3650, description="会员天数")  # 改为默认3天
+    quantity: int = Field(default=1, ge=1, le=1000, description="生成数量")  # 增加到1000
+    expires_at: Optional[str] = Field(None, description="过期时间 ISO 格式")
+
+
+class CreateGiftCardResponse(BaseModel):
+    ok: bool = True
+    batch_id: str
+    cards: List[GiftCardOut]
+    count: int
+
+
+class GiftCardStatsOut(BaseModel):
+    total: int = 0
+    active: int = 0
+    redeemed: int = 0
+    expired: int = 0
+    disabled: int = 0
+
+
+class PaginatedGiftCards(BaseModel):
+    items: List[GiftCardOut]
+    total: int
+    page: int
+    size: int
+
+
+class GiftCardRedemptionOut(BaseModel):
+    id: str
+    gift_card_code: str
+    membership_type: Optional[str] = None
+    membership_days: int = 0
+    redeemed_at: Optional[str] = None
+    previous_plan: Optional[str] = None
+    new_plan: Optional[str] = None
+
+
+# ----- 礼品卡错误码 -----
+def err_gift_card_invalid_format() -> dict:
+    return {"code": "INVALID_CODE_FORMAT", "message": "兑换码格式不正确"}
+
+
+def err_gift_card_not_found() -> dict:
+    return {"code": "CODE_NOT_FOUND", "message": "兑换码不存在"}
+
+
+def err_gift_card_already_redeemed() -> dict:
+    return {"code": "ALREADY_REDEEMED", "message": "该兑换码已被使用"}
+
+
+def err_gift_card_expired() -> dict:
+    return {"code": "CODE_EXPIRED", "message": "兑换码已过期"}
+
+
+def err_gift_card_disabled() -> dict:
+    return {"code": "CODE_DISABLED", "message": "兑换码已禁用"}
+
+
+# ----- 密码设置/修改 -----
+class SetPasswordBody(BaseModel):
+    password: str = Field(..., min_length=6, description="新密码")
+
+
+class ChangePasswordBody(BaseModel):
+    old_password: str = Field(..., min_length=1, description="旧密码")
+    new_password: str = Field(..., min_length=6, description="新密码")

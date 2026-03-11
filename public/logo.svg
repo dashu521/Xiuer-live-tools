@@ -1,0 +1,63 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- 主色调渐变 - 与项目主题色一致：橙色系 -->
+    <linearGradient id="primaryGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#F5A623;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#E8873A;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#D4691A;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- 背景渐变 - 深灰色系，与深色主题一致 -->
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1E1E1E;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2D2D2D;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- 发光效果 -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <!-- 阴影效果 -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#000000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+  
+  <!-- 背景圆形 - 深灰色背景 -->
+  <circle cx="256" cy="256" r="240" fill="url(#bgGradient)" filter="url(#shadow)"/>
+  
+  <!-- 外圈装饰环 - 橙色 -->
+  <circle cx="256" cy="256" r="220" stroke="url(#primaryGradient)" stroke-width="4" fill="none" opacity="0.5"/>
+  <circle cx="256" cy="256" r="200" stroke="url(#primaryGradient)" stroke-width="2" fill="none" opacity="0.25"/>
+  
+  <!-- 中心图形 -->
+  <g transform="translate(256, 256)">
+    <!-- 外圈光环 - 橙色 -->
+    <circle cx="0" cy="0" r="120" fill="none" stroke="url(#primaryGradient)" stroke-width="8" opacity="0.6" filter="url(#glow)"/>
+    
+    <!-- 内部圆形背景 - 半透明橙色 -->
+    <circle cx="0" cy="0" r="100" fill="url(#primaryGradient)" opacity="0.1"/>
+    <circle cx="0" cy="0" r="90" fill="url(#primaryGradient)" opacity="0.15"/>
+    
+    <!-- 播放按钮 - 橙色渐变 -->
+    <path d="M-35 -50 L45 0 L-35 50 Z" fill="url(#primaryGradient)" filter="url(#glow)"/>
+    
+    <!-- 直播指示点 - 红色呼吸灯 -->
+    <circle cx="65" cy="-65" r="12" fill="#EF4444" filter="url(#glow)">
+      <animate attributeName="opacity" values="1;0.4;1" dur="2s" repeatCount="indefinite"/>
+    </circle>
+    
+    <!-- 装饰线条 - 橙色 -->
+    <g stroke="url(#primaryGradient)" stroke-width="3" stroke-linecap="round" opacity="0.5">
+      <line x1="-80" y1="-80" x2="-50" y2="-50"/>
+      <line x1="80" y1="-80" x2="50" y2="-50"/>
+      <line x1="-80" y1="80" x2="-50" y2="50"/>
+      <line x1="80" y1="80" x2="50" y2="50"/>
+    </g>
+  </g>
+</svg>

@@ -1,0 +1,42 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- 主色调渐变 - 与项目主题色一致：橙色系 -->
+    <linearGradient id="faviconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#F5A623;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#E8873A;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#D4691A;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- 背景渐变 - 深灰色系 -->
+    <linearGradient id="faviconBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1E1E1E;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2D2D2D;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- 发光效果 -->
+    <filter id="faviconGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- 背景圆形 - 深灰色 -->
+  <circle cx="128" cy="128" r="120" fill="url(#faviconBg)"/>
+  
+  <!-- 外圈 - 橙色 -->
+  <circle cx="128" cy="128" r="110" stroke="url(#faviconGradient)" stroke-width="3" fill="none" opacity="0.5"/>
+  
+  <!-- 内部圆形背景 - 半透明橙色 -->
+  <circle cx="128" cy="128" r="50" fill="url(#faviconGradient)" opacity="0.12"/>
+  
+  <!-- 播放按钮 - 橙色 -->
+  <path d="M108 98 L148 128 L108 158 Z" fill="url(#faviconGradient)" filter="url(#faviconGlow)"/>
+  
+  <!-- 直播指示点 - 红色 -->
+  <circle cx="165" cy="65" r="8" fill="#EF4444" filter="url(#faviconGlow)">
+    <animate attributeName="opacity" values="1;0.4;1" dur="2s" repeatCount="indefinite"/>
+  </circle>
+</svg>

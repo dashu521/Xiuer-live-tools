@@ -1,0 +1,70 @@
+# 本地/阿里云 ECS 均可使用。生产可改为连接阿里云 RDS，去掉 mysql 服务。
+# (Compose V2 已弃用 version，可省略)
+# ⚠️ 重要：生产环境必须设置以下环境变量：
+#   - DATABASE_URL
+#   - JWT_SECRET
+#   - ADMIN_PASSWORD
+
+services:
+  api:
+    build:
+      context: ../auth-api
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      # 阿里云短信（个人开发者用 aliyun_dypns 免企业资质，详见 docs/SMS_SETUP.md）
+      - SMS_MODE=${SMS_MODE:-aliyun_dypns}
+      - ALIYUN_ACCESS_KEY_ID=${ALIYUN_ACCESS_KEY_ID:-}
+      - ALIYUN_ACCESS_KEY_SECRET=${ALIYUN_ACCESS_KEY_SECRET:-}
+      - ALIYUN_SMS_SIGN_NAME=${ALIYUN_SMS_SIGN_NAME:-}
+      - ALIYUN_SMS_TEMPLATE_CODE=${ALIYUN_SMS_TEMPLATE_CODE:-}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+    # 内存限制配置
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-auth_db}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # MySQL 内存优化配置
+    command:
+      - --default-authentication-plugin=mysql_native_password
+      - --innodb-buffer-pool-size=64M
+      - --key-buffer-size=16M
+      - --tmp-table-size=16M
+      - --max-connections=50
+      - --performance-schema=OFF
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+volumes:
+  mysql_data:

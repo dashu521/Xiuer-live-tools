@@ -1,0 +1,317 @@
+/**
+ * UI 规范 v3：时尚主题（Fashion Theme）
+ *
+ * 设计原则：
+ * 1. 极深灰黑背景 (#0F0F11)，比纯黑更有质感
+ * 2. 橙金渐变主色 (#FF6B35 → #F7931E)，注入时尚活力
+ * 3. 玻璃拟态效果（Glassmorphism）增加现代感
+ * 4. 更大的圆角 (14px-20px)，更柔和的视觉感受
+ * 5. 细腻的光晕阴影效果
+ * 6. 符合 WCAG AA 级标准：正常文本对比度 ≥ 4.5:1
+ * 7. 按钮文字使用清晰易读的无衬线字体，字号不小于14px
+ * 8. 所有可交互元素有明确的视觉反馈状态
+ */
+
+/* ========== 时尚主题（Fashion Theme）========== */
+:root,
+[data-theme="fashion"] {
+  /* 四层结构：页面底 → Sidebar/Header → 内容区 → 卡片 (surface) */
+  --app-bg: hsl(240, 8%, 6%);
+  --header-bg: hsl(240, 8%, 10%);
+  --sidebar-bg: hsl(240, 8%, 10%);
+  --content-bg: hsl(240, 7%, 8%);
+  --surface: hsl(240, 9%, 12%);
+  --surface-muted: hsl(240, 8%, 10%);
+  --surface-elevated: hsl(240, 9%, 16%);
+  --border: 240 6% 18%;
+
+  /* 文本颜色 - 高对比度确保可读性 */
+  --text-primary: hsl(0, 0%, 98%);
+  --text-secondary: hsl(240, 3%, 90%);
+  --text-muted: hsl(240, 4%, 63%);
+  --text-disabled: hsl(240, 4%, 44%);
+
+  /* 主色调 - 橙金渐变系 */
+  --primary: 17 100% 60%;
+  --primary-hover: hsl(17, 100%, 54%);
+  --primary-pressed: hsl(17, 100%, 48%);
+  --primary-subtle: hsl(17, 100%, 60%, 0.15);
+  --on-primary: hsl(0, 0%, 100%);
+
+  /* 语义颜色 - 高饱和度 */
+  --success: 142 76% 45%;
+  --success-subtle: rgba(34, 197, 94, 0.15);
+  --warning: 45 93% 47%;
+  --warning-subtle: rgba(234, 179, 8, 0.15);
+  --error: 0 84% 60%;
+  --error-subtle: rgba(239, 68, 68, 0.15);
+  --info: 217 91% 60%;
+  --info-subtle: rgba(59, 130, 246, 0.15);
+
+  /* 阴影系统 - 带主色光晕效果 */
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-card-hover: 0 8px 24px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(255, 107, 53, 0.1);
+  --shadow-dropdown: 0 12px 32px rgba(0, 0, 0, 0.5), 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-modal: 0 24px 56px rgba(0, 0, 0, 0.6), 0 8px 24px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 0 20px rgba(255, 107, 53, 0.3);
+  --shadow-glow-strong: 0 0 30px rgba(255, 107, 53, 0.4);
+
+  /* 分割线阴影 */
+  --header-top-shadow: 0 1px 0 rgba(255, 255, 255, 0.04);
+  --header-separator: 0 1px 0 rgba(255, 255, 255, 0.06);
+  --sidebar-edge-shadow: 1px 0 0 rgba(255, 255, 255, 0.04);
+  --content-edge-shadow: 0 0 0 1px rgba(255, 255, 255, 0.03);
+  --divider: rgba(255, 255, 255, 0.06);
+
+  /* 交互状态 */
+  --sidebar-item-hover: rgba(255, 107, 53, 0.08);
+  --sidebar-active-bg: rgba(255, 107, 53, 0.12);
+  --hover-overlay: rgba(255, 255, 255, 0.04);
+  --pressed-overlay: rgba(255, 255, 255, 0.08);
+
+  /* Header 操作区 */
+  --header-action-bg: #1e1e24;
+  --header-action-border: rgba(255, 255, 255, 0.08);
+  --header-action-fg: #fafafa;
+  --header-action-select-chevron-opacity: 0.9;
+
+  /* 输入框 */
+  --input-bg: hsl(240, 8%, 10%);
+  --input-border: hsl(240, 6%, 20%);
+  --input-border-focus: hsl(17, 100%, 60%);
+  --input-border-hover: hsl(240, 6%, 26%);
+  --input-placeholder: hsl(240, 5%, 55%);
+
+  /* 按钮 */
+  --button-secondary-bg: hsl(240, 9%, 16%);
+  --button-secondary-hover: hsl(240, 6%, 20%);
+  --button-secondary-pressed: hsl(240, 6%, 24%);
+  --button-ghost-hover: hsl(17, 100%, 60%, 0.08);
+
+  /* shadcn/ui 兼容变量 - 时尚主题 */
+  --background: 240 10% 6%;
+  --foreground: 0 0% 98%;
+  --card: 240 8% 12%;
+  --card-foreground: 0 0% 98%;
+  --popover: 240 8% 12%;
+  --popover-foreground: 0 0% 98%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 240 6% 16%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 240 6% 14%;
+  --muted-foreground: 240 5% 65%;
+  --accent: 17 100% 60%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+  --input: 240 6% 14%;
+  --ring: 17 100% 60%;
+  --sidebar-background: 240 8% 10%;
+  --sidebar-foreground: 0 0% 98%;
+  --sidebar-primary: 17 100% 60%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 17 100% 60% / 0.12;
+  --sidebar-accent-foreground: 0 0% 98%;
+  --sidebar-border: 240 6% 16%;
+  --sidebar-ring: 17 100% 60%;
+}
+
+/* ========== 时尚主题特定样式优化 ========== */
+
+/* 渐变主按钮样式 */
+[data-theme="fashion"] .btn-primary-gradient,
+[data-theme="fashion"] button[data-variant="default"],
+[data-theme="fashion"] .bg-primary {
+  background: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%);
+  transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="fashion"] .btn-primary-gradient:hover,
+[data-theme="fashion"] button[data-variant="default"]:hover,
+[data-theme="fashion"] .bg-primary:hover {
+  background: linear-gradient(135deg, #ff8050 0%, #f7a040 100%);
+  transform: translateY(-1px);
+}
+
+[data-theme="fashion"] .btn-primary-gradient:active,
+[data-theme="fashion"] button[data-variant="default"]:active,
+[data-theme="fashion"] .bg-primary:active {
+  transform: translateY(0);
+}
+
+/* 渐变按钮禁用样式 */
+[data-theme="fashion"] .btn-primary-gradient:disabled,
+[data-theme="fashion"] button[data-variant="default"]:disabled,
+[data-theme="fashion"] .bg-primary:disabled {
+  background: linear-gradient(135deg, #5a5a65 0%, #4a4a55 100%);
+  box-shadow: none;
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 玻璃拟态效果 */
+[data-theme="fashion"] .glass {
+  background: rgba(28, 28, 33, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+[data-theme="fashion"] .glass-strong {
+  background: rgba(28, 28, 33, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* 光晕效果 */
+[data-theme="fashion"] .glow {
+  box-shadow: 0 0 20px rgba(255, 107, 53, 0.3);
+}
+
+[data-theme="fashion"] .glow-strong {
+  box-shadow: 0 0 30px rgba(255, 107, 53, 0.4);
+}
+
+[data-theme="fashion"] .glow-text {
+  text-shadow: 0 0 20px rgba(255, 107, 53, 0.5);
+}
+
+/* 卡片悬停效果 */
+[data-theme="fashion"] .card-hover {
+  transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="fashion"] .card-hover:hover {
+  border-color: rgba(255, 107, 53, 0.3);
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.5),
+    0 0 20px rgba(255, 107, 53, 0.1);
+  transform: translateY(-2px);
+}
+
+/* 输入框焦点光晕 */
+[data-theme="fashion"] input:focus,
+[data-theme="fashion"] textarea:focus,
+[data-theme="fashion"] select:focus {
+  box-shadow: 0 0 0 3px hsl(17, 100%, 60%, 0.2);
+  border-color: var(--input-border-focus);
+}
+
+/* 输入框悬停状态 */
+[data-theme="fashion"] input:hover:not(:focus):not(:disabled),
+[data-theme="fashion"] textarea:hover:not(:focus):not(:disabled),
+[data-theme="fashion"] select:hover:not(:focus):not(:disabled) {
+  border-color: var(--input-border-hover);
+}
+
+/* 侧边栏激活项 */
+[data-theme="fashion"] .sidebar-item-active {
+  background: linear-gradient(90deg, rgba(255, 107, 53, 0.12) 0%, transparent 100%);
+  border-left: 3px solid #ff6b35;
+}
+
+/* 滚动条样式 */
+[data-theme="fashion"] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+[data-theme="fashion"] ::-webkit-scrollbar-track {
+  background: #131316;
+}
+
+[data-theme="fashion"] ::-webkit-scrollbar-thumb {
+  background: #2e2e35;
+  border-radius: 4px;
+}
+
+[data-theme="fashion"] ::-webkit-scrollbar-thumb:hover {
+  background: #3e3e47;
+}
+
+/* 选中文字样式 */
+[data-theme="fashion"] ::selection {
+  background: rgba(255, 107, 53, 0.4);
+  color: #ffffff;
+}
+
+/* 焦点环样式 - 已移除全局 outline，由组件自行控制 */
+
+/* 禁用状态 */
+[data-theme="fashion"] :disabled,
+[data-theme="fashion"] [disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 渐变文字效果 */
+[data-theme="fashion"] .text-gradient {
+  background: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* 边框光晕 */
+[data-theme="fashion"] .border-glow {
+  border-color: rgba(255, 107, 53, 0.3);
+  box-shadow: 0 0 10px rgba(255, 107, 53, 0.1);
+}
+
+/* 动画过渡 */
+[data-theme="fashion"] .transition-fashion {
+  transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="fashion"] .transition-fashion-fast {
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="fashion"] .transition-fashion-slow {
+  transition: all 400ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 主题切换过渡动画 - 全局平滑过渡 */
+html {
+  transition:
+    background-color 300ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html * {
+  transition:
+    background-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 按钮和交互元素的快速过渡 */
+html button,
+html a {
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 卡片和容器的慢速过渡 */
+html .card,
+html [class*="card-"] {
+  transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 无障碍支持：减少动画 */
+@media (prefers-reduced-motion: reduce) {
+  [data-theme="fashion"] *,
+  [data-theme="fashion"] *::before,
+  [data-theme="fashion"] *::after {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.01ms;
+  }
+
+  [data-theme="fashion"] .card-hover:hover,
+  [data-theme="fashion"] .btn-primary-gradient:hover,
+  [data-theme="fashion"] button[data-variant="default"]:hover {
+    transform: none;
+  }
+}

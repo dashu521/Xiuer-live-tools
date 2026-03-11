@@ -1,0 +1,15 @@
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-dotenv>=1.0.0
+sqlalchemy>=2.0,<2.1
+pymysql==1.1.1
+cryptography>=44.0.0
+bcrypt==4.2.1
+python-jose[cryptography]==3.3.0
+pydantic==2.10.3
+pydantic-settings==2.6.1
+aliyun-python-sdk-core>=2.13.0
+aliyun-python-sdk-dysmsapi>=1.8.0
+alibabacloud_dypnsapi20170525>=2.0.0
+alibabacloud_tea_openapi>=0.3.0
+passlib[bcrypt]

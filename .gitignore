@@ -1,0 +1,85 @@
+node_modules
+
+# 本地工具 - 不推送到远程仓库
+remotion-video/
+
+# Build outputs
+dist
+dist-ssr
+dist-electron
+release
+out
+build
+*.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Electron
+app-update.yml
+latest.yml
+latest-mac.yml
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Editor directories and files
+.vscode/.debug.env
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Lockfiles (uncomment if you want to ignore them)
+# package-lock.json
+# pnpm-lock.yaml
+# yarn.lock
+
+# Testing
+test-results/
+playwright-report/
+playwright/.cache/
+coverage/
+test/
+tests/
+test-output/
+local_test/
+local-tests/
+sandbox/
+experiments/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+Thumbs.db
+
+# Python / auth-api local
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.db
+*.sqlite
+*.sqlite3
+
+# Cache
+.eslintcache
+.cache/
+*.tsbuildinfo
+
+# Misc
+TROUBLE.md

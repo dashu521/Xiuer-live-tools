@@ -1,0 +1,14 @@
+# 仅 API，连接外部 MySQL（如阿里云 RDS）。使用：docker compose -f docker-compose.rds.yml up -d
+version: "3.8"
+
+services:
+  api:
+    build:
+      context: ../auth-api
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - CORS_ORIGINS=${CORS_ORIGINS}

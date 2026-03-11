@@ -1,0 +1,12 @@
+#!/usr/bin/expect -f
+set timeout 30
+set password $env(SSHPASS)
+spawn scp -F /dev/null -o PubkeyAuthentication=no -o StrictHostKeyChecking=no {*}$argv
+expect {
+    "password:" { send "$password\r"; exp_continue }
+    "Password:" { send "$password\r"; exp_continue }
+    "denied" { exit 1 }
+    eof { exit 0 }
+    timeout { exit 2 }
+}
+expect eof

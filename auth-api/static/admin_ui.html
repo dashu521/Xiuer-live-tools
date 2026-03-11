@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>管理员 - 用户管理</title>
+  <style>
+    :root { --blue: #2563eb; --blue-hover: #1d4ed8; --red: #dc2626; --red-hover: #b91c1c; --green: #16a34a; --gray-50: #f9fafb; --gray-100: #f3f4f6; --gray-200: #e5e7eb; --gray-300: #d1d5db; --gray-500: #6b7280; --gray-700: #374151; --gray-900: #111827; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; color: var(--gray-900); font-size: 14px; }
+
+    /* Header */
+    .header { background: #fff; border-bottom: 1px solid var(--gray-200); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50; }
+    .header h1 { font-size: 16px; font-weight: 600; }
+    .header-right { display: flex; gap: 8px; align-items: center; }
+
+    /* Container */
+    .container { max-width: 1100px; margin: 0 auto; padding: 20px; }
+
+    /* Card */
+    .card { background: #fff; border-radius: 10px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+
+    /* Buttons */
+    button { padding: 7px 14px; border-radius: 6px; font-size: 13px; cursor: pointer; border: 1px solid var(--gray-300); background: #fff; color: var(--gray-700); transition: all .15s; font-family: inherit; }
+    button:hover { background: var(--gray-50); }
+    button.primary { background: var(--blue); color: #fff; border-color: var(--blue); }
+    button.primary:hover { background: var(--blue-hover); }
+    button.danger { background: var(--red); color: #fff; border-color: var(--red); }
+    button.danger:hover { background: var(--red-hover); }
+    button.success { background: var(--green); color: #fff; border-color: var(--green); }
+    button.sm { padding: 4px 10px; font-size: 12px; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+
+    /* Inputs */
+    input[type="text"], input[type="password"], input[type="number"], select {
+      padding: 7px 12px; border: 1px solid var(--gray-300); border-radius: 6px; font-size: 13px; font-family: inherit; outline: none; transition: border .15s;
+    }
+    input:focus, select:focus { border-color: var(--blue); box-shadow: 0 0 0 2px rgba(37,99,235,.12); }
+
+    /* Table */
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--gray-100); white-space: nowrap; }
+    th { background: var(--gray-50); font-weight: 600; font-size: 12px; color: var(--gray-500); text-transform: uppercase; letter-spacing: .3px; position: sticky; top: 0; }
+    tr:hover td { background: #f8fafc; }
+    .table-wrap { overflow-x: auto; }
+
+    /* Badges */
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+    .badge.active { background: #dcfce7; color: #15803d; }
+    .badge.disabled { background: #fef2f2; color: #b91c1c; }
+    .badge.trial-active { background: #dbeafe; color: #1d4ed8; }
+    .badge.trial-expired { background: #fef3c7; color: #92400e; }
+    .badge.trial-none { background: var(--gray-100); color: var(--gray-500); }
+    .badge.phone { background: #ede9fe; color: #6d28d9; }
+    .badge.email { background: #e0f2fe; color: #0369a1; }
+    .badge.online { background: #dcfce7; color: #15803d; }
+    .badge.online::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #22c55e; margin-right: 4px; animation: pulse 2s infinite; }
+    .badge.offline { background: var(--gray-100); color: var(--gray-500); }
+    .badge.offline::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--gray-300); margin-right: 4px; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+
+    /* Toolbar */
+    .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+    .toolbar .search-input { min-width: 220px; }
+    .toolbar .spacer { flex: 1; }
+    .stats { font-size: 13px; color: var(--gray-500); }
+
+    /* Pagination */
+    .pagination { display: flex; gap: 4px; align-items: center; justify-content: center; margin-top: 16px; font-size: 13px; }
+    .pagination button { min-width: 32px; }
+    .pagination .current { background: var(--blue); color: #fff; border-color: var(--blue); }
+    .pagination .info { color: var(--gray-500); margin: 0 8px; }
+
+    /* Modal */
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 200; align-items: center; justify-content: center; }
+    .modal.show { display: flex; }
+    .modal-content { background: #fff; padding: 24px; border-radius: 12px; min-width: 360px; max-width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
+    .modal-title { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+    .modal-actions { margin-top: 20px; display: flex; gap: 8px; justify-content: flex-end; }
+    .modal-field { margin-bottom: 12px; }
+    .modal-field label { display: block; font-size: 12px; color: var(--gray-500); margin-bottom: 4px; }
+    .modal-field input, .modal-field select { width: 100%; }
+
+    /* Toast */
+    .toast-container { position: fixed; top: 16px; right: 16px; z-index: 999; display: flex; flex-direction: column; gap: 8px; }
+    .toast { padding: 12px 20px; border-radius: 8px; color: #fff; font-size: 13px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); animation: slideIn .3s ease; min-width: 200px; }
+    .toast.success { background: var(--green); }
+    .toast.error { background: var(--red); }
+    .toast.info { background: var(--blue); }
+    @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+    /* Loading overlay */
+    .loading { position: relative; }
+    .loading::after { content: ''; position: absolute; inset: 0; background: rgba(255,255,255,.7); display: flex; align-items: center; justify-content: center; z-index: 10; }
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--gray-300); border-top-color: var(--blue); border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: 6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Login */
+    .login-card { max-width: 380px; margin: 80px auto; }
+    .login-card h2 { font-size: 20px; margin-bottom: 20px; text-align: center; }
+    .login-card .field { margin-bottom: 14px; }
+    .login-card .field input { width: 100%; padding: 10px 14px; }
+    .login-card button { width: 100%; padding: 10px; font-size: 14px; }
+
+    /* Checkbox */
+    input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--blue); }
+
+    /* Error */
+    .error { color: var(--red); font-size: 13px; margin-top: 6px; }
+
+    /* Temp password */
+    .temp-pw { font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace; background: var(--gray-100); padding: 10px 14px; border-radius: 6px; margin: 8px 0; word-break: break-all; font-size: 15px; letter-spacing: .5px; }
+
+    /* Audit log */
+    .log-item { padding: 8px 0; border-bottom: 1px solid var(--gray-100); font-size: 12px; }
+    .log-item:last-child { border: none; }
+    .log-time { color: var(--gray-500); }
+    .log-action { font-weight: 600; }
+    .log-status-success { color: var(--green); }
+    .log-status-failure { color: var(--red); }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 0; border-bottom: 2px solid var(--gray-200); margin-bottom: 16px; }
+    .tab { padding: 8px 18px; cursor: pointer; font-size: 13px; font-weight: 500; border-bottom: 2px solid transparent; margin-bottom: -2px; color: var(--gray-500); transition: all .15s; }
+    .tab:hover { color: var(--gray-700); }
+    .tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <h1>用户管理后台</h1>
+  <div class="header-right" id="headerRight" style="display:none;">
+    <button onclick="loadUsers()" title="刷新"><span class="spinner" style="display:none" id="refreshSpinner"></span>刷新</button>
+    <button onclick="openAuditLogs()">操作日志</button>
+    <button class="danger sm" onclick="doLogout()">退出</button>
+  </div>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+
+<!-- Login -->
+<div class="container" id="loginView">
+  <div class="card login-card">
+    <h2>管理员登录</h2>
+    <div class="field">
+      <input type="text" id="adminUser" placeholder="管理员账号" />
+    </div>
+    <div class="field">
+      <input type="password" id="adminPass" placeholder="密码" />
+    </div>
+    <button type="button" class="primary" id="btnLogin">登录</button>
+    <p id="loginError" class="error" style="display:none;"></p>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="container hidden" id="mainView">
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" data-tab="users" onclick="switchTab('users')">用户管理</div>
+    <div class="tab" data-tab="giftcards" onclick="switchTab('giftcards')">礼品卡</div>
+    <div class="tab" data-tab="logs" onclick="switchTab('logs')">操作日志</div>
+  </div>
+
+  <!-- Users Tab -->
+  <div id="tabUsers">
+    <div class="toolbar">
+      <input type="text" class="search-input" id="searchInput" placeholder="搜索邮箱/手机/ID..." />
+      <button onclick="doSearch()">搜索</button>
+      <button onclick="clearSearch()">清空</button>
+      <div class="spacer"></div>
+      <span class="stats" id="statsText"></span>
+      <select id="batchSelect" style="font-size:12px;">
+        <option value="">批量操作</option>
+        <option value="disable">批量禁用</option>
+        <option value="enable">批量启用</option>
+        <option value="delete">批量删除</option>
+      </select>
+      <button class="sm" onclick="doBatchAction()">执行</button>
+      <button class="sm" onclick="exportCSV()">导出 CSV</button>
+    </div>
+
+    <div class="card" id="usersCard">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="checkAll" onchange="toggleCheckAll()" /></th>
+              <th>账号</th>
+              <th>在线</th>
+              <th>注册方式</th>
+              <th>状态</th>
+              <th>试用状态</th>
+              <th>创建时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="usersBody"></tbody>
+        </table>
+      </div>
+      <div id="loadingRow" class="hidden" style="text-align:center;padding:20px;color:var(--gray-500);">
+        <span class="spinner"></span> 加载中...
+      </div>
+      <div id="emptyRow" class="hidden" style="text-align:center;padding:20px;color:var(--gray-500);">暂无用户数据</div>
+      <p id="usersError" class="error" style="display:none;"></p>
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </div>
+
+  <!-- Gift Cards Tab -->
+  <div id="tabGiftcards" class="hidden">
+    <div class="toolbar">
+      <select id="gcStatusFilter">
+        <option value="">全部状态</option>
+        <option value="active">可用</option>
+        <option value="redeemed">已兑换</option>
+        <option value="expired">已过期</option>
+        <option value="disabled">已禁用</option>
+      </select>
+      <input type="text" id="gcBatchIdFilter" placeholder="批次 ID" class="search-input" style="max-width:180px;" />
+      <input type="text" id="gcCodeSearch" placeholder="兑换码搜索" class="search-input" style="max-width:140px;" />
+      <button onclick="loadGiftCards()">筛选</button>
+      <button class="sm" onclick="copyGcSelected()" title="复制当前页勾选的兑换码">复制选中</button>
+      <button class="sm" onclick="batchDisableGc()">批量禁用</button>
+      <button class="sm danger" onclick="batchDeleteGc()">删除选中</button>
+      <button class="sm" onclick="exportGcCsv()">导出 CSV</button>
+      <div class="spacer"></div>
+      <span class="stats" id="gcStatsText"></span>
+      <button class="primary" id="btnCreateGc" onclick="openCreateGcModal()">生成礼品卡</button>
+    </div>
+    <div class="card" id="gcCard">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="gcCheckAll" onchange="toggleGcCheckAll()" title="全选本页" /></th>
+              <th>兑换码</th>
+              <th>类型</th>
+              <th>天数</th>
+              <th>状态</th>
+              <th>批次</th>
+              <th>创建时间</th>
+              <th>过期时间</th>
+              <th>兑换时间</th>
+              <th>兑换者</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="gcBody"></tbody>
+        </table>
+      </div>
+      <div id="gcLoading" class="hidden" style="text-align:center;padding:20px;color:var(--gray-500);"><span class="spinner"></span> 加载中...</div>
+      <div id="gcEmpty" class="hidden" style="text-align:center;padding:20px;color:var(--gray-500);">
+        <p style="margin-bottom:10px;">暂无礼品卡</p>
+        <button class="primary sm" onclick="openCreateGcModal()">生成礼品卡</button>
+      </div>
+      <div id="gcPaginationWrap" style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;flex-wrap:wrap;gap:8px;">
+        <span class="stats" id="gcPaginationInfo"></span>
+        <div class="pagination" id="gcPagination"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Audit Logs Tab -->
+  <div id="tabLogs" class="hidden">
+    <div class="toolbar">
+      <select id="logActionFilter">
+        <option value="">全部操作</option>
+        <option value="admin_login">管理员登录</option>
+        <option value="list_users">查看列表</option>
+        <option value="disable_user">禁用用户</option>
+        <option value="enable_user">启用用户</option>
+        <option value="delete_user">删除用户</option>
+        <option value="reset_password">重置密码</option>
+        <option value="extend_trial">延长试用</option>
+        <option value="export_users">导出用户</option>
+        <option value="create_gift_cards">生成礼品卡</option>
+        <option value="redeem_gift_card">兑换礼品卡</option>
+        <option value="disable_gift_card">禁用礼品卡</option>
+      </select>
+      <button onclick="loadAuditLogs()">筛选</button>
+    </div>
+    <div class="card" id="logsCard">
+      <div id="logsBody"></div>
+      <div id="logsLoading" class="hidden" style="text-align:center;padding:20px;color:var(--gray-500);"><span class="spinner"></span> 加载中...</div>
+      <div class="pagination" id="logsPagination"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Reset Password -->
+<div id="modalReset" class="modal">
+  <div class="modal-content">
+    <div class="modal-title">重置密码</div>
+    <p style="margin-bottom:12px;">为用户 <strong id="resetUsername"></strong> 设置新密码：</p>
+    <div class="modal-field">
+      <label>新密码（至少 8 位）</label>
+      <input type="password" id="newPassword" placeholder="输入新密码" minlength="8" />
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeModal('modalReset')">取消</button>
+      <button class="primary" onclick="doResetPassword()">确认重置</button>
+    </div>
+    <p id="modalResetError" class="error" style="display:none;"></p>
+  </div>
+</div>
+
+<!-- Modal: Temp Password -->
+<div id="modalTemp" class="modal">
+  <div class="modal-content">
+    <div class="modal-title">临时密码</div>
+    <p>用户 <strong id="tempUsername"></strong> 的临时密码（仅显示一次）：</p>
+    <div class="temp-pw" id="tempPasswordValue"></div>
+    <div class="modal-actions">
+      <button class="primary" onclick="copyTempPw()">复制密码</button>
+      <button onclick="closeModal('modalTemp')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Toggle -->
+<div id="modalToggle" class="modal">
+  <div class="modal-content">
+    <div class="modal-title" id="modalToggleTitle"></div>
+    <p id="modalToggleText"></p>
+    <div class="modal-actions">
+      <button onclick="closeModal('modalToggle')">取消</button>
+      <button class="primary" onclick="doToggle()">确认</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Delete -->
+<div id="modalDelete" class="modal">
+  <div class="modal-content">
+    <div class="modal-title" style="color:var(--red);">删除用户</div>
+    <p>确定要删除用户 <strong id="deleteUsername"></strong> 吗？</p>
+    <p style="color:var(--red);font-size:12px;margin-top:8px;">此操作不可撤销，将同时删除该用户的所有数据。</p>
+    <div class="modal-actions">
+      <button onclick="closeModal('modalDelete')">取消</button>
+      <button class="danger" onclick="doDelete()">确认删除</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Extend Trial -->
+<div id="modalExtend" class="modal">
+  <div class="modal-content">
+    <div class="modal-title">延长试用期</div>
+    <p style="margin-bottom:12px;">为用户 <strong id="extendUsername"></strong> 延长试用：</p>
+    <div class="modal-field">
+      <label>延长天数</label>
+      <input type="number" id="extendDays" value="7" min="1" max="365" />
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeModal('modalExtend')">取消</button>
+      <button class="success" onclick="doExtendTrial()">确认延长</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Create Gift Cards -->
+<div id="modalCreateGc" class="modal">
+  <div class="modal-content">
+    <div class="modal-title">生成礼品卡</div>
+    <div class="modal-field">
+      <label>会员类型</label>
+      <select id="gcMembershipType">
+        <option value="pro">Pro - 基础版 (1个账号)</option>
+        <option value="pro_max">Pro Max - 中级版 (3个账号)</option>
+        <option value="ultra">Ultra - 高级版 (无限账号)</option>
+      </select>
+    </div>
+    <div class="modal-field">
+      <label>会员天数</label>
+      <input type="number" id="gcDays" value="30" min="1" max="3650" />
+    </div>
+    <div class="modal-field">
+      <label>生成数量 (1-100)</label>
+      <input type="number" id="gcQuantity" value="1" min="1" max="100" />
+    </div>
+    <div class="modal-field">
+      <label>过期时间（可选）</label>
+      <input type="text" id="gcExpiresAt" placeholder="如 2026-12-31T23:59:59" />
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeModal('modalCreateGc')">取消</button>
+      <button class="primary" id="btnDoCreateGc" onclick="doCreateGiftCards()">生成</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Batch Result -->
+<div id="modalGcResult" class="modal">
+  <div class="modal-content">
+    <div class="modal-title">礼品卡生成成功</div>
+    <p style="margin-bottom:8px;">批次 ID：<span id="gcBatchId" style="font-family:monospace;font-size:12px;color:var(--gray-500);"></span></p>
+    <p style="margin-bottom:8px;">共生成 <strong id="gcResultCount"></strong> 张礼品卡：</p>
+    <div id="gcResultCodes" style="max-height:300px;overflow-y:auto;background:var(--gray-50);border-radius:6px;padding:12px;font-family:'SF Mono',Monaco,monospace;font-size:14px;line-height:2;"></div>
+    <div class="modal-actions">
+      <button onclick="copyGcCodes()">复制全部兑换码</button>
+      <button onclick="downloadGcTxt()">下载 TXT</button>
+      <button class="primary" onclick="closeModal('modalGcResult')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = window.location.origin;
+let token = sessionStorage.getItem('admin_token') || '';
+let currentPage = 1;
+let currentSize = 20;
+let currentQuery = '';
+let logsPage = 1;
+
+const $ = id => document.getElementById(id);
+
+function hdrs() { return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }; }
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function escAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+/* Toast */
+function toast(msg, type = 'success') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  $('toasts').appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 3000);
+}
+
+/* 复制到剪贴板（兼容 HTTP 非安全环境：优先 clipboard API，失败则用 execCommand 兜底） */
+function copyToClipboard(text) {
+  if (!text) return false;
+  var ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  ta.style.top = '0';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try {
+    var ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch (e) {
+    document.body.removeChild(ta);
+    return false;
+  }
+}
+
+/* Modal helpers */
+function openModal(id) { $(id).classList.add('show'); }
+function closeModal(id) { $(id).classList.remove('show'); }
+
+/* Tab switching */
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  $('tabUsers').classList.toggle('hidden', name !== 'users');
+  $('tabGiftcards').classList.toggle('hidden', name !== 'giftcards');
+  $('tabLogs').classList.toggle('hidden', name !== 'logs');
+  if (name === 'logs') loadAuditLogs();
+  if (name === 'giftcards') { loadGiftCards(); loadGcStats(); }
+}
+
+/* Login */
+async function doLogin() {
+  const user = $('adminUser').value.trim();
+  const pass = $('adminPass').value;
+  if (!user || !pass) { showErr('loginError', '请输入账号和密码'); return; }
+  hideErr('loginError');
+  try {
+    const r = await fetch(API + '/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: user, password: pass }) });
+    const d = await r.json();
+    if (r.ok && d.token) {
+      token = d.token;
+      sessionStorage.setItem('admin_token', token);
+      enterMain();
+    } else {
+      showErr('loginError', d.detail?.message || '登录失败');
+    }
+  } catch { showErr('loginError', '网络错误'); }
+}
+
+$('btnLogin').onclick = doLogin;
+$('adminUser').onkeydown = e => { if (e.key === 'Enter') $('adminPass').focus(); };
+$('adminPass').onkeydown = e => { if (e.key === 'Enter') doLogin(); };
+
+function enterMain() {
+  $('loginView').classList.add('hidden');
+  $('mainView').classList.remove('hidden');
+  $('headerRight').style.display = '';
+  loadUsers();
+}
+
+function doLogout() {
+  token = '';
+  sessionStorage.removeItem('admin_token');
+  $('loginView').classList.remove('hidden');
+  $('mainView').classList.add('hidden');
+  $('headerRight').style.display = 'none';
+}
+
+/* Error helpers */
+function showErr(id, msg) { const el = $(id); el.textContent = msg; el.style.display = ''; }
+function hideErr(id) { const el = $(id); el.textContent = ''; el.style.display = 'none'; }
+
+/* Search */
+$('searchInput').onkeydown = e => { if (e.key === 'Enter') doSearch(); };
+function doSearch() { currentQuery = $('searchInput').value.trim(); currentPage = 1; loadUsers(); }
+function clearSearch() { $('searchInput').value = ''; currentQuery = ''; currentPage = 1; loadUsers(); }
+
+/* Load Users */
+async function loadUsers() {
+  const tbody = $('usersBody');
+  const errEl = $('usersError');
+  tbody.innerHTML = '';
+  hideErr('usersError');
+  $('loadingRow').classList.remove('hidden');
+  $('emptyRow').classList.add('hidden');
+  $('pagination').innerHTML = '';
+
+  let url = API + '/admin/users?page=' + currentPage + '&size=' + currentSize;
+  if (currentQuery) url += '&query=' + encodeURIComponent(currentQuery);
+
+  try {
+    const r = await fetch(url, { headers: hdrs() });
+    $('loadingRow').classList.add('hidden');
+    if (r.status === 401) { doLogout(); toast('登录已过期', 'error'); return; }
+    const data = await r.json();
+    if (!data.items) { showErr('usersError', data.detail?.message || '加载失败'); return; }
+
+    const onlineCount = data.items.filter(u => u.is_online).length;
+    $('statsText').textContent = '共 ' + data.total + ' 位用户' + (onlineCount > 0 ? '，' + onlineCount + ' 人在线' : '');
+
+    if (data.items.length === 0) {
+      $('emptyRow').classList.remove('hidden');
+      return;
+    }
+
+    const nowTs = Math.floor(Date.now() / 1000);
+    data.items.forEach(u => {
+      const tr = document.createElement('tr');
+      const statusCls = u.disabled ? 'disabled' : 'active';
+      const statusText = u.disabled ? '已禁用' : '正常';
+      const created = u.created_at ? u.created_at.slice(0, 16).replace('T', ' ') : '-';
+
+      let trialBadge = '<span class="badge trial-none">未开通</span>';
+      if (u.trial_end) {
+        trialBadge = u.trial_end > nowTs
+          ? '<span class="badge trial-active">试用中 ' + fmtTs(u.trial_end) + '</span>'
+          : '<span class="badge trial-expired">已过期 ' + fmtTs(u.trial_end) + '</span>';
+      }
+
+      let regType = '<span class="badge" style="background:#eee;color:#666;">未知</span>';
+      if (u.phone) regType = '<span class="badge phone">手机</span>';
+      else if (u.email) regType = '<span class="badge email">邮箱</span>';
+
+      const onlineBadge = u.is_online
+        ? '<span class="badge online">在线</span>'
+        : '<span class="badge offline" title="' + (u.last_active_at ? '最后活跃: ' + escAttr(u.last_active_at.slice(0,16).replace('T',' ')) : '从未活跃') + '">离线</span>';
+
+      tr.innerHTML =
+        '<td><input type="checkbox" class="user-check" value="' + escAttr(u.user_id) + '" /></td>' +
+        '<td title="ID: ' + escAttr(u.user_id) + '">' + esc(u.username) + '</td>' +
+        '<td>' + onlineBadge + '</td>' +
+        '<td>' + regType + '</td>' +
+        '<td><span class="badge ' + statusCls + '">' + statusText + '</span></td>' +
+        '<td>' + trialBadge + '</td>' +
+        '<td>' + esc(created) + '</td>' +
+        '<td style="white-space:nowrap;">' +
+          '<button class="sm" onclick="openResetModal(\'' + escAttr(u.username) + '\')">重置密码</button>' +
+          '<button class="sm" onclick="genTempPw(\'' + escAttr(u.username) + '\')">临时密码</button>' +
+          '<button class="sm" onclick="openToggle(\'' + escAttr(u.username) + '\',' + u.disabled + ')">' + (u.disabled ? '启用' : '禁用') + '</button>' +
+          '<button class="sm" onclick="openExtend(\'' + escAttr(u.username) + '\')">延长试用</button>' +
+          '<button class="sm danger" onclick="openDeleteModal(\'' + escAttr(u.username) + '\')">删除</button>' +
+        '</td>';
+      tbody.appendChild(tr);
+    });
+
+    renderPagination(data.total, data.page, data.size);
+  } catch {
+    $('loadingRow').classList.add('hidden');
+    showErr('usersError', '加载用户列表失败');
+  }
+}
+
+function fmtTs(ts) {
+  const d = new Date(ts * 1000);
+  return (d.getMonth()+1) + '/' + d.getDate() + ' ' + d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+}
+
+/* Pagination */
+function renderPagination(total, page, size) {
+  const el = $('pagination');
+  const totalPages = Math.ceil(total / size) || 1;
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+
+  let html = '<button ' + (page <= 1 ? 'disabled' : 'onclick="goPage(' + (page-1) + ')"') + '>&laquo;</button>';
+  const start = Math.max(1, page - 2);
+  const end = Math.min(totalPages, page + 2);
+  for (let i = start; i <= end; i++) {
+    html += '<button class="' + (i === page ? 'current' : '') + '" onclick="goPage(' + i + ')">' + i + '</button>';
+  }
+  html += '<button ' + (page >= totalPages ? 'disabled' : 'onclick="goPage(' + (page+1) + ')"') + '>&raquo;</button>';
+  html += '<span class="info">' + page + ' / ' + totalPages + '</span>';
+  el.innerHTML = html;
+}
+
+function goPage(p) { currentPage = p; loadUsers(); }
+
+/* Checkbox */
+function toggleCheckAll() { const checked = $('checkAll').checked; document.querySelectorAll('.user-check').forEach(c => c.checked = checked); }
+
+/* Batch Actions */
+async function doBatchAction() {
+  const action = $('batchSelect').value;
+  if (!action) { toast('请选择批量操作类型', 'info'); return; }
+  const ids = Array.from(document.querySelectorAll('.user-check:checked')).map(c => c.value);
+  if (!ids.length) { toast('请先勾选用户', 'info'); return; }
+
+  const actionLabel = { disable: '禁用', enable: '启用', delete: '删除' }[action];
+  if (!confirm('确定要批量' + actionLabel + ' ' + ids.length + ' 位用户吗？')) return;
+
+  try {
+    const r = await fetch(API + '/admin/users/batch-action?action=' + action, {
+      method: 'POST', headers: hdrs(), body: JSON.stringify(ids)
+    });
+    const d = await r.json();
+    if (r.ok && d.ok) { toast('批量' + actionLabel + '成功，影响 ' + d.affected + ' 位用户'); loadUsers(); }
+    else toast(d.detail?.message || '操作失败', 'error');
+  } catch { toast('网络错误', 'error'); }
+}
+
+/* Reset Password Modal */
+let _resetUser = '';
+function openResetModal(username) {
+  _resetUser = username;
+  $('resetUsername').textContent = username;
+  $('newPassword').value = '';
+  hideErr('modalResetError');
+  openModal('modalReset');
+  setTimeout(() => $('newPassword').focus(), 100);
+}
+
+async function doResetPassword() {
+  const pw = $('newPassword').value;
+  if (pw.length < 8) { showErr('modalResetError', '密码至少 8 位'); return; }
+  try {
+    const r = await fetch(API + '/admin/users/' + encodeURIComponent(_resetUser) + '/reset-password', {
+      method: 'POST', headers: hdrs(), body: JSON.stringify({ new_password: pw })
+    });
+    const d = await r.json();
+    if (r.ok && d.ok) { closeModal('modalReset'); toast('密码已重置'); loadUsers(); }
+    else showErr('modalResetError', d.detail?.message || d.message || '操作失败');
+  } catch { showErr('modalResetError', '网络错误'); }
+}
+
+/* Temp Password */
+async function genTempPw(username) {
+  try {
+    const r = await fetch(API + '/admin/users/' + encodeURIComponent(username) + '/reset-password', {
+      method: 'POST', headers: hdrs(), body: JSON.stringify({})
+    });
+    const d = await r.json();
+    if (r.ok && d.ok && d.temp_password) {
+      $('tempUsername').textContent = username;
+      $('tempPasswordValue').textContent = d.temp_password;
+      openModal('modalTemp');
+    } else toast(d.detail?.message || '操作失败', 'error');
+  } catch { toast('网络错误', 'error'); }
+}
+
+function copyTempPw() {
+  var t = $('tempPasswordValue').textContent;
+  if (copyToClipboard(t)) toast('已复制到剪贴板'); else toast('复制失败，请手动选择复制', 'error');
+}
+
+/* Toggle disable/enable */
+let _toggleUser = '', _toggleDisable = false;
+function openToggle(username, currentlyDisabled) {
+  _toggleUser = username;
+  _toggleDisable = !currentlyDisabled;
+  const action = _toggleDisable ? '禁用' : '启用';
+  $('modalToggleTitle').textContent = action + '用户';
+  $('modalToggleText').textContent = '确定要' + action + '用户「' + username + '」吗？';
+  openModal('modalToggle');
+}
+
+async function doToggle() {
+  const ep = _toggleDisable ? 'disable' : 'enable';
+  try {
+    const r = await fetch(API + '/admin/users/' + encodeURIComponent(_toggleUser) + '/' + ep, { method: 'POST', headers: hdrs() });
+    const d = await r.json();
+    if (r.ok && d.ok) { closeModal('modalToggle'); toast((_toggleDisable ? '已禁用' : '已启用') + '用户'); loadUsers(); }
+    else toast(d.detail?.message || '操作失败', 'error');
+  } catch { toast('网络错误', 'error'); }
+}
+
+/* Delete Modal */
+let _deleteUser = '';
+function openDeleteModal(username) {
+  _deleteUser = username;
+  $('deleteUsername').textContent = username;
+  openModal('modalDelete');
+}
+
+async function doDelete() {
+  try {
+    const r = await fetch(API + '/admin/users/' + encodeURIComponent(_deleteUser), { method: 'DELETE', headers: hdrs() });
+    const d = await r.json();
+    if (r.ok && d.ok) { closeModal('modalDelete'); toast('用户已删除'); loadUsers(); }
+    else toast(d.detail?.message || '删除失败', 'error');
+  } catch { toast('网络错误', 'error'); }
+}
+
+/* Extend Trial Modal */
+let _extendUser = '';
+function openExtend(username) {
+  _extendUser = username;
+  $('extendUsername').textContent = username;
+  $('extendDays').value = 7;
+  openModal('modalExtend');
+}
+
+async function doExtendTrial() {
+  const days = parseInt($('extendDays').value);
+  if (!days || days < 1) { toast('天数必须大于 0', 'error'); return; }
+  try {
+    const r = await fetch(API + '/admin/users/' + encodeURIComponent(_extendUser) + '/extend-trial', {
+      method: 'POST', headers: hdrs(), body: JSON.stringify({ days })
+    });
+    const d = await r.json();
+    if (r.ok && d.ok) { closeModal('modalExtend'); toast('已延长 ' + days + ' 天试用期'); loadUsers(); }
+    else toast(d.detail?.message || '操作失败', 'error');
+  } catch { toast('网络错误', 'error'); }
+}
+
+/* Audit Logs */
+function openAuditLogs() { switchTab('logs'); }
+
+async function loadAuditLogs() {
+  const body = $('logsBody');
+  body.innerHTML = '';
+  $('logsLoading').classList.remove('hidden');
+  $('logsPagination').innerHTML = '';
+
+  const action = $('logActionFilter').value;
+  let url = API + '/admin/audit-logs?page=' + logsPage + '&size=50';
+  if (action) url += '&action=' + action;
+
+  try {
+    const r = await fetch(url, { headers: hdrs() });
+    $('logsLoading').classList.add('hidden');
+    if (r.status === 401) { doLogout(); return; }
+    const data = await r.json();
+    if (!data.items) return;
+
+    if (data.items.length === 0) {
+      body.innerHTML = '<div style="text-align:center;padding:20px;color:var(--gray-500);">暂无日志</div>';
+      return;
+    }
+
+    data.items.forEach(log => {
+      const div = document.createElement('div');
+      div.className = 'log-item';
+      const time = log.created_at ? log.created_at.slice(0,19).replace('T',' ') : '';
+      const statusCls = log.status === 'success' ? 'log-status-success' : 'log-status-failure';
+      div.innerHTML = '<span class="log-time">' + esc(time) + '</span> &nbsp;' +
+        '<span class="log-action">' + esc(log.action) + '</span> &nbsp;' +
+        (log.target_user ? '<span>' + esc(log.target_user) + '</span> &nbsp;' : '') +
+        '<span class="' + statusCls + '">' + esc(log.status) + '</span>';
+      body.appendChild(div);
+    });
+
+    const totalPages = Math.ceil(data.total / 50) || 1;
+    if (totalPages > 1) {
+      let html = '';
+      for (let i = 1; i <= Math.min(totalPages, 10); i++) {
+        html += '<button class="' + (i === logsPage ? 'current' : '') + '" onclick="goLogsPage(' + i + ')">' + i + '</button>';
+      }
+      $('logsPagination').innerHTML = html;
+    }
+  } catch { $('logsLoading').classList.add('hidden'); }
+}
+
+function goLogsPage(p) { logsPage = p; loadAuditLogs(); }
+
+/* ======================== Gift Cards ======================== */
+let gcPage = 1;
+let _gcCodes = [];
+
+async function loadGcStats() {
+  try {
+    const r = await fetch(API + '/admin/gift-cards/stats', { headers: hdrs() });
+    if (!r.ok) return;
+    const d = await r.json();
+    $('gcStatsText').textContent = '共 ' + d.total + ' 张 | 可用 ' + d.active + ' | 已兑换 ' + d.redeemed + ' | 已过期 ' + d.expired + ' | 已禁用 ' + d.disabled;
+  } catch {}
+}
+
+async function loadGiftCards() {
+  const tbody = $('gcBody');
+  tbody.innerHTML = '';
+  $('gcLoading').classList.remove('hidden');
+  $('gcEmpty').classList.add('hidden');
+  $('gcPagination').innerHTML = '';
+
+  const sf = $('gcStatusFilter').value;
+  const batchId = ($('gcBatchIdFilter') && $('gcBatchIdFilter').value) ? $('gcBatchIdFilter').value.trim() : '';
+  const codeSearch = ($('gcCodeSearch') && $('gcCodeSearch').value) ? $('gcCodeSearch').value.trim() : '';
+  let url = API + '/admin/gift-cards?page=' + gcPage + '&size=20';
+  if (sf) url += '&status_filter=' + encodeURIComponent(sf);
+  if (batchId) url += '&batch_id=' + encodeURIComponent(batchId);
+  if (codeSearch) url += '&code_search=' + encodeURIComponent(codeSearch);
+
+  try {
+    const r = await fetch(url, { headers: hdrs() });
+    $('gcLoading').classList.add('hidden');
+    if (r.status === 401) { doLogout(); return; }
+    const data = await r.json();
+    if (!data.items) return;
+
+    if (data.items.length === 0) { $('gcEmpty').classList.remove('hidden'); return; }
+
+    function fmtDt(s) { return s ? s.slice(0, 16).replace('T', ' ') : '-'; }
+    data.items.forEach(gc => {
+      const tr = document.createElement('tr');
+      tr.setAttribute('data-code', gc.code);
+      tr.setAttribute('data-id', gc.id);
+      tr.setAttribute('data-status', gc.status || '');
+      let statusBadge = '<span class="badge active">可用</span>';
+      if (gc.status === 'redeemed') statusBadge = '<span class="badge trial-expired">已兑换</span>';
+      else if (gc.status === 'expired') statusBadge = '<span class="badge trial-none">已过期</span>';
+      else if (gc.status === 'disabled') statusBadge = '<span class="badge disabled">已禁用</span>';
+
+      const created = fmtDt(gc.created_at);
+      const expiresStr = fmtDt(gc.expires_at);
+      const redeemedStr = fmtDt(gc.redeemed_at);
+      const batchShort = gc.batch_id ? (gc.batch_id.slice(0, 8) + '…') : '-';
+      const mType = gc.membership_type || '-';
+
+      let actions = '';
+      if (gc.status === 'active') {
+        actions = '<button class="sm" onclick="copyText(\'' + escAttr(gc.code) + '\')">复制</button>' +
+                  '<button class="sm danger" onclick="disableGc(\'' + escAttr(gc.id) + '\')">禁用</button>';
+      } else {
+        actions = '<button class="sm" onclick="copyText(\'' + escAttr(gc.code) + '\')">复制</button>';
+      }
+
+      tr.innerHTML =
+        '<td><input type="checkbox" class="gc-row-check" value="' + escAttr(gc.id) + '" /></td>' +
+        '<td style="font-family:monospace;letter-spacing:1px;">' + esc(gc.code) + '</td>' +
+        '<td>' + esc(mType) + '</td>' +
+        '<td>' + (gc.membership_days || 0) + ' 天</td>' +
+        '<td>' + statusBadge + '</td>' +
+        '<td title="' + escAttr(gc.batch_id || '') + '">' + esc(batchShort) + '</td>' +
+        '<td>' + esc(created) + '</td>' +
+        '<td>' + esc(expiresStr) + '</td>' +
+        '<td>' + esc(redeemedStr) + '</td>' +
+        '<td>' + (gc.redeemed_by ? esc(gc.redeemed_by) : '-') + '</td>' +
+        '<td>' + actions + '</td>';
+      tbody.appendChild(tr);
+    });
+
+    var checkAllEl = $('gcCheckAll');
+    if (checkAllEl) checkAllEl.checked = false;
+
+    const total = data.total;
+    const totalPages = Math.ceil(total / 20) || 1;
+    const from = (gcPage - 1) * 20 + 1;
+    const to = Math.min(gcPage * 20, total);
+    var infoEl = $('gcPaginationInfo');
+    if (infoEl) infoEl.textContent = '第 ' + from + '-' + to + ' 条 / 共 ' + total + ' 条';
+    if (totalPages > 1) {
+      let html = '';
+      for (let i = 1; i <= Math.min(totalPages, 10); i++) {
+        html += '<button class="' + (i === gcPage ? 'current' : '') + '" onclick="goGcPage(' + i + ')">' + i + '</button>';
+      }
+      $('gcPagination').innerHTML = html;
+    }
+
+    loadGcStats();
+  } catch { $('gcLoading').classList.add('hidden'); toast('加载礼品卡失败', 'error'); }
+}
+
+function goGcPage(p) { gcPage = p; loadGiftCards(); }
+
+function copyText(t) {
+  if (copyToClipboard(t)) toast('已复制'); else toast('复制失败，请手动选择复制', 'error');
+}
+
+function toggleGcCheckAll() {
+  var checked = $('gcCheckAll').checked;
+  document.querySelectorAll('.gc-row-check').forEach(function(cb) { cb.checked = checked; });
+}
+
+function copyGcSelected() {
+  var rows = Array.from(document.querySelectorAll('#gcBody tr')).filter(function(tr) { return tr.querySelector('.gc-row-check:checked'); });
+  var codes = rows.map(function(tr) { return tr.getAttribute('data-code'); }).filter(Boolean);
+  if (codes.length === 0) { toast('请先勾选要复制的兑换码', 'info'); return; }
+  if (copyToClipboard(codes.join('\n'))) toast('已复制 ' + codes.length + ' 个兑换码'); else toast('复制失败，请手动选择复制', 'error');
+}
+
+function getGcSelectedIds() {
+  return Array.from(document.querySelectorAll('.gc-row-check:checked')).map(function(cb) { return cb.value; }).filter(Boolean);
+}
+
+async function batchDisableGc() {
+  var ids = getGcSelectedIds();
+  if (ids.length === 0) { toast('请先勾选要禁用的礼品卡', 'info'); return; }
+  if (!confirm('确定要禁用选中的 ' + ids.length + ' 张礼品卡吗？仅「可用」状态的会被禁用。')) return;
+  try {
+    const r = await fetch(API + '/admin/gift-cards/batch-disable', { method: 'POST', headers: hdrs(), body: JSON.stringify({ card_ids: ids }) });
+    const d = await r.json();
+    if (r.ok && d.ok) { toast(d.message || '已禁用'); loadGiftCards(); }
+    else toast((d.detail && d.detail.message) || '操作失败', 'error');
+  } catch (e) { toast('网络错误', 'error'); }
+}
+
+async function batchDeleteGc() {
+  var ids = getGcSelectedIds();
+  if (ids.length === 0) { toast('请先勾选要删除的礼品卡', 'info'); return; }
+  if (!confirm('确定要删除选中的 ' + ids.length + ' 张礼品卡吗？已兑换的将自动跳过，不可恢复。')) return;
+  try {
+    const r = await fetch(API + '/admin/gift-cards/batch-delete', { method: 'POST', headers: hdrs(), body: JSON.stringify({ card_ids: ids }) });
+    const d = await r.json();
+    if (r.ok && d.ok) { toast(d.message || '已删除'); loadGiftCards(); }
+    else toast((d.detail && d.detail.message) || d.message || '操作失败', 'error');
+  } catch (e) { toast('网络错误', 'error'); }
+}
+
+async function exportGcCsv() {
+  const sf = $('gcStatusFilter').value;
+  const batchId = ($('gcBatchIdFilter') && $('gcBatchIdFilter').value) ? $('gcBatchIdFilter').value.trim() : '';
+  const codeSearch = ($('gcCodeSearch') && $('gcCodeSearch').value) ? $('gcCodeSearch').value.trim() : '';
+  let url = API + '/admin/gift-cards/export?';
+  if (sf) url += 'status_filter=' + encodeURIComponent(sf) + '&';
+  if (batchId) url += 'batch_id=' + encodeURIComponent(batchId) + '&';
+  if (codeSearch) url += 'code_search=' + encodeURIComponent(codeSearch);
+  toast('正在导出...', 'info');
+  try {
+    const r = await fetch(url, { headers: hdrs() });
+    if (!r.ok) { toast('导出失败', 'error'); return; }
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'gift_cards.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('导出完成');
+  } catch (e) { toast('导出失败', 'error'); }
+}
+
+function downloadGcTxt() {
+  if (_gcCodes.length === 0) { toast('无兑换码可下载', 'error'); return; }
+  var text = _gcCodes.join('\n');
+  var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'gift_cards_' + (new Date().toISOString().slice(0, 10)) + '.txt';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('已下载 ' + _gcCodes.length + ' 个兑换码');
+}
+
+async function disableGc(cardId) {
+  if (!confirm('确定要禁用此礼品卡吗？')) return;
+  try {
+    const r = await fetch(API + '/admin/gift-cards/' + cardId + '/disable', { method: 'POST', headers: hdrs() });
+    const d = await r.json();
+    if (r.ok && d.ok) { toast('已禁用'); loadGiftCards(); }
+    else toast(d.detail?.message || '操作失败', 'error');
+  } catch { toast('网络错误', 'error'); }
+}
+
+function openCreateGcModal() {
+  $('gcMembershipType').value = 'pro';
+  $('gcDays').value = '30';
+  $('gcQuantity').value = '1';
+  $('gcExpiresAt').value = '';
+  openModal('modalCreateGc');
+}
+
+async function doCreateGiftCards() {
+  const mType = $('gcMembershipType').value;
+  const days = parseInt($('gcDays').value);
+  const qty = parseInt($('gcQuantity').value);
+  const expiresAt = $('gcExpiresAt').value.trim() || undefined;
+
+  if (!days || days < 1) { toast('天数必须大于 0', 'error'); return; }
+  if (!qty || qty < 1 || qty > 100) { toast('数量需在 1-100 之间', 'error'); return; }
+
+  var btn = $('btnDoCreateGc');
+  if (btn) { btn.disabled = true; btn.textContent = '生成中…'; }
+  try {
+    const r = await fetch(API + '/admin/gift-cards', {
+      method: 'POST', headers: hdrs(),
+      body: JSON.stringify({ tier: mType, membership_days: days, quantity: qty, expires_at: expiresAt })
+    });
+    const d = await r.json();
+    if (r.ok && d.ok) {
+      closeModal('modalCreateGc');
+      _gcCodes = d.cards.map(c => c.code);
+      $('gcBatchId').textContent = d.batch_id;
+      $('gcResultCount').textContent = d.count;
+      $('gcResultCodes').innerHTML = _gcCodes.map(c => '<div>' + esc(c) + '</div>').join('');
+      openModal('modalGcResult');
+      loadGiftCards();
+    } else toast((d.detail && d.detail.message) || '生成失败', 'error');
+  } catch (e) { toast('网络错误', 'error'); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = '生成'; } }
+}
+
+function copyGcCodes() {
+  if (_gcCodes.length === 0) { toast('无兑换码可复制', 'error'); return; }
+  if (copyToClipboard(_gcCodes.join('\n'))) toast('已复制 ' + _gcCodes.length + ' 个兑换码'); else toast('复制失败，请手动选择复制', 'error');
+}
+
+/* CSV export with auth — need to handle token in header, so use fetch + blob */
+async function exportCSV() {
+  toast('正在导出...', 'info');
+  try {
+    const r = await fetch(API + '/admin/users/export', { headers: hdrs() });
+    if (!r.ok) { toast('导出失败', 'error'); return; }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'users.csv'; a.click();
+    URL.revokeObjectURL(url);
+    toast('导出完成');
+  } catch { toast('导出失败', 'error'); }
+}
+
+/* Init */
+if (token) { enterMain(); }
+</script>
+</body>
+</html>
