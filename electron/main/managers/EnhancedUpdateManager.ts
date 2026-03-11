@@ -10,7 +10,7 @@ import semver from 'semver'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import * as yaml from 'yaml'
 import windowManager from '#/windowManager'
-import { createLogger } from '../logger'
+import { createLogger, isAppQuitting } from '../logger'
 import { errorMessage, sleep } from '../utils'
 import { cdnManager } from './CDNManager'
 import { integrityManager } from './IntegrityManager'
@@ -330,6 +330,10 @@ class EnhancedUpdateManager {
   }
 
   private sendToRenderer(channel: string, data?: any): void {
+    // 应用退出时不发送任何消息到渲染进程
+    if (isAppQuitting) {
+      return
+    }
     windowManager.send(channel as any, data)
   }
 }
@@ -359,6 +363,7 @@ class EnhancedWindowsUpdater implements Updater {
     })
 
     this.autoUpdater.on('update-available', async (info: UpdateInfo) => {
+      if (isAppQuitting) return
       logger.info(`Update available: ${info.version}`)
 
       try {
@@ -378,6 +383,7 @@ class EnhancedWindowsUpdater implements Updater {
     })
 
     this.autoUpdater.on('update-not-available', (info: UpdateInfo) => {
+      if (isAppQuitting) return
       logger.info(`No update available: ${info.version}`)
       windowManager.send(IPC_CHANNELS.updater.updateAvailable, {
         update: false,
@@ -387,10 +393,12 @@ class EnhancedWindowsUpdater implements Updater {
     })
 
     this.autoUpdater.on('download-progress', (progressInfo: ProgressInfo) => {
+      if (isAppQuitting) return
       windowManager.send(IPC_CHANNELS.updater.downloadProgress, progressInfo)
     })
 
     this.autoUpdater.on('update-downloaded', async (event: UpdateDownloadedEvent) => {
+      if (isAppQuitting) return
       logger.info(`Update downloaded: ${event.version}`)
 
       try {
@@ -415,6 +423,7 @@ class EnhancedWindowsUpdater implements Updater {
     })
 
     this.autoUpdater.on('error', async (error: Error) => {
+      if (isAppQuitting) return
       logger.error('Update error:', error.message)
 
       const updateError = updateErrorHandler.createError(
@@ -466,7 +475,8 @@ class EnhancedWindowsUpdater implements Updater {
 
       await this.autoUpdater.checkForUpdates()
     } catch (error) {
-      const message = `检查更新时发生错误: ${errorMessage(error).split('\n')[0]}`
+      if (isAppQuitting) return
+      const message = `检查更新时发生错误：${errorMessage(error).split('\n')[0]}`
       logger.error(message)
       windowManager.send(IPC_CHANNELS.updater.updateError, { message })
     }
@@ -506,11 +516,13 @@ class EnhancedMacOSUpdater implements Updater {
 
       if (semver.lt(latestYml.version, app.getVersion())) {
         logger.info(`${app.getVersion()} 已经是最新版本`)
-        windowManager.send(IPC_CHANNELS.updater.updateAvailable, {
-          update: false,
-          version: app.getVersion(),
-          newVersion: latestYml.version,
-        })
+        if (!isAppQuitting) {
+          windowManager.send(IPC_CHANNELS.updater.updateAvailable, {
+            update: false,
+            version: app.getVersion(),
+            newVersion: latestYml.version,
+          })
+        }
         return
       }
 
@@ -523,12 +535,15 @@ class EnhancedMacOSUpdater implements Updater {
         logger.warn('Failed to create backup:', error)
       }
 
-      windowManager.send(IPC_CHANNELS.updater.updateAvailable, {
-        update: true,
-        version: app.getVersion(),
-        newVersion: latestYml.version,
-      })
+      if (!isAppQuitting) {
+        windowManager.send(IPC_CHANNELS.updater.updateAvailable, {
+          update: true,
+          version: app.getVersion(),
+          newVersion: latestYml.version,
+        })
+      }
     } catch (err) {
+      if (isAppQuitting) return
       const message = errorMessage(err)
       logger.error(message)
       windowManager.send(IPC_CHANNELS.updater.updateError, { message })
@@ -563,7 +578,9 @@ class EnhancedMacOSUpdater implements Updater {
         const localFileSha512 = await this.calculateFileHash(this.savePath)
         if (localFileSha512 === setupFile.sha512) {
           logger.debug('Local file exists and matches, skipping download')
-          windowManager.send(IPC_CHANNELS.updater.updateDownloaded)
+          if (!isAppQuitting) {
+            windowManager.send(IPC_CHANNELS.updater.updateDownloaded)
+          }
           return
         }
       }
@@ -599,20 +616,25 @@ class EnhancedMacOSUpdater implements Updater {
 
         if (totalBytes > 0) {
           const progress = (downloadBytes / totalBytes) * 100
-          windowManager.send(IPC_CHANNELS.updater.downloadProgress, {
-            percent: progress,
-            transferred: downloadBytes,
-            total: totalBytes,
-            bytesPerSecond: 0,
-          } as any)
+          if (!isAppQuitting) {
+            windowManager.send(IPC_CHANNELS.updater.downloadProgress, {
+              percent: progress,
+              transferred: downloadBytes,
+              total: totalBytes,
+              bytesPerSecond: 0,
+            } as any)
+          }
         }
       }
 
       fileWriter.end()
       logger.debug('File download complete')
-      windowManager.send(IPC_CHANNELS.updater.updateDownloaded)
+      if (!isAppQuitting) {
+        windowManager.send(IPC_CHANNELS.updater.updateDownloaded)
+      }
     } catch (err) {
-      const message = `下载文件失败: ${errorMessage(err)}`
+      if (isAppQuitting) return
+      const message = `下载文件失败：${errorMessage(err)}`
       logger.error(message)
       windowManager.send(IPC_CHANNELS.updater.updateError, { message, downloadURL: fileUrl })
     }
@@ -626,6 +648,7 @@ class EnhancedMacOSUpdater implements Updater {
     if (existsSync(this.savePath)) {
       await shell.openPath(this.savePath)
       await sleep(3000)
+      if (isAppQuitting) return
       app.quit()
     } else {
       logger.error(`下载文件 ${this.savePath} 不存在`)

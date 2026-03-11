@@ -102,7 +102,10 @@ if (app.isPackaged && !app.requestSingleInstanceLock()) {
 const XIUER_DEBUG_PATH = path.join(process.env.TEMP ?? os.tmpdir(), 'xiuer-window-debug.txt')
 function logWindowDebug(phase: string, w: BrowserWindow | null = win): void {
   const ts = new Date().toISOString()
-  const line = `${ts} pid=${process.pid} ${phase} mainWindow=${!!w} visible=${w ? w.isVisible() : false} minimized=${w ? w.isMinimized() : false}\n`
+  // 安全检查：确保窗口存在且未被销毁
+  const isVisible = w && !w.isDestroyed() ? w.isVisible() : false
+  const isMinimized = w && !w.isDestroyed() ? w.isMinimized() : false
+  const line = `${ts} pid=${process.pid} ${phase} mainWindow=${!!w} visible=${isVisible} minimized=${isMinimized}\n`
   appendFileSync(XIUER_DEBUG_PATH, line)
 }
 
@@ -218,7 +221,10 @@ async function createWindow() {
 
     win.on('closed', () => {
       logWindowDebug('window closed')
-      win = null
+      // 清理窗口引用前检查是否已销毁
+      if (win?.isDestroyed()) {
+        win = null
+      }
       // Windows 打包版兜底：若窗口被异常关闭且应用未退出，自动重建主窗口
       if (app.isPackaged && process.platform === 'win32' && !isQuitting) {
         setTimeout(() => {
@@ -378,6 +384,11 @@ async function createWindow() {
 
     // 仅在窗口创建成功后注册：拦截关闭事件，改为隐藏到托盘
     win.on('close', e => {
+      // 安全检查：确保窗口未被销毁
+      if (win && win.isDestroyed()) {
+        return
+      }
+      
       if (!isQuitting) {
         e.preventDefault()
 
@@ -386,8 +397,10 @@ async function createWindow() {
         const shouldShowTip = !config.hideToTrayTipDismissed
 
         // 隐藏窗口并设置不在任务栏显示
-        win?.hide()
-        win?.setSkipTaskbar(true)
+        if (win && !win.isDestroyed()) {
+          win.hide()
+          win.setSkipTaskbar(true)
+        }
 
         // 立即显示系统通知（不依赖渲染进程）
         if (shouldShowTip && Notification.isSupported()) {
@@ -400,7 +413,7 @@ async function createWindow() {
 
           notification.on('click', () => {
             // 点击通知时显示主窗口
-            if (win) {
+            if (win && !win.isDestroyed()) {
               win.show()
               win.setSkipTaskbar(false)
               win.focus()
@@ -465,10 +478,47 @@ app.on('window-all-closed', async () => {
   }
 })
 
-app.on('before-quit', () => {
-  isQuitting = true
-  setAppQuitting(true)
-  stopMemoryLogInterval()
+app.on('before-quit', (event) => {
+  // 防止应用立即退出，给清理工作留出时间
+  if (!isQuitting) {
+    isQuitting = true
+    setAppQuitting(true)
+    stopMemoryLogInterval()
+    
+    // 清理账户管理器
+    try {
+      accountManager.cleanup()
+    } catch (error) {
+      createLogger('app').error('清理账户管理器失败:', error)
+    }
+  }
+})
+
+app.on('will-quit', (event) => {
+  // 确保所有异步操作完成后再退出
+  createLogger('app').info('应用即将退出，执行最终清理...')
+  
+  // 销毁托盘
+  if (tray) {
+    try {
+      tray.destroy()
+      tray = null
+      createLogger('app').info('托盘已销毁')
+    } catch (error) {
+      createLogger('app').error('销毁托盘失败:', error)
+    }
+  }
+  
+  // 清理窗口引用
+  if (win) {
+    try {
+      win.removeAllListeners()
+      win = null
+      createLogger('app').info('窗口已清理')
+    } catch (error) {
+      createLogger('app').error('清理窗口失败:', error)
+    }
+  }
 })
 
 app.on('second-instance', () => {
@@ -512,7 +562,15 @@ process.on('uncaughtException', error => {
   logger.error(error)
   logger.error('---------------------------------------------')
 
-  dialog.showErrorBox('应用程序错误', `发生了一个意外的错误，请联系技术支持：\n${error.message}`)
+  // 应用退出时不显示错误对话框，避免"Object has been destroyed"错误
+  if (!isQuitting) {
+    try {
+      dialog.showErrorBox('应用程序错误', `发生了一个意外的错误，请联系技术支持：\n${error.message}`)
+    } catch (dialogError) {
+      // 忽略对话框错误，避免在退出时引发新的错误
+      logger.error('显示错误对话框失败:', dialogError)
+    }
+  }
 })
 
 process.on('unhandledRejection', reason => {
@@ -557,7 +615,8 @@ function createTray() {
     {
       label: '显示主窗口',
       click: () => {
-        if (win) {
+        // 安全检查：确保窗口未被销毁
+        if (win && !win.isDestroyed()) {
           win.show()
           win.setSkipTaskbar(false) // 恢复任务栏显示
           win.focus()
@@ -572,8 +631,8 @@ function createTray() {
     {
       label: '退出程序',
       click: () => {
-        isQuitting = true
-        app.quit()
+        // 统一的退出方法，避免竞态条件
+        quitApp()
       },
     },
   ])
@@ -582,7 +641,8 @@ function createTray() {
 
   // 托盘图标单击：显示/聚焦主窗口
   tray.on('click', () => {
-    if (win) {
+    // 安全检查：确保窗口未被销毁
+    if (win && !win.isDestroyed()) {
       if (win.isVisible()) {
         win.focus()
       } else {
@@ -594,6 +654,57 @@ function createTray() {
       createWindow()
     }
   })
+}
+
+/**
+ * 统一的退出应用方法
+ * 确保所有清理工作按正确顺序执行
+ */
+function quitApp() {
+  if (isQuitting) {
+    // 已经在退出过程中，忽略重复调用
+    return
+  }
+  
+  createLogger('app').info('开始退出应用...')
+  isQuitting = true
+  setAppQuitting(true)
+  
+  // 停止内存日志
+  stopMemoryLogInterval()
+  
+  // 清理账户管理器
+  try {
+    accountManager.cleanup()
+  } catch (error) {
+    createLogger('app').error('清理账户管理器失败:', error)
+  }
+  
+  // 销毁托盘（在 will-quit 中会再次检查）
+  if (tray && !tray.isDestroyed()) {
+    try {
+      tray.destroy()
+      tray = null
+      createLogger('app').info('托盘已销毁')
+    } catch (error) {
+      createLogger('app').error('销毁托盘失败:', error)
+    }
+  }
+  
+  // 清理窗口
+  if (win && !win.isDestroyed()) {
+    try {
+      win.removeAllListeners()
+      win.close()
+      win = null
+      createLogger('app').info('窗口已关闭')
+    } catch (error) {
+      createLogger('app').error('关闭窗口失败:', error)
+    }
+  }
+  
+  // 触发应用退出
+  app.quit()
 }
 
 // IPC 处理：设置"不再提示"标记

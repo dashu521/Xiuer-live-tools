@@ -10,7 +10,7 @@ import semver from 'semver'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import * as yaml from 'yaml'
 import windowManager from '#/windowManager'
-import { createLogger } from '../logger'
+import { createLogger, isAppQuitting } from '../logger'
 import { errorMessage, sleep } from '../utils'
 
 type LatestYml = {
@@ -206,6 +206,7 @@ class WindowsUpdater implements Updater {
     })
 
     this.autoUpdater.on('update-available', async (info: UpdateInfo) => {
+      if (isAppQuitting) return
       logger.info(`有可用更新！当前版本：${app.getVersion()}，新版本：${info.version}`)
 
       const releaseNote = await fetchChangelog()
@@ -218,6 +219,7 @@ class WindowsUpdater implements Updater {
     })
 
     this.autoUpdater.on('update-not-available', (info: UpdateInfo) => {
+      if (isAppQuitting) return
       logger.info(`无可用更新。当前版本：${app.getVersion()}，新版本：${info.version}`)
       windowManager.send(IPC_CHANNELS.updater.updateAvailable, {
         update: false,
@@ -227,16 +229,19 @@ class WindowsUpdater implements Updater {
     })
 
     this.autoUpdater.on('download-progress', (progressInfo: ProgressInfo) => {
+      if (isAppQuitting) return
       windowManager.send(IPC_CHANNELS.updater.downloadProgress, progressInfo)
     })
 
     this.autoUpdater.on('update-downloaded', (event: UpdateDownloadedEvent) => {
+      if (isAppQuitting) return
       logger.info(`${event.version} 更新下载完成!`)
       windowManager.send(IPC_CHANNELS.updater.updateDownloaded, event)
     })
 
     this.autoUpdater.on('error', (error: Error) => {
-      logger.error('更新出错: ', error.message)
+      if (isAppQuitting) return
+      logger.error('更新出错：', error.message)
       windowManager.send(IPC_CHANNELS.updater.updateError, {
         message: error.message,
         error,
@@ -250,7 +255,8 @@ class WindowsUpdater implements Updater {
     try {
       return await this.autoUpdater.checkForUpdates()
     } catch (error) {
-      const message = `检查 GitHub 更新失败: ${errorMessage(error).split('\n')[0]}`
+      if (isAppQuitting) return
+      const message = `检查 GitHub 更新失败：${errorMessage(error).split('\n')[0]}`
       logger.error(message)
       windowManager.send(IPC_CHANNELS.updater.updateError, { message })
     }
@@ -273,7 +279,8 @@ class WindowsUpdater implements Updater {
     try {
       return await this.autoUpdater.checkForUpdates()
     } catch (error) {
-      const message = `网络错误: ${errorMessage(error).split('\n')[0]}`
+      if (isAppQuitting) return
+      const message = `网络错误：${errorMessage(error).split('\n')[0]}`
       const downloadURL = `${sourceURL}${assetsURL}${PRODUCT_NAME}_${latestVersion}_windows_x64.exe`
       windowManager.send(IPC_CHANNELS.updater.updateError, { message, downloadURL })
     }
@@ -349,6 +356,7 @@ class MacOSUpdater implements Updater {
         return
       }
     } catch (err) {
+      if (isAppQuitting) return
       const message = errorMessage(err)
       logger.error(message)
       windowManager.send(IPC_CHANNELS.updater.updateError, { message: message })
@@ -385,7 +393,9 @@ class MacOSUpdater implements Updater {
         logger.debug(`检测到本地文件，计算 Sha512 哈希值为 ${localFileSha512}`)
         if (localFileSha512 === setupFile.sha512) {
           logger.debug('本地已存在安装包，无需重复下载')
-          windowManager.send(IPC_CHANNELS.updater.updateDownloaded)
+          if (!isAppQuitting) {
+            windowManager.send(IPC_CHANNELS.updater.updateDownloaded)
+          }
           return
         }
       }
@@ -421,20 +431,25 @@ class MacOSUpdater implements Updater {
 
         if (totalBytes > 0) {
           const progress = (downloadBytes / totalBytes) * 100
-          windowManager.send(IPC_CHANNELS.updater.downloadProgress, {
-            delta: totalBytes - downloadBytes,
-            percent: progress,
-            bytesPerSecond: 0,
-            transferred: downloadBytes,
-            total: totalBytes,
-          })
+          if (!isAppQuitting) {
+            windowManager.send(IPC_CHANNELS.updater.downloadProgress, {
+              delta: totalBytes - downloadBytes,
+              percent: progress,
+              bytesPerSecond: 0,
+              transferred: downloadBytes,
+              total: totalBytes,
+            })
+          }
         }
       }
       fileWriter.end()
       logger.debug(`文件 ${fileUrl} 下载完成，保存到 ${this.savePath}`)
-      windowManager.send(IPC_CHANNELS.updater.updateDownloaded)
+      if (!isAppQuitting) {
+        windowManager.send(IPC_CHANNELS.updater.updateDownloaded)
+      }
     } catch (err) {
-      const message = `下载文件失败: ${errorMessage(err)}`
+      if (isAppQuitting) return
+      const message = `下载文件失败：${errorMessage(err)}`
       logger.error(message)
       windowManager.send(IPC_CHANNELS.updater.updateError, { message, downloadURL: fileUrl })
     }
@@ -451,6 +466,7 @@ class MacOSUpdater implements Updater {
       await shell.openPath(this.savePath)
       // 等待一会后退出应用
       await sleep(3000)
+      if (isAppQuitting) return
       app.quit()
     } else {
       logger.error(`下载文件 ${this.savePath} 不存在`)

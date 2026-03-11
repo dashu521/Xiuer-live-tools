@@ -33,9 +33,14 @@ electronLog.transports.console.format = ({ data, level, message }) => {
   // 应用退出时不发送日志到渲染进程，避免 "Object has been destroyed" 错误
   if (level !== 'verbose' && level !== 'debug' && !isAppQuitting) {
     try {
+      // 双重检查：确保窗口管理器可以发送消息
       windowManager.send(IPC_CHANNELS.log, { ...message, data: [text] })
-    } catch {
+    } catch (error) {
       // 忽略发送失败，避免崩溃
+      // 在退出时捕获任何可能的 "Object has been destroyed" 错误
+      if (!(error instanceof Error && error.message.includes('destroyed'))) {
+        console.warn('[logger] Failed to send log to renderer:', error)
+      }
     }
   }
   return [

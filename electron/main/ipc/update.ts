@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
-import { createLogger } from '#/logger'
+import { createLogger, isAppQuitting } from '#/logger'
 import { updateManager } from '#/managers/UpdateManager'
 
 const logger = createLogger('update-ipc')
@@ -8,18 +8,30 @@ const logger = createLogger('update-ipc')
 export function setupUpdateIpcHandlers() {
   // 检查更新
   ipcMain.handle(IPC_CHANNELS.updater.checkUpdate, async () => {
+    if (isAppQuitting) {
+      logger.warn('IPC: checkUpdate called during app quitting, ignored')
+      return { error: '应用正在退出' }
+    }
     logger.info('IPC: checkUpdate called')
     return await updateManager.checkUpdateVersion()
   })
 
   // 开始下载更新
   ipcMain.handle(IPC_CHANNELS.updater.startDownload, async () => {
+    if (isAppQuitting) {
+      logger.warn('IPC: startDownload called during app quitting, ignored')
+      return { error: '应用正在退出' }
+    }
     logger.info('IPC: startDownload called')
     await updateManager.startDownload()
   })
 
   // 退出并安装更新
   ipcMain.handle(IPC_CHANNELS.updater.quitAndInstall, async () => {
+    if (isAppQuitting) {
+      logger.warn('IPC: quitAndInstall called during app quitting, ignored')
+      return { error: '应用正在退出' }
+    }
     logger.info('IPC: quitAndInstall called')
     await updateManager.quitAndInstall()
   })
@@ -29,6 +41,7 @@ export function setupUpdateIpcHandlers() {
     return {
       platform: process.platform,
       canUpdate: process.platform === 'win32' || process.platform === 'darwin',
+      isQuitting: isAppQuitting,
     }
   })
 }
