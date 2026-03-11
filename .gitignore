@@ -83,3 +83,9 @@ __pycache__/
 
 # Misc
 TROUBLE.md
+
+# Database files - should not be tracked or packaged
+auth-api/data/*.db
+*.db
+*.sqlite
+*.sqlite3
