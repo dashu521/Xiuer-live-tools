@@ -27,6 +27,9 @@ permissions:
 env:
   # 生产环境 API 地址
   VITE_AUTH_API_BASE_URL: http://121.41.179.197:8000
+  # 阿里云 OSS 配置
+  ALIYUN_ACCESS_KEY_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
+  ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
 
 jobs:
   build-windows:
@@ -104,3 +107,45 @@ jobs:
           generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 11. 安装 ossutil
+      - name: Install ossutil
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $ossutilUrl = "https://gosspublic.alicdn.com/ossutil/1.7.16/ossutil64.zip"
+          Invoke-WebRequest -Uri $ossutilUrl -OutFile "ossutil.zip"
+          Expand-Archive -Path "ossutil.zip" -DestinationPath "." -Force
+
+      # 12. 配置 OSS
+      - name: Configure OSS
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          .\ossutil64\ossutil.exe config -e oss-cn-hangzhou.aliyuncs.com -i $env:ALIYUN_ACCESS_KEY_ID -k $env:ALIYUN_ACCESS_KEY_SECRET -L CH
+
+      # 13. 上传构建产物到 OSS
+      - name: Upload build to OSS
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}"
+          $localPath = "release\$version"
+          $remotePath = "oss://xiuer-download/releases/$version/"
+
+          Write-Host "Uploading from $localPath to $remotePath"
+          .\ossutil64\ossutil.exe cp $localPath $remotePath -r -f
+
+          # 同时上传 latest.yml 到根目录
+          .\ossutil64\ossutil.exe cp "$localPath\latest.yml" "oss://xiuer-download/releases/latest.yml" -f
+
+      # 14. 输出下载地址
+      - name: Output download URL
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          echo "========================================"
+          echo "Build completed successfully!"
+          echo "========================================"
+          echo "GitHub Release: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+          echo "OSS Download: https://xiuer-download.oss-cn-hangzhou.aliyuncs.com/releases/${{ github.ref_name }}/"
+          echo "========================================"
