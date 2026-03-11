@@ -446,7 +446,9 @@ class EnhancedWindowsUpdater implements Updater {
       logger.debug(`Checking for updates, source: ${source}`)
 
       if (source === 'github') {
-        throw new Error('GitHub updates disabled in commercial release')
+        // 使用默认 GitHub provider 配置（从 electron-builder.json 读取）
+        await this.autoUpdater.checkForUpdates()
+        return
       }
 
       let sourceURL: URL

@@ -99,19 +99,47 @@ async function timeoutFetch(url: string | URL, timeout = 5000) {
 const _releaseNotes: Record<string, string> = {}
 const latestVersion: string | null = null
 
-// Commercial release: update checks disabled
-async function _getLatestVersion() {
-  return null
+// Get latest version from GitHub Releases
+async function _getLatestVersion(): Promise<string | null> {
+  try {
+    const response = await net.fetch('https://api.github.com/repos/Xiuer-Chinese/Xiuer-live-tools/releases/latest', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Accept': 'application/vnd.github.v3+json',
+      },
+    })
+    if (!response.ok) {
+      logger.error(`Failed to fetch latest version: ${response.status}`)
+      return null
+    }
+    const data = await response.json() as { tag_name: string }
+    return data.tag_name.replace(/^v/, '')
+  } catch (error) {
+    logger.error('Failed to get latest version:', error)
+    return null
+  }
 }
 
-// Commercial release: changelog fetching disabled
-async function fetchChangelog() {
-  return undefined
+// Fetch changelog from GitHub Releases
+async function fetchChangelog(): Promise<string | undefined> {
+  try {
+    const response = await net.fetch('https://api.github.com/repos/Xiuer-Chinese/Xiuer-live-tools/releases/latest', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Accept': 'application/vnd.github.v3+json',
+      },
+    })
+    if (!response.ok) return undefined
+    const data = await response.json() as { body: string }
+    return data.body
+  } catch {
+    return undefined
+  }
 }
 
-// Commercial release: no GitHub assets
-function getAssetsURL() {
-  return ''
+// Get GitHub Release assets URL
+function getAssetsURL(): string {
+  return 'https://github.com/Xiuer-Chinese/Xiuer-live-tools/releases/latest'
 }
 
 interface Updater {

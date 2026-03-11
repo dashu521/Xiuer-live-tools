@@ -84,9 +84,10 @@ jobs:
         with:
           name: windows-build
           path: |
-            release/**/*.exe
+            release/**/Xiuer-Live-Assistant_*.exe
             release/**/*.zip
             release/**/latest.yml
+            release/**/*.blockmap
 
       # 10. 自动上传到 GitHub Release（仅 tag 触发时）
       - name: Upload to GitHub Release
@@ -94,7 +95,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            release/**/*.exe
+            release/**/Xiuer-Live-Assistant_*.exe
             release/**/*.zip
             release/**/latest.yml
             release/**/*.blockmap
