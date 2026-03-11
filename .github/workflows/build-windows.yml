@@ -122,7 +122,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: |
-          .\ossutil64\ossutil.exe config -e oss-cn-hangzhou.aliyuncs.com -i $env:ALIYUN_ACCESS_KEY_ID -k $env:ALIYUN_ACCESS_KEY_SECRET -L CH
+          .\ossutil64\ossutil64.exe config -e oss-cn-hangzhou.aliyuncs.com -i $env:ALIYUN_ACCESS_KEY_ID -k $env:ALIYUN_ACCESS_KEY_SECRET -L CH
 
       # 13. 上传构建产物到 OSS - 版本目录
       - name: Upload build to OSS (versioned)
@@ -136,11 +136,11 @@ jobs:
           Write-Host "========================================"
           Write-Host "Uploading to versioned path: $remotePath"
           Write-Host "========================================"
-          .\ossutil64\ossutil.exe cp $localPath $remotePath -r -f
+          .\ossutil64\ossutil64.exe cp $localPath $remotePath -r -f
 
           # 验证上传
           Write-Host "Uploaded files:"
-          .\ossutil64\ossutil.exe ls $remotePath
+          .\ossutil64\ossutil64.exe ls $remotePath
 
       # 14. 上传构建产物到 OSS - latest 目录（仅 tag 构建）
       - name: Upload build to OSS (latest)
@@ -156,11 +156,11 @@ jobs:
           Write-Host "========================================"
 
           # 清空 latest 目录并重新上传
-          .\ossutil64\ossutil.exe rm $latestPath -r -f
-          .\ossutil64\ossutil.exe cp $localPath $latestPath -r -f
+          .\ossutil64\ossutil64.exe rm $latestPath -r -f
+          .\ossutil64\ossutil64.exe cp $localPath $latestPath -r -f
 
           # 同时上传 latest.yml 到根目录（用于自动更新）
-          .\ossutil64\ossutil.exe cp "$localPath\latest.yml" "oss://xiuer-live-tools-download/releases/latest.yml" -f
+          .\ossutil64\ossutil64.exe cp "$localPath\latest.yml" "oss://xiuer-live-tools-download/releases/latest.yml" -f
 
           Write-Host "Latest directory updated successfully"
 
