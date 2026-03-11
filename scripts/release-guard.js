@@ -367,8 +367,8 @@ function scanHighRiskContent() {
               isFallback: isFallbackPattern(line)
             };
 
-            // 特殊处理 src/config/authApiBase.ts
-            if (filePath.includes('src/config/authApiBase.ts') && finding.isFallback) {
+            // 特殊处理 src/config/authApiBase.ts（兼容 Windows 路径）
+            if ((filePath.includes('src/config/authApiBase.ts') || filePath.includes('src\\config\\authApiBase.ts')) && finding.isFallback) {
               // 如果环境变量已设置且不是 localhost
               const apiBaseUrl = process.env.VITE_AUTH_API_BASE_URL;
               if (apiBaseUrl && !apiBaseUrl.includes('localhost') && !apiBaseUrl.includes('127.0.0.1')) {
