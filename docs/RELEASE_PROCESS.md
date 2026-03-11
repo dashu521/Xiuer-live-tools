@@ -59,60 +59,114 @@ npm run release:audit
 - API 地址配置
 - Publish 配置
 
-## 🚀 一键发布流程
+## 🚀 Tag 驱动的自动发布流程（增强版）
 
-### 步骤 1：执行一键发布脚本
+### 发布流程概览
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     自动化发布流程                               │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  本机 Mac (M3 Ultra)                                            │
+│  ├─ 1. npm run release:audit     [人工] 检查发布前置条件        │
+│  ├─ 2. npm run release           [人工] 构建 macOS 安装包       │
+│  ├─ 3. 本地测试                  [人工] 验证安装包              │
+│  ├─ 4. npm run release:notes     [自动] 生成 Release Notes      │
+│  └─ 5. git tag && git push       [人工] 推送 tag                │
+│                              ↓                                  │
+│  GitHub Actions (自动触发)                                      │
+│  ├─ 6. 构建 Windows 安装包       [自动]                         │
+│  └─ 7. 上传到 GitHub Release     [自动]                         │
+│                              ↓                                  │
+│  本机 Mac                                                       │
+│  └─ 8. npm run release:upload:mac [自动] 上传 Mac 产物          │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 详细步骤
+
+#### 步骤 1：发布前审计（人工）
+
+```bash
+npm run release:audit
+```
+
+检查 Git 状态、配置、API 地址等。
+
+#### 步骤 2：本地构建 macOS（人工）
 
 ```bash
 export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
 npm run release
 ```
 
-脚本会依次执行：
-1. 环境检查（Node.js、npm、Git）
-2. 读取版本信息
-3. Git 状态检查（分支、干净程度、remote）
-4. Tag 可用性检查
-5. 环境变量检查
-6. 发布审计
-7. 阻断检查（release:guard）
-8. macOS 构建
-9. 构建产物检查
+构建 macOS 安装包，自动执行阻断检查。
 
-### 步骤 2：本地测试
-
-构建成功后，测试 macOS 安装包：
+#### 步骤 3：本地测试（人工）
 
 ```bash
 open "release/1.2.1"  # 替换为实际版本号
 ```
 
-### 步骤 3：创建并推送 Tag
+安装并测试 macOS 安装包。
 
-macOS 构建验证通过后，创建 Tag 触发 Windows 构建：
+#### 步骤 4：生成 Release Notes（自动）
 
 ```bash
-git tag v1.2.1  # 替换为实际版本号
+npm run release:notes
+```
+
+自动生成 `release-notes/v1.2.1.md`，包含分类的更新日志。
+
+#### 步骤 5：推送 Tag（人工）
+
+```bash
+git tag v1.2.1
 git push origin v1.2.1
 ```
 
-### 步骤 4：等待 Windows 构建
+推送 tag 后自动触发：
+- GitHub Actions Windows 构建
+- Windows 产物自动上传到 GitHub Release
 
-访问 GitHub Actions 查看 Windows 构建进度：
-https://github.com/Xiuer-Chinese/Xiuer-live-tools/actions
+#### 步骤 6：上传 Mac 产物（自动）
 
-### 步骤 5：发布到 GitHub Releases
+等待 Windows 构建完成后，执行：
 
-1. 等待 GitHub Actions Windows 构建完成
-2. 访问：https://github.com/Xiuer-Chinese/Xiuer-live-tools/releases
-3. 点击 "Create a new release"
-4. 选择 Tag（如 v1.2.1）
-5. 填写 Release 标题和说明
-6. 上传文件：
-   - macOS: `秀儿直播助手_1.2.1_macos_*.dmg`
-   - Windows: `秀儿直播助手_1.2.1_win-x64.exe`
-   - Windows: `秀儿直播助手_1.2.1_win-x64.zip`
-   - 自动更新文件：`latest.yml`（Windows）
+```bash
+npm run release:upload:mac
+```
+
+自动上传 Mac 产物到同一 Release。
+
+### 自动化程度说明
+
+| 步骤 | 类型 | 说明 |
+|------|------|------|
+| 发布前审计 | 🔴 人工 | 必须人工确认 |
+| 本地构建 | 🔴 人工 | macOS 只能本机构建 |
+| 本地测试 | 🔴 人工 | 必须人工验证 |
+| 生成 Release Notes | 🟢 自动 | 脚本自动生成 |
+| 推送 Tag | 🔴 人工 | 触发自动流程的开关 |
+| Windows 构建 | 🟢 自动 | GitHub Actions 自动执行 |
+| Windows 上传 | 🟢 自动 | 自动上传到 Release |
+| Mac 上传 | 🟢 自动 | 脚本自动上传 |
+
+### 最终 Release 内容
+
+推送 tag 并完成上传后，GitHub Release 将包含：
+
+| 文件 | 来源 | 上传方式 |
+|------|------|----------|
+| `秀儿直播助手_1.2.1_macos_x64.dmg` | 本机构建 | `npm run release:upload:mac` |
+| `秀儿直播助手_1.2.1_macos_arm64.dmg` | 本机构建 | `npm run release:upload:mac` |
+| `秀儿直播助手_1.2.1_win-x64.exe` | GitHub Actions | 自动上传 |
+| `秀儿直播助手_1.2.1_win-x64.zip` | GitHub Actions | 自动上传 |
+| `latest-mac.yml` | 本机构建 | `npm run release:upload:mac` |
+| `latest.yml` | GitHub Actions | 自动上传 |
+| `*.blockmap` | 自动 | 自动上传 |
 
 ## 📦 Release 页面文件清单
 

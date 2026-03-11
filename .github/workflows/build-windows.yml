@@ -1,9 +1,9 @@
-# 秀儿直播助手 - Windows 构建工作流
-# 专门用于在 GitHub Actions 上构建 Windows 安装包
+# 秀儿直播助手 - Windows 构建工作流（增强版）
+# 专门用于在 GitHub Actions 上构建 Windows 安装包并自动发布到 GitHub Release
 #
 # 触发方式：
-# 1. 推送 v* 标签（如 v1.2.1）
-# 2. 手动触发 workflow_dispatch
+# 1. 推送 v* 标签（如 v1.2.1）- 自动构建并发布到 Release
+# 2. 手动触发 workflow_dispatch - 仅构建，不自动发布
 #
 # 注意：本工作流仅构建 Windows 版本，macOS 请在本地构建
 
@@ -72,13 +72,13 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=4096
           VITE_AUTH_API_BASE_URL: ${{ env.VITE_AUTH_API_BASE_URL }}
 
-      # 8. 打包 Windows 安装包
+      # 8. 打包 Windows 安装包（不发布）
       - name: Build Windows installer
-        run: npx electron-builder --win nsis zip --x64
+        run: npx electron-builder --win nsis zip --x64 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 9. 上传构建产物为 Artifact
+      # 9. 上传构建产物为 Artifact（始终上传，便于调试）
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -88,9 +88,18 @@ jobs:
             release/**/*.zip
             release/**/latest.yml
 
-      # 10. 发布到 GitHub Release（仅 tag 触发时）
-      - name: Release to GitHub
+      # 10. 自动上传到 GitHub Release（仅 tag 触发时）
+      - name: Upload to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        run: npx electron-builder --win nsis zip --x64 --publish always
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release/**/*.exe
+            release/**/*.zip
+            release/**/latest.yml
+            release/**/*.blockmap
+          fail_on_unmatched_files: false
+          # 如果 Release 不存在，自动创建
+          generate_release_notes: false
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
