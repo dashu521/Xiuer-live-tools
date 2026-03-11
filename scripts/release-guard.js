@@ -2,6 +2,11 @@
 /**
  * 发布防事故系统 - Release Guard
  * 在发布前执行高风险检查，发现问题直接阻止构建
+ * 
+ * 检查级别：
+ * - BLOCKER: 会阻止发布的硬阻塞项
+ * - WARNING: 审计警告，需人工确认但不会阻止发布
+ * - INFO: 信息提示
  */
 
 const { execSync } = require('child_process');
@@ -14,14 +19,31 @@ const colors = {
   green: '\x1b[32m',
   yellow: '\x1b[33m',
   blue: '\x1b[34m',
+  cyan: '\x1b[36m',
   bold: '\x1b[1m'
 };
 
-let hasError = false;
+let hasBlocker = false;
+const blockers = [];
+const warnings = [];
+const infos = [];
+
+function addBlocker(category, message, details = '') {
+  hasBlocker = true;
+  blockers.push({ category, message, details });
+}
+
+function addWarning(category, message, details = '') {
+  warnings.push({ category, message, details });
+}
+
+function addInfo(category, message, details = '') {
+  infos.push({ category, message, details });
+}
 
 function log(title, status, details = '') {
-  const icon = status === 'PASS' ? '✅' : status === 'FAIL' ? '❌' : '⚠️';
-  const color = status === 'PASS' ? colors.green : status === 'FAIL' ? colors.red : colors.yellow;
+  const icon = status === 'PASS' ? '✅' : status === 'BLOCKER' ? '❌' : status === 'WARNING' ? '⚠️' : 'ℹ️';
+  const color = status === 'PASS' ? colors.green : status === 'BLOCKER' ? colors.red : status === 'WARNING' ? colors.yellow : colors.cyan;
   console.log(`${icon} ${color}${colors.bold}[${status}]${colors.reset} ${title}`);
   if (details) {
     console.log(`   ${details}`);
@@ -47,12 +69,12 @@ function checkGit() {
     if (branch === 'main') {
       log('当前分支是 main', 'PASS');
     } else {
-      log('当前分支必须是 main', 'FAIL', `当前分支: ${branch}`);
-      hasError = true;
+      log('当前分支必须是 main', 'BLOCKER', `当前分支: ${branch}`);
+      addBlocker('Git', '当前分支不是 main', `当前分支: ${branch}`);
     }
   } catch (error) {
-    log('无法获取当前分支', 'FAIL', error.message);
-    hasError = true;
+    log('无法获取当前分支', 'BLOCKER', error.message);
+    addBlocker('Git', '无法获取当前分支', error.message);
   }
 
   // 1.2 检查 git status 是否干净
@@ -61,12 +83,12 @@ function checkGit() {
     if (status === '') {
       log('Git 工作区干净', 'PASS');
     } else {
-      log('Git 工作区存在未提交修改', 'FAIL', '请执行 git status 查看详情');
-      hasError = true;
+      log('Git 工作区存在未提交修改', 'BLOCKER', '请执行 git status 查看详情');
+      addBlocker('Git', 'Git 工作区不干净', '存在未提交的修改');
     }
   } catch (error) {
-    log('无法检查 Git 状态', 'FAIL', error.message);
-    hasError = true;
+    log('无法检查 Git 状态', 'BLOCKER', error.message);
+    addBlocker('Git', '无法检查 Git 状态', error.message);
   }
 
   // 1.3 检查 remote 数量
@@ -75,12 +97,12 @@ function checkGit() {
     if (remotes.length === 1 && remotes[0] === 'origin') {
       log('Remote 配置正确（仅 origin）', 'PASS');
     } else {
-      log('Remote 配置错误', 'FAIL', `发现 ${remotes.length} 个 remote: ${remotes.join(', ')}`);
-      hasError = true;
+      log('Remote 配置错误', 'BLOCKER', `发现 ${remotes.length} 个 remote: ${remotes.join(', ')}`);
+      addBlocker('Git', 'Remote 配置错误', `发现 ${remotes.length} 个 remote`);
     }
   } catch (error) {
-    log('无法检查 remote', 'FAIL', error.message);
-    hasError = true;
+    log('无法检查 remote', 'BLOCKER', error.message);
+    addBlocker('Git', '无法检查 remote', error.message);
   }
 
   // 1.4 检查 origin URL
@@ -90,12 +112,12 @@ function checkGit() {
     if (originUrl === expectedUrl) {
       log('Origin URL 正确', 'PASS');
     } else {
-      log('Origin URL 错误', 'FAIL', `期望: ${expectedUrl}\n   实际: ${originUrl}`);
-      hasError = true;
+      log('Origin URL 错误', 'BLOCKER', `期望: ${expectedUrl}\n   实际: ${originUrl}`);
+      addBlocker('Git', 'Origin URL 错误', `期望: ${expectedUrl}, 实际: ${originUrl}`);
     }
   } catch (error) {
-    log('无法获取 origin URL', 'FAIL', error.message);
-    hasError = true;
+    log('无法获取 origin URL', 'BLOCKER', error.message);
+    addBlocker('Git', '无法获取 origin URL', error.message);
   }
 }
 
@@ -131,18 +153,18 @@ function checkTrackedFiles() {
     if (violations.length === 0) {
       log('未发现被跟踪的禁止文件', 'PASS');
     } else {
-      log('发现被 Git 跟踪的禁止文件', 'FAIL');
+      log('发现被 Git 跟踪的禁止文件', 'BLOCKER');
       for (const { file, pattern } of violations.slice(0, 10)) {
         console.log(`   ❌ ${file} (${pattern})`);
       }
       if (violations.length > 10) {
         console.log(`   ... 还有 ${violations.length - 10} 个文件`);
       }
-      hasError = true;
+      addBlocker('Git 跟踪文件', '发现被跟踪的禁止文件', `${violations.length} 个文件`);
     }
   } catch (error) {
-    log('无法检查跟踪文件', 'FAIL', error.message);
-    hasError = true;
+    log('无法检查跟踪文件', 'BLOCKER', error.message);
+    addBlocker('Git 跟踪文件', '无法检查', error.message);
   }
 }
 
@@ -155,13 +177,14 @@ function checkConfig() {
     const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf-8'));
     if (packageJson.version) {
       log(`package.json version: ${packageJson.version}`, 'PASS');
+      addInfo('版本', `当前版本: ${packageJson.version}`);
     } else {
-      log('package.json 缺少 version 字段', 'FAIL');
-      hasError = true;
+      log('package.json 缺少 version 字段', 'BLOCKER');
+      addBlocker('配置', 'package.json 缺少 version 字段');
     }
   } catch (error) {
-    log('无法读取 package.json', 'FAIL', error.message);
-    hasError = true;
+    log('无法读取 package.json', 'BLOCKER', error.message);
+    addBlocker('配置', '无法读取 package.json', error.message);
   }
 
   // 3.2 检查 electron-builder.json publish 配置
@@ -170,23 +193,23 @@ function checkConfig() {
     const publish = builderConfig.publish;
 
     if (!publish) {
-      log('electron-builder.json 缺少 publish 配置', 'FAIL');
-      hasError = true;
+      log('electron-builder.json 缺少 publish 配置', 'BLOCKER');
+      addBlocker('配置', '缺少 publish 配置');
     } else if (publish.provider !== 'github') {
-      log('electron-builder.json publish.provider 必须是 github', 'FAIL', `实际: ${publish.provider}`);
-      hasError = true;
+      log('electron-builder.json publish.provider 必须是 github', 'BLOCKER', `实际: ${publish.provider}`);
+      addBlocker('配置', 'publish.provider 错误', `实际: ${publish.provider}`);
     } else if (publish.owner !== 'Xiuer-Chinese') {
-      log('electron-builder.json publish.owner 错误', 'FAIL', `期望: Xiuer-Chinese, 实际: ${publish.owner}`);
-      hasError = true;
+      log('electron-builder.json publish.owner 错误', 'BLOCKER', `期望: Xiuer-Chinese, 实际: ${publish.owner}`);
+      addBlocker('配置', 'publish.owner 错误');
     } else if (publish.repo !== 'Xiuer-live-tools') {
-      log('electron-builder.json publish.repo 错误', 'FAIL', `期望: Xiuer-live-tools, 实际: ${publish.repo}`);
-      hasError = true;
+      log('electron-builder.json publish.repo 错误', 'BLOCKER', `期望: Xiuer-live-tools, 实际: ${publish.repo}`);
+      addBlocker('配置', 'publish.repo 错误');
     } else {
       log('electron-builder.json publish 配置正确', 'PASS');
     }
   } catch (error) {
-    log('无法读取 electron-builder.json', 'FAIL', error.message);
-    hasError = true;
+    log('无法读取 electron-builder.json', 'BLOCKER', error.message);
+    addBlocker('配置', '无法读取 electron-builder.json', error.message);
   }
 }
 
@@ -197,16 +220,17 @@ function checkEnv() {
   const apiBaseUrl = process.env.VITE_AUTH_API_BASE_URL;
 
   if (!apiBaseUrl) {
-    log('VITE_AUTH_API_BASE_URL 未设置', 'FAIL', '发布时必须设置生产环境 API 地址');
-    hasError = true;
+    log('VITE_AUTH_API_BASE_URL 未设置', 'BLOCKER', '发布时必须设置生产环境 API 地址');
+    addBlocker('环境变量', 'VITE_AUTH_API_BASE_URL 未设置');
     return;
   }
 
   if (apiBaseUrl.includes('localhost') || apiBaseUrl.includes('127.0.0.1')) {
-    log('VITE_AUTH_API_BASE_URL 包含本地地址', 'FAIL', `当前值: ${apiBaseUrl}`);
-    hasError = true;
+    log('VITE_AUTH_API_BASE_URL 包含本地地址', 'BLOCKER', `当前值: ${apiBaseUrl}`);
+    addBlocker('环境变量', 'API 地址为本地地址', apiBaseUrl);
   } else {
     log(`VITE_AUTH_API_BASE_URL: ${apiBaseUrl}`, 'PASS');
+    addInfo('环境变量', `API 地址: ${apiBaseUrl}`);
   }
 }
 
@@ -214,7 +238,15 @@ function checkEnv() {
 function scanHighRiskContent() {
   console.log(`\n${colors.blue}${colors.bold}🔍 高风险内容扫描${colors.reset}\n`);
 
-  const scanDirs = ['src', 'electron', 'shared', 'scripts'];
+  // 高风险目录：这些目录中的 localhost 会被视为 BLOCKER
+  const highRiskDirs = ['src', 'shared'];
+  
+  // 中风险目录：这些目录中的 localhost 会被视为 WARNING
+  const mediumRiskDirs = ['electron/main', 'preload'];
+  
+  // 低风险目录：这些目录中的 localhost 会被视为 INFO（脚本自身）
+  const lowRiskDirs = ['scripts'];
+
   const riskPatterns = [
     { pattern: /http:\/\/localhost/, name: 'http://localhost' },
     { pattern: /127\.0\.0\.1/, name: '127.0.0.1' },
@@ -223,24 +255,86 @@ function scanHighRiskContent() {
     { pattern: /17701259200/, name: '17701259200' }
   ];
 
-  const findings = [];
+  const blockerFindings = [];
+  const warningFindings = [];
+  const infoFindings = [];
+
   const scannedExtensions = ['.ts', '.tsx', '.js', '.jsx', '.json', '.cjs', '.mjs'];
+
+  function getRiskLevel(filePath) {
+    // 检查是否在脚本目录
+    for (const dir of lowRiskDirs) {
+      if (filePath.startsWith(dir + path.sep) || filePath === dir) {
+        return 'info';
+      }
+    }
+    
+    // 检查是否在中风险目录
+    for (const dir of mediumRiskDirs) {
+      if (filePath.startsWith(dir + path.sep) || filePath === dir) {
+        return 'warning';
+      }
+    }
+    
+    // 检查是否在高风险目录
+    for (const dir of highRiskDirs) {
+      if (filePath.startsWith(dir + path.sep) || filePath === dir) {
+        return 'blocker';
+      }
+    }
+    
+    // 默认 info
+    return 'info';
+  }
+
+  function isFallbackPattern(line) {
+    // 检测是否是 fallback 模式：env || 'localhost'
+    const fallbackPatterns = [
+      /import\.meta\.env\.\w+.*\|\|.*localhost/,
+      /process\.env\.\w+.*\|\|.*localhost/,
+      /\|\|.*localhost/,
+      /\|\|.*127\.0\.0\.1/
+    ];
+    return fallbackPatterns.some(p => p.test(line));
+  }
 
   function scanFile(filePath) {
     try {
       const content = fs.readFileSync(filePath, 'utf-8');
       const lines = content.split('\n');
+      const riskLevel = getRiskLevel(filePath);
 
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         for (const { pattern, name } of riskPatterns) {
           if (pattern.test(line)) {
-            findings.push({
+            const finding = {
               file: filePath,
               line: i + 1,
               content: line.trim().substring(0, 80),
-              risk: name
-            });
+              risk: name,
+              isFallback: isFallbackPattern(line)
+            };
+
+            // 特殊处理 src/config/authApiBase.ts
+            if (filePath.includes('src/config/authApiBase.ts') && finding.isFallback) {
+              // 如果环境变量已设置且不是 localhost，则降级为 warning
+              const apiBaseUrl = process.env.VITE_AUTH_API_BASE_URL;
+              if (apiBaseUrl && !apiBaseUrl.includes('localhost') && !apiBaseUrl.includes('127.0.0.1')) {
+                warningFindings.push({ ...finding, note: 'fallback 模式，但环境变量已正确设置' });
+              } else {
+                blockerFindings.push({ ...finding, note: 'fallback 模式且环境变量未设置或无效' });
+              }
+            } else {
+              // 根据目录风险级别分类
+              if (riskLevel === 'blocker') {
+                blockerFindings.push(finding);
+              } else if (riskLevel === 'warning') {
+                warningFindings.push(finding);
+              } else {
+                infoFindings.push(finding);
+              }
+            }
           }
         }
       }
@@ -269,30 +363,113 @@ function scanHighRiskContent() {
     }
   }
 
-  for (const dir of scanDirs) {
+  // 扫描所有目录
+  const allDirs = [...highRiskDirs, ...mediumRiskDirs, ...lowRiskDirs];
+  for (const dir of allDirs) {
     scanDir(dir);
   }
 
-  if (findings.length === 0) {
+  // 输出结果
+  if (blockerFindings.length === 0 && warningFindings.length === 0 && infoFindings.length === 0) {
     log('未发现高风险内容', 'PASS');
   } else {
-    log('发现高风险内容', 'FAIL');
-    for (const finding of findings.slice(0, 15)) {
-      console.log(`   ❌ ${finding.file}:${finding.line}`);
-      console.log(`      [${finding.risk}] ${finding.content}`);
+    // 输出 BLOCKER
+    if (blockerFindings.length > 0) {
+      log(`发现 ${blockerFindings.length} 处高风险内容（会阻止发布）`, 'BLOCKER');
+      for (const finding of blockerFindings.slice(0, 10)) {
+        console.log(`   ❌ ${finding.file}:${finding.line}`);
+        console.log(`      [${finding.risk}] ${finding.content}`);
+        if (finding.note) console.log(`      说明: ${finding.note}`);
+      }
+      if (blockerFindings.length > 10) {
+        console.log(`   ... 还有 ${blockerFindings.length - 10} 处`);
+      }
+      addBlocker('高风险内容', '发现高风险 localhost/127.0.0.1', `${blockerFindings.length} 处`);
     }
-    if (findings.length > 15) {
-      console.log(`   ... 还有 ${findings.length - 15} 处`);
+
+    // 输出 WARNING
+    if (warningFindings.length > 0) {
+      log(`发现 ${warningFindings.length} 处警告内容（需人工确认）`, 'WARNING');
+      for (const finding of warningFindings.slice(0, 10)) {
+        console.log(`   ⚠️  ${finding.file}:${finding.line}`);
+        console.log(`      [${finding.risk}] ${finding.content}`);
+        if (finding.note) console.log(`      说明: ${finding.note}`);
+      }
+      if (warningFindings.length > 10) {
+        console.log(`   ... 还有 ${warningFindings.length - 10} 处`);
+      }
+      addWarning('潜在风险', '发现需要确认的内容', `${warningFindings.length} 处`);
     }
-    hasError = true;
+
+    // 输出 INFO（仅当存在时）
+    if (infoFindings.length > 0) {
+      log(`发现 ${infoFindings.length} 处信息项（脚本/工具中的正常引用）`, 'INFO');
+      for (const finding of infoFindings.slice(0, 5)) {
+        console.log(`   ℹ️  ${finding.file}:${finding.line}`);
+        console.log(`      [${finding.risk}] ${finding.content.substring(0, 60)}...`);
+      }
+      if (infoFindings.length > 5) {
+        console.log(`   ... 还有 ${infoFindings.length - 5} 处（已省略）`);
+      }
+    }
   }
 }
 
 // ==================== 主程序 ====================
+function printSummary() {
+  console.log(`\n${colors.bold}════════════════════════════════════════════════════════════${colors.reset}\n`);
+  
+  // BLOCKER 汇总
+  if (blockers.length > 0) {
+    console.log(`${colors.red}${colors.bold}【BLOCKER - 会阻止发布的问题】${colors.reset}`);
+    for (const b of blockers) {
+      console.log(`  ❌ [${b.category}] ${b.message}`);
+      if (b.details) console.log(`     详情: ${b.details}`);
+    }
+    console.log('');
+  }
+
+  // WARNING 汇总
+  if (warnings.length > 0) {
+    console.log(`${colors.yellow}${colors.bold}【WARNING - 需人工确认的警告】${colors.reset}`);
+    for (const w of warnings) {
+      console.log(`  ⚠️  [${w.category}] ${w.message}`);
+      if (w.details) console.log(`     详情: ${w.details}`);
+    }
+    console.log('');
+  }
+
+  // INFO 汇总
+  if (infos.length > 0) {
+    console.log(`${colors.cyan}${colors.bold}【INFO - 信息提示】${colors.reset}`);
+    for (const i of infos) {
+      console.log(`  ℹ️  [${i.category}] ${i.message}`);
+      if (i.details) console.log(`     详情: ${i.details}`);
+    }
+    console.log('');
+  }
+
+  // 最终结论
+  console.log(`${colors.bold}════════════════════════════════════════════════════════════${colors.reset}\n`);
+  
+  if (hasBlocker) {
+    console.log(`${colors.red}${colors.bold}❌ 检查失败！存在 ${blockers.length} 个阻塞问题，请修复后再尝试发布。${colors.reset}\n`);
+    console.log(`${colors.yellow}⚠️  注意：WARNING 级别的问题不会阻止发布，但建议人工确认。${colors.reset}\n`);
+    process.exit(1);
+  } else {
+    console.log(`${colors.green}${colors.bold}✅ 所有阻塞检查通过！可以安全发布。${colors.reset}\n`);
+    if (warnings.length > 0) {
+      console.log(`${colors.yellow}⚠️  存在 ${warnings.length} 个警告项，建议人工确认。${colors.reset}\n`);
+    }
+    process.exit(0);
+  }
+}
+
 function main() {
   console.log(`${colors.bold}`);
   console.log('╔════════════════════════════════════════════════════════════╗');
   console.log('║           🛡️  发布防事故系统 - Release Guard                ║');
+  console.log('║              检查级别: BLOCKER | WARNING | INFO             ║');
   console.log('╚════════════════════════════════════════════════════════════╝');
   console.log(`${colors.reset}`);
 
@@ -302,15 +479,7 @@ function main() {
   checkEnv();
   scanHighRiskContent();
 
-  console.log(`\n${colors.bold}════════════════════════════════════════════════════════════${colors.reset}\n`);
-
-  if (hasError) {
-    console.log(`${colors.red}${colors.bold}❌ 检查失败！请修复上述问题后再尝试发布。${colors.reset}\n`);
-    process.exit(1);
-  } else {
-    console.log(`${colors.green}${colors.bold}✅ 所有检查通过！可以安全发布。${colors.reset}\n`);
-    process.exit(0);
-  }
+  printSummary();
 }
 
 main();

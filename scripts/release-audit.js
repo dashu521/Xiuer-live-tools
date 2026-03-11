@@ -2,6 +2,11 @@
 /**
  * 发布前审计脚本 - Release Audit
  * 只做检查，不阻断构建，输出审计报告
+ *
+ * 检查级别：
+ * - BLOCKER: 会阻止发布的硬阻塞项
+ * - WARNING: 审计警告，需人工确认但不会阻止发布
+ * - INFO: 信息提示
  */
 
 const { execSync } = require('child_process');
@@ -33,8 +38,8 @@ function printSection(title) {
 }
 
 function printItem(label, value, status = 'info') {
-  const color = status === 'ok' ? colors.green : status === 'warn' ? colors.yellow : status === 'error' ? colors.red : colors.reset;
-  const icon = status === 'ok' ? '✅' : status === 'warn' ? '⚠️' : status === 'error' ? '❌' : '•';
+  const color = status === 'ok' ? colors.green : status === 'warn' ? colors.yellow : status === 'error' ? colors.red : status === 'blocker' ? colors.red : colors.reset;
+  const icon = status === 'ok' ? '✅' : status === 'warn' ? '⚠️' : status === 'error' ? '❌' : status === 'blocker' ? '❌' : '•';
   console.log(`${icon} ${label}: ${color}${value}${colors.reset}`);
 }
 
@@ -176,11 +181,140 @@ function auditApiConfig() {
       if (match) {
         const defaultUrl = match[1];
         const isLocal = defaultUrl.includes('localhost') || defaultUrl.includes('127.0.0.1');
-        printItem('代码默认地址', defaultUrl, isLocal ? 'info' : 'ok');
+        const isFallback = content.includes('||') && isLocal;
+
+        if (isFallback && envApiUrl && !envApiUrl.includes('localhost') && !envApiUrl.includes('127.0.0.1')) {
+          // 环境变量已正确设置，fallback 只是安全网
+          printItem('代码默认地址', `${defaultUrl} (fallback 模式)`, 'ok');
+          console.log('   ℹ️  环境变量已正确设置，fallback 地址不会生效');
+        } else if (isLocal) {
+          printItem('代码默认地址', defaultUrl, 'warn');
+          console.log('   ⚠️  代码中存在 localhost fallback，如环境变量未设置将使用本地地址');
+        } else {
+          printItem('代码默认地址', defaultUrl, 'ok');
+        }
       }
     }
   } catch (error) {
     // 忽略
+  }
+}
+
+function auditLocalhostScan() {
+  printSection('Localhost 引用扫描（按目录风险级别）');
+
+  // 高风险目录
+  const highRiskDirs = ['src', 'shared'];
+  // 中风险目录
+  const mediumRiskDirs = ['electron/main', 'preload'];
+  // 低风险目录
+  const lowRiskDirs = ['scripts'];
+
+  const riskPatterns = [
+    { pattern: /http:\/\/localhost/, name: 'http://localhost' },
+    { pattern: /127\.0\.0\.1/, name: '127.0.0.1' }
+  ];
+
+  const blockerFindings = [];
+  const warningFindings = [];
+  const infoFindings = [];
+
+  const scannedExtensions = ['.ts', '.tsx', '.js', '.jsx', '.json', '.cjs', '.mjs'];
+
+  function getRiskLevel(filePath) {
+    for (const dir of lowRiskDirs) {
+      if (filePath.startsWith(dir + path.sep) || filePath === dir) return 'info';
+    }
+    for (const dir of mediumRiskDirs) {
+      if (filePath.startsWith(dir + path.sep) || filePath === dir) return 'warning';
+    }
+    for (const dir of highRiskDirs) {
+      if (filePath.startsWith(dir + path.sep) || filePath === dir) return 'blocker';
+    }
+    return 'info';
+  }
+
+  function isFallbackPattern(line) {
+    return /\|\|.*localhost/.test(line) || /\|\|.*127\.0\.0\.1/.test(line);
+  }
+
+  function scanFile(filePath) {
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const lines = content.split('\n');
+      const riskLevel = getRiskLevel(filePath);
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        for (const { pattern, name } of riskPatterns) {
+          if (pattern.test(line)) {
+            const finding = {
+              file: filePath,
+              line: i + 1,
+              content: line.trim().substring(0, 60),
+              risk: name,
+              isFallback: isFallbackPattern(line)
+            };
+
+            if (finding.isFallback) {
+              warningFindings.push({ ...finding, note: 'fallback 模式' });
+            } else if (riskLevel === 'blocker') {
+              blockerFindings.push(finding);
+            } else if (riskLevel === 'warning') {
+              warningFindings.push(finding);
+            } else {
+              infoFindings.push(finding);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      // 跳过
+    }
+  }
+
+  function scanDir(dir) {
+    if (!fs.existsSync(dir)) return;
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name !== 'node_modules' && entry.name !== '.git') {
+          scanDir(fullPath);
+        }
+      } else if (entry.isFile() && scannedExtensions.includes(path.extname(entry.name))) {
+        scanFile(fullPath);
+      }
+    }
+  }
+
+  const allDirs = [...highRiskDirs, ...mediumRiskDirs, ...lowRiskDirs];
+  for (const dir of allDirs) scanDir(dir);
+
+  // 输出结果
+  if (blockerFindings.length > 0) {
+    console.log(`${colors.red}【高风险目录中的 localhost（会阻止发布）】${colors.reset}`);
+    for (const f of blockerFindings.slice(0, 5)) {
+      console.log(`  ❌ ${f.file}:${f.line} [${f.risk}]`);
+    }
+    if (blockerFindings.length > 5) console.log(`  ... 还有 ${blockerFindings.length - 5} 处`);
+  }
+
+  if (warningFindings.length > 0) {
+    console.log(`${colors.yellow}【中风险目录中的 localhost（需确认）】${colors.reset}`);
+    for (const f of warningFindings.slice(0, 5)) {
+      console.log(`  ⚠️  ${f.file}:${f.line} [${f.risk}]${f.note ? ` (${f.note})` : ''}`);
+    }
+    if (warningFindings.length > 5) console.log(`  ... 还有 ${warningFindings.length - 5} 处`);
+  }
+
+  if (infoFindings.length > 0) {
+    console.log(`${colors.cyan}【低风险目录中的 localhost（脚本/工具）】${colors.reset}`);
+    console.log(`  ℹ️  发现 ${infoFindings.length} 处（已省略详情）`);
+  }
+
+  if (blockerFindings.length === 0 && warningFindings.length === 0 && infoFindings.length === 0) {
+    printItem('Localhost 扫描', '未发现 localhost/127.0.0.1 引用', 'ok');
   }
 }
 
@@ -227,6 +361,7 @@ function main() {
   console.log(`${colors.bold}`);
   console.log('╔════════════════════════════════════════════════════════════╗');
   console.log('║              📊 发布前审计报告 - Release Audit              ║');
+  console.log('║         检查级别: BLOCKER | WARNING | INFO                  ║');
   console.log('╚════════════════════════════════════════════════════════════╝');
   console.log(`${colors.reset}`);
 
@@ -241,6 +376,7 @@ function main() {
   auditGitignore();
   auditTrackedFiles();
   auditApiConfig();
+  auditLocalhostScan();
   auditPublishConfig();
 
   // 总结

@@ -26,7 +26,7 @@
     "test": "vitest run",
     "prepare": "husky",
     "bump": "bumpp --no-commit --no-tag --no-push && changelogen --output",
-    "release": "node ./scripts/release",
+    "release": "node scripts/release.js",
     "pre-release-check": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pre-release-check.ps1",
     "diag:deps": "node scripts/diagnose-deps.mjs",
     "slow-server": "node ./scripts/slow-server.js",
