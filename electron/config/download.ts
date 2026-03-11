@@ -1,11 +1,13 @@
 /**
  * 下载与更新配置
  * 统一配置国内高速下载源
+ *
+ * 架构：用户 → download.xiuer.work → 阿里云 CDN → OSS Bucket
  */
 
 export const DOWNLOAD_CONFIG = {
-  // 主下载域名（国内 CDN）
-  baseUrl: 'https://xiuer.work',
+  // 主下载域名（国内 CDN）- 推荐
+  baseUrl: 'https://download.xiuer.work',
 
   // OSS 直连地址（备用）
   ossBaseUrl: 'https://xiuer-live-tools-download.oss-cn-hangzhou.aliyuncs.com',
@@ -22,7 +24,7 @@ export const DOWNLOAD_CONFIG = {
   // 自动更新配置
   updater: {
     provider: 'generic' as const,
-    url: 'https://xiuer.work/releases/latest',
+    url: 'https://download.xiuer.work/releases/latest',
     channel: 'latest',
   },
 
@@ -58,4 +60,14 @@ export function getLatestDownloadUrl(file?: string): string {
  */
 export function getUpdateUrl(): string {
   return DOWNLOAD_CONFIG.updater.url
+}
+
+/**
+ * 获取 OSS 直连地址（备用）
+ */
+export function getOssDirectUrl(version: string, file?: string): string {
+  if (file) {
+    return `${DOWNLOAD_CONFIG.ossBaseUrl}/releases/${version}/${file}`
+  }
+  return `${DOWNLOAD_CONFIG.ossBaseUrl}/releases/${version}/`
 }
