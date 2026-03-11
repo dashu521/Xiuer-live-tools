@@ -28,6 +28,80 @@
 └─────────────────────────────────────────────────────────────┘
 ```
 
+## 🚀 安全版一键发布流程（推荐）
+
+### 三阶段发布流程
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     安全版一键发布流程                           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  第一阶段: npm run publish                                       │
+│  ├─ 执行 release:audit          [自动] 检查发布前置条件         │
+│  ├─ 检查环境变量                [自动] 确认 API 地址            │
+│  ├─ 执行 release:guard          [自动] 阻断检查                 │
+│  ├─ 执行 release                [自动] 构建 macOS 安装包        │
+│  ├─ 执行 release:notes          [自动] 生成 Release Notes       │
+│  └─ 执行 release:upload:mac     [自动] 上传 Mac 产物            │
+│                              ↓                                  │
+│  第二阶段: npm run publish:confirm                               │
+│  ├─ 检查 git 状态               [自动] 确认工作区干净           │
+│  ├─ 检查 tag 不存在             [自动] 确认 tag 可用            │
+│  ├─ 推送 main 分支              [自动]                          │
+│  ├─ 创建 tag                    [自动]                          │
+│  └─ 推送 tag                    [自动] 触发 Windows CI          │
+│                              ↓                                  │
+│  第三阶段: npm run publish:check                                 │
+│  ├─ 检查 GitHub Actions         [自动] Windows 构建状态         │
+│  └─ 检查 Release 资产           [自动] 验证发布完整性           │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 快速开始
+
+#### 第一阶段：准备发布
+
+```bash
+export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
+npm run publish
+```
+
+**说明：**
+- 构建 macOS 安装包
+- 生成 Release Notes
+- 上传 Mac 产物
+- **不会**自动推 tag（安全确认点）
+
+#### 第二阶段：确认发布
+
+```bash
+npm run publish:confirm
+```
+
+**说明：**
+- 检查 git 工作区干净
+- 检查 tag 不存在
+- 创建并推送 tag
+- 触发 GitHub Actions Windows 构建
+- **这是不可撤销的操作**
+
+#### 第三阶段：检查结果
+
+等待 5-10 分钟后：
+
+```bash
+npm run publish:check
+```
+
+**说明：**
+- 检查 Windows CI 构建状态
+- 验证 Release 资产完整性
+- 输出最终发布结果
+
+---
+
 ## 🎯 发布前准备
 
 ### 1. 环境检查
@@ -36,6 +110,7 @@
 - Node.js >= 20.0.0
 - npm >= 10.0.0
 - Git
+- GitHub CLI (`gh`)
 - macOS 11 及以上（本机）
 
 ### 2. 环境变量
@@ -59,31 +134,11 @@ npm run release:audit
 - API 地址配置
 - Publish 配置
 
-## 🚀 Tag 驱动的自动发布流程（增强版）
+---
 
-### 发布流程概览
+## 📝 传统发布流程（备用）
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     自动化发布流程                               │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  本机 Mac (M3 Ultra)                                            │
-│  ├─ 1. npm run release:audit     [人工] 检查发布前置条件        │
-│  ├─ 2. npm run release           [人工] 构建 macOS 安装包       │
-│  ├─ 3. 本地测试                  [人工] 验证安装包              │
-│  ├─ 4. npm run release:notes     [自动] 生成 Release Notes      │
-│  └─ 5. git tag && git push       [人工] 推送 tag                │
-│                              ↓                                  │
-│  GitHub Actions (自动触发)                                      │
-│  ├─ 6. 构建 Windows 安装包       [自动]                         │
-│  └─ 7. 上传到 GitHub Release     [自动]                         │
-│                              ↓                                  │
-│  本机 Mac                                                       │
-│  └─ 8. npm run release:upload:mac [自动] 上传 Mac 产物          │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
+如需手动控制每个步骤，可使用以下传统流程：
 
 ### 详细步骤
 
@@ -141,42 +196,23 @@ npm run release:upload:mac
 
 自动上传 Mac 产物到同一 Release。
 
-### 自动化程度说明
+---
 
-| 步骤 | 类型 | 说明 |
-|------|------|------|
-| 发布前审计 | 🔴 人工 | 必须人工确认 |
-| 本地构建 | 🔴 人工 | macOS 只能本机构建 |
-| 本地测试 | 🔴 人工 | 必须人工验证 |
-| 生成 Release Notes | 🟢 自动 | 脚本自动生成 |
-| 推送 Tag | 🔴 人工 | 触发自动流程的开关 |
-| Windows 构建 | 🟢 自动 | GitHub Actions 自动执行 |
-| Windows 上传 | 🟢 自动 | 自动上传到 Release |
-| Mac 上传 | 🟢 自动 | 脚本自动上传 |
-
-### 最终 Release 内容
+## 📦 Release 页面文件清单
 
 推送 tag 并完成上传后，GitHub Release 将包含：
 
 | 文件 | 来源 | 上传方式 |
 |------|------|----------|
-| `秀儿直播助手_1.2.1_macos_x64.dmg` | 本机构建 | `npm run release:upload:mac` |
-| `秀儿直播助手_1.2.1_macos_arm64.dmg` | 本机构建 | `npm run release:upload:mac` |
-| `秀儿直播助手_1.2.1_win-x64.exe` | GitHub Actions | 自动上传 |
-| `秀儿直播助手_1.2.1_win-x64.zip` | GitHub Actions | 自动上传 |
+| `Xiuer-Live-Assistant_1.2.1_macos_x64.dmg` | 本机构建 | `npm run release:upload:mac` |
+| `Xiuer-Live-Assistant_1.2.1_macos_arm64.dmg` | 本机构建 | `npm run release:upload:mac` |
+| `Xiuer-Live-Assistant_1.2.1_win-x64.exe` | GitHub Actions | 自动上传 |
+| `Xiuer-Live-Assistant_1.2.1_win-x64.zip` | GitHub Actions | 自动上传 |
 | `latest-mac.yml` | 本机构建 | `npm run release:upload:mac` |
 | `latest.yml` | GitHub Actions | 自动上传 |
 | `*.blockmap` | 自动 | 自动上传 |
 
-## 📦 Release 页面文件清单
-
-| 文件 | 说明 | 来源 |
-|------|------|------|
-| 秀儿直播助手_1.2.1_macos_x64.dmg | macOS Intel 安装包 | 本机构建 |
-| 秀儿直播助手_1.2.1_macos_arm64.dmg | macOS Apple Silicon 安装包 | 本机构建 |
-| 秀儿直播助手_1.2.1_win-x64.exe | Windows 安装程序 | GitHub Actions |
-| 秀儿直播助手_1.2.1_win-x64.zip | Windows 便携版 | GitHub Actions |
-| latest.yml | Windows 自动更新配置 | GitHub Actions |
+---
 
 ## ⚠️ 常见失败原因
 
@@ -247,6 +283,8 @@ git commit -m "chore: remove database files from git tracking"
 **解决方案**：
 确保 `VITE_AUTH_API_BASE_URL` 已设置为生产地址，代码中的 localhost fallback 不会生效。
 
+---
+
 ## 🔧 手动构建命令
 
 如需手动执行构建步骤：
@@ -285,6 +323,8 @@ Windows 构建只能通过以下方式触发：
    - 选择 "Build Windows"
    - 点击 "Run workflow"
 
+---
+
 ## 📝 发布检查清单
 
 发布前请确认：
@@ -298,6 +338,8 @@ Windows 构建只能通过以下方式触发：
 - [ ] Windows 构建已完成
 - [ ] GitHub Release 已创建
 - [ ] 所有安装包已上传
+
+---
 
 ## 📝 自动生成 Release Notes
 
@@ -396,13 +438,16 @@ git commit -m "chore(release): 添加一键发布脚本"
 
 如果是首发版本（没有历史 tag），脚本会自动生成包含核心功能介绍的完整首发说明。
 
+---
+
 ## 🆘 获取帮助
 
 如遇问题：
 
-1. 查看详细日志：`npm run release 2>&1 | tee release.log`
+1. 查看详细日志：`npm run publish 2>&1 | tee publish.log`
 2. 检查 GitHub Actions 日志
-3. 联系技术支持：support@xiuer.live
+3. 运行检查命令：`npm run publish:check`
+4. 联系技术支持：support@xiuer.live
 
 ---
 
