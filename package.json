@@ -40,6 +40,7 @@
     "release:upload:mac": "node scripts/upload-mac-release.js",
     "release:mac": "npm run release:guard && npm run dist:clean && npm run build && npx electron-builder --mac",
     "release:win:ci": "echo 'Windows build runs on GitHub Actions. Please trigger via workflow_dispatch or push a tag.'",
+    "release:check-env": "node scripts/check-build-env.js",
     "publish": "node scripts/publish.js",
     "publish:confirm": "node scripts/publish-confirm.js",
     "publish:check": "node scripts/publish-check.js"

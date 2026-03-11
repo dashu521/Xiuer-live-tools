@@ -5,7 +5,10 @@
 # 1. 推送 v* 标签（如 v1.2.1）- 自动构建并发布到 Release
 # 2. 手动触发 workflow_dispatch - 仅构建，不自动发布
 #
-# 注意：本工作流仅构建 Windows 版本，macOS 请在本地构建
+# 注意：
+# - 本工作流仅构建 Windows 版本
+# - macOS 版本请在本地 Mac 构建（任意 Apple Silicon 或 Intel Mac 均可）
+# - 详见 docs/RELEASE_SPECIFICATION.md 中的三层发布结构
 
 name: Build Windows
 

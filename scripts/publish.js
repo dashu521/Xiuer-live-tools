@@ -167,6 +167,11 @@ async function main() {
   console.log('║           🚀 安全版一键发布系统 - 第一阶段                  ║');
   console.log('║                                                            ║');
   console.log('║  本阶段：构建、上传 Mac，但不推 tag                        ║');
+  console.log('║                                                            ║');
+  console.log('║  构建类型说明：                                            ║');
+  console.log('║  • 若未配置 Apple 开发者证书 → 生成测试构建（未签名）      ║');
+  console.log('║  • 若已配置 Apple 开发者证书 → 生成正式发布构建（已签名）  ║');
+  console.log('║  • 详见 docs/RELEASE_SPECIFICATION.md                     ║');
   console.log('╚════════════════════════════════════════════════════════════╝');
   console.log(`${colors.reset}`);
 

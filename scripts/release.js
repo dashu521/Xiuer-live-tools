@@ -79,9 +79,13 @@ async function main() {
   console.log('║           🚀 秀儿直播助手 - 一键发布系统                    ║');
   console.log('║                                                            ║');
   console.log('║  发布架构：                                                ║');
-  console.log('║  • 本机 Mac (M3 Ultra) → 构建 macOS 安装包                ║');
+  console.log('║  • 本地 Mac (任意机型) → 构建 macOS 安装包                ║');
   console.log('║  • GitHub Actions → 构建 Windows 安装包                   ║');
   console.log('║  • GitHub Releases → 统一分发                            ║');
+  console.log('║                                                            ║');
+  console.log('║  构建类型：                                                ║');
+  console.log('║  • 测试构建：无需证书，生成未签名应用（Gatekeeper 需手动允许）║');
+  console.log('║  • 正式发布：需 Apple Developer ID 证书进行签名和公证      ║');
   console.log('╚════════════════════════════════════════════════════════════╝');
   console.log(`${colors.reset}`);
 
