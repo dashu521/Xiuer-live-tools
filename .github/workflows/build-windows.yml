@@ -109,7 +109,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # 11. 安装并配置 ossutil，然后上传 OSS
-      # 合并为一个 step 避免 secrets 传递问题
+      # 只上传发布成品文件，严禁递归上传整个 release 目录
       - name: Install ossutil and upload to OSS
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
@@ -141,20 +141,14 @@ jobs:
           } elseif (Test-Path ".\ossutil64.exe") {
             $ossutilExe = ".\ossutil64.exe"
           } else {
-            # 搜索当前目录
             $found = Get-ChildItem -Path "." -Filter "ossutil64.exe" -Recurse | Select-Object -First 1
-            if ($found) {
-              $ossutilExe = $found.FullName
-            }
+            if ($found) { $ossutilExe = $found.FullName }
           }
 
           if (-not $ossutilExe) {
             Write-Host "❌ 找不到 ossutil64.exe"
-            Write-Host "当前目录结构:"
-            Get-ChildItem -Path "." -Recurse | Where-Object { $_.Name -like "*ossutil*" } | Select-Object -ExpandProperty FullName
             exit 1
           }
-
           Write-Host "✅ 找到 ossutil: $ossutilExe"
 
           # 配置 ossutil
@@ -169,62 +163,103 @@ jobs:
           }
           Write-Host "✅ OSS 配置成功"
 
-          # 上传构建产物到 OSS
+          # 打印 release 目录下最终产物清单
+          Write-Host ""
+          Write-Host "========================================"
+          Write-Host "Release output files"
+          Write-Host "========================================"
+          Get-ChildItem -Path "release" -Recurse | Select-Object -ExpandProperty FullName | ForEach-Object { Write-Host $_ }
+
+          # 显式搜集待上传文件（严禁使用整目录递归上传）
+          Write-Host ""
+          Write-Host "========================================"
+          Write-Host "Selecting files for OSS upload"
+          Write-Host "========================================"
+
+          $exeFiles = Get-ChildItem -Path "release" -Recurse -File | Where-Object { $_.Extension -eq ".exe" }
+          $ymlFiles = Get-ChildItem -Path "release" -Recurse -File | Where-Object { $_.Name -eq "latest.yml" }
+          $blockmapFiles = Get-ChildItem -Path "release" -Recurse -File | Where-Object { $_.Extension -eq ".blockmap" }
+
+          # 检查必需文件
+          if (-not $exeFiles -or $exeFiles.Count -eq 0) {
+            throw "❌ 未找到 Windows 安装包 .exe，停止上传"
+          }
+          if (-not $ymlFiles -or $ymlFiles.Count -eq 0) {
+            throw "❌ 未找到 latest.yml，停止上传"
+          }
+
+          Write-Host ""
+          Write-Host "========================================"
+          Write-Host "Files selected for OSS upload"
+          Write-Host "========================================"
+          $exeFiles | ForEach-Object { Write-Host "EXE: $($_.FullName)" }
+          $ymlFiles | ForEach-Object { Write-Host "YML: $($_.FullName)" }
+          if ($blockmapFiles -and $blockmapFiles.Count -gt 0) {
+            $blockmapFiles | ForEach-Object { Write-Host "BLOCKMAP: $($_.FullName)" }
+          } else {
+            Write-Host "No blockmap files found, skip."
+          }
+
+          # 上传文件到 OSS
           $version = "${{ github.ref_name }}"
-          $localPath = "release\$version"
           $versionedPath = "oss://xiuer-live-tools-download/releases/$version/"
           $latestPath = "oss://xiuer-live-tools-download/releases/latest/"
-
-          # 检查本地路径
-          if (-not (Test-Path $localPath)) {
-            Write-Host ""
-            Write-Host "❌ 本地路径不存在: $localPath"
-            Write-Host "release 目录内容:"
-            if (Test-Path "release") {
-              Get-ChildItem -Path "release" -Recurse | Select-Object -ExpandProperty FullName
-            }
-            exit 1
-          }
 
           # 上传到版本目录
           Write-Host ""
           Write-Host "========================================"
           Write-Host "上传到版本目录: $versionedPath"
           Write-Host "========================================"
-          & $ossutilExe cp $localPath $versionedPath -r -f
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ 上传到版本目录失败"
-            exit 1
-          }
-          Write-Host "✅ 版本目录上传成功"
 
-          # 清空并更新 latest 目录
-          Write-Host ""
-          Write-Host "========================================"
-          Write-Host "更新 latest 目录"
-          Write-Host "========================================"
-          & $ossutilExe rm $latestPath -r -f
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "⚠️  清空 latest 目录警告（可能目录不存在）"
+          foreach ($file in $exeFiles) {
+            Write-Host "上传: $($file.Name)"
+            & $ossutilExe cp $file.FullName "$versionedPath$($file.Name)" -f
+            if ($LASTEXITCODE -ne 0) { throw "❌ 上传 $($file.Name) 失败" }
           }
 
-          & $ossutilExe cp $localPath $latestPath -r -f
-          if ($LASTEXITCODE -ne 0) {
-            Write-Host "❌ 上传到 latest 目录失败"
-            exit 1
+          foreach ($file in $ymlFiles) {
+            Write-Host "上传: $($file.Name)"
+            & $ossutilExe cp $file.FullName "$versionedPath$($file.Name)" -f
+            if ($LASTEXITCODE -ne 0) { throw "❌ 上传 $($file.Name) 失败" }
           }
-          Write-Host "✅ latest 目录更新成功"
 
-          # 上传 latest.yml 到根目录
-          $ymlPath = "$localPath\latest.yml"
-          if (Test-Path $ymlPath) {
-            & $ossutilExe cp $ymlPath "oss://xiuer-live-tools-download/releases/latest.yml" -f
-            if ($LASTEXITCODE -eq 0) {
-              Write-Host "✅ latest.yml 上传成功"
-            } else {
-              Write-Host "⚠️  latest.yml 上传失败"
+          if ($blockmapFiles -and $blockmapFiles.Count -gt 0) {
+            foreach ($file in $blockmapFiles) {
+              Write-Host "上传: $($file.Name)"
+              & $ossutilExe cp $file.FullName "$versionedPath$($file.Name)" -f
+              if ($LASTEXITCODE -ne 0) { throw "❌ 上传 $($file.Name) 失败" }
             }
           }
+
+          Write-Host "✅ 版本目录上传成功"
+
+          # 上传到 latest 目录
+          Write-Host ""
+          Write-Host "========================================"
+          Write-Host "上传到 latest 目录: $latestPath"
+          Write-Host "========================================"
+
+          foreach ($file in $exeFiles) {
+            Write-Host "上传: $($file.Name)"
+            & $ossutilExe cp $file.FullName "$latestPath$($file.Name)" -f
+            if ($LASTEXITCODE -ne 0) { throw "❌ 上传 $($file.Name) 到 latest 失败" }
+          }
+
+          foreach ($file in $ymlFiles) {
+            Write-Host "上传: $($file.Name)"
+            & $ossutilExe cp $file.FullName "$latestPath$($file.Name)" -f
+            if ($LASTEXITCODE -ne 0) { throw "❌ 上传 $($file.Name) 到 latest 失败" }
+          }
+
+          if ($blockmapFiles -and $blockmapFiles.Count -gt 0) {
+            foreach ($file in $blockmapFiles) {
+              Write-Host "上传: $($file.Name)"
+              & $ossutilExe cp $file.FullName "$latestPath$($file.Name)" -f
+              if ($LASTEXITCODE -ne 0) { throw "❌ 上传 $($file.Name) 到 latest 失败" }
+            }
+          }
+
+          Write-Host "✅ latest 目录上传成功"
 
           Write-Host ""
           Write-Host "========================================"
