@@ -33,7 +33,11 @@
     "analyze": "node scripts/analyze-build.js",
     "analyze:build": "npm run build && npm run analyze",
     "analyze:deps": "node scripts/optimize-deps.mjs",
-    "analyze:images": "node scripts/optimize-images.mjs"
+    "analyze:images": "node scripts/optimize-images.mjs",
+    "release:guard": "node scripts/release-guard.js",
+    "release:audit": "node scripts/release-audit.js",
+    "release:mac": "npm run release:guard && npm run dist:clean && npm run build && npx electron-builder --mac",
+    "release:win:ci": "echo 'Windows build runs on GitHub Actions. Please trigger via workflow_dispatch or push a tag.'"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
