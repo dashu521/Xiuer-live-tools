@@ -245,6 +245,103 @@ Windows 构建只能通过以下方式触发：
 - [ ] GitHub Release 已创建
 - [ ] 所有安装包已上传
 
+## 📝 自动生成 Release Notes
+
+### 功能说明
+
+项目提供自动生成 Release Notes 的功能，根据 Git 提交记录自动生成分类清晰的更新日志。
+
+### 执行命令
+
+```bash
+npm run release:notes
+```
+
+### 生成分类
+
+脚本会自动按以下前缀分组提交记录：
+
+| 前缀 | 分类 | 示例 |
+|------|------|------|
+| `feat:` | 新增功能 | `feat: 添加抖音小店支持` |
+| `fix:` | 问题修复 | `fix: 修复自动回复失效问题` |
+| `perf:` / `refactor:` | 优化调整 | `perf: 优化消息发送速度` |
+| `chore:` / `build:` / `ci:` | 构建与发布 | `chore: 更新依赖版本` |
+| `docs:` | 文档更新 | `docs: 更新使用说明` |
+| `test:` | 测试相关 | `test: 添加单元测试` |
+| `style:` | 代码格式 | `style: 格式化代码` |
+| 其他 | 其他改动 | - |
+
+### 生成文件位置
+
+生成的 Release Notes 文件保存在：
+```
+release-notes/vX.X.X.md
+```
+
+例如：`release-notes/v1.2.1.md`
+
+### 文件结构
+
+```markdown
+# 秀儿直播助手 v1.2.1
+
+## 📋 更新概览
+
+### 新增功能
+- 添加抖音小店支持 (`a1b2c3d`)
+- 实现自动弹窗功能 (`e4f5g6h`)
+
+### 问题修复
+- 修复自动回复失效问题 (`i7j8k9l`)
+
+### 构建与发布
+- 添加一键发布脚本 (`m0n1o2p`)
+
+...
+```
+
+### 用于 GitHub Release
+
+生成后可以通过以下方式使用：
+
+**方式 1：复制粘贴**
+```bash
+cat release-notes/v1.2.1.md
+# 复制内容到 GitHub Release 页面
+```
+
+**方式 2：命令行更新**
+```bash
+gh release edit v1.2.1 --notes-file release-notes/v1.2.1.md
+```
+
+**方式 3：创建 Release 时直接指定**
+```bash
+gh release create v1.2.1 --notes-file release-notes/v1.2.1.md
+```
+
+### 提交信息规范建议
+
+为了生成高质量的 Release Notes，建议遵循以下提交规范：
+
+```
+<type>(<scope>): <subject>
+
+<body>
+```
+
+**示例：**
+```bash
+git commit -m "feat(douyin): 添加抖音小店自动回复功能"
+git commit -m "fix(ai): 修复 DeepSeek API 调用超时问题"
+git commit -m "chore(release): 添加一键发布脚本"
+```
+
+### 首发版本特殊处理
+
+如果是首发版本（没有历史 tag），脚本会自动生成包含核心功能介绍的完整首发说明。
+
 ## 🆘 获取帮助
 
 如遇问题：
