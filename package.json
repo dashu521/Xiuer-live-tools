@@ -16,7 +16,7 @@
   "scripts": {
     "dev": "cross-env USE_REAL_AUTH=true vite",
     "dev:force": "node -e \"require('fs').rmSync('dist-electron',{recursive:true,force:true})\" && vite",
-    "build": "node scripts/generate-build-config.js && tsc && vite build && node scripts/copy-runtime-files.js",
+    "build": "tsc && vite build && node scripts/copy-runtime-files.js && node scripts/generate-build-config.js",
     "preview": "vite preview",
     "test": "vitest run",
     "prepare": "husky",
