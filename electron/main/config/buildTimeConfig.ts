@@ -37,6 +37,21 @@ export function getBuildTimeConfig(): BuildTimeConfig {
 
     if (app?.isPackaged && process.resourcesPath) {
       configPath = path.join(process.resourcesPath, 'app.asar', 'dist-electron', 'build-config.json')
+      try {
+        const asar = require('@electron/asar')
+        const asarPath = path.join(process.resourcesPath, 'app.asar')
+        if (fs.existsSync(asarPath)) {
+          const content = asar.extractFile(asarPath, 'dist-electron/build-config.json')
+          if (content) {
+            const config = JSON.parse(content.toString()) as BuildTimeConfig
+            cachedConfig = config
+            console.log('[buildTimeConfig] Loaded from asar:', config.authApiBaseUrl)
+            return config
+          }
+        }
+      } catch {
+        // asar 模块不可用，尝试直接读取
+      }
       if (!fs.existsSync(configPath)) {
         configPath = path.join(process.resourcesPath, 'build-config.json')
       }
