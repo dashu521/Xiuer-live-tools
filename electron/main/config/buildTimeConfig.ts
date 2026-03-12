@@ -16,8 +16,12 @@ export function getBuildTimeConfig(): BuildTimeConfig {
   }
 
   if (typeof process === 'undefined') {
+    console.warn('[buildTimeConfig] process is undefined, using default')
     return defaultConfig
   }
+
+  console.log('[buildTimeConfig] app.isPackaged:', app?.isPackaged)
+  console.log('[buildTimeConfig] process.resourcesPath:', process.resourcesPath)
 
   const authApiBaseUrl =
     process.env.AUTH_API_BASE_URL ??
@@ -29,50 +33,69 @@ export function getBuildTimeConfig(): BuildTimeConfig {
     return cachedConfig
   }
 
-  try {
-    const fs = require('fs') as typeof import('fs')
-    const path = require('path') as typeof import('path')
-    
-    let configPath: string | null = null
+  const fs = require('fs') as typeof import('fs')
+  const path = require('path') as typeof import('path')
 
-    if (app?.isPackaged && process.resourcesPath) {
-      configPath = path.join(process.resourcesPath, 'app.asar', 'dist-electron', 'build-config.json')
-      try {
-        const asar = require('@electron/asar')
-        const asarPath = path.join(process.resourcesPath, 'app.asar')
-        if (fs.existsSync(asarPath)) {
-          const content = asar.extractFile(asarPath, 'dist-electron/build-config.json')
-          if (content) {
-            const config = JSON.parse(content.toString()) as BuildTimeConfig
-            cachedConfig = config
-            console.log('[buildTimeConfig] Loaded from asar:', config.authApiBaseUrl)
-            return config
-          }
-        }
-      } catch {
-        // asar 模块不可用，尝试直接读取
+  if (app?.isPackaged && process.resourcesPath) {
+    const asarPath = path.join(process.resourcesPath, 'app.asar')
+    const asarInternalPath = 'dist-electron/build-config.json'
+    
+    console.log('[buildTimeConfig] asarPath:', asarPath)
+    console.log('[buildTimeConfig] asarInternalPath:', asarInternalPath)
+
+    try {
+      const asar = require('@electron/asar')
+      console.log('[buildTimeConfig] @electron/asar module loaded')
+      
+      const content = asar.extractFile(asarPath, asarInternalPath)
+      if (content) {
+        const config = JSON.parse(content.toString()) as BuildTimeConfig
+        cachedConfig = config
+        console.log('[buildTimeConfig] Loaded from asar via @electron/asar:', config.authApiBaseUrl)
+        return config
       }
-      if (!fs.existsSync(configPath)) {
-        configPath = path.join(process.resourcesPath, 'build-config.json')
-      }
-    } else {
-      configPath = path.join(process.cwd(), 'dist-electron', 'build-config.json')
+    } catch (err) {
+      console.warn('[buildTimeConfig] @electron/asar extractFile failed:', err)
     }
 
-    if (configPath && fs.existsSync(configPath)) {
-      const content = fs.readFileSync(configPath, 'utf-8')
+    try {
+      const directPath = path.join(asarPath, asarInternalPath)
+      console.log('[buildTimeConfig] Trying direct read:', directPath)
+      const content = fs.readFileSync(directPath, 'utf-8')
       const config = JSON.parse(content) as BuildTimeConfig
       cachedConfig = config
-      console.log('[buildTimeConfig] Loaded from:', configPath, '=>', config.authApiBaseUrl)
+      console.log('[buildTimeConfig] Loaded via direct fs.readFileSync:', config.authApiBaseUrl)
       return config
-    } else {
-      console.warn('[buildTimeConfig] Config file not found at:', configPath)
+    } catch (err) {
+      console.warn('[buildTimeConfig] Direct fs.readFileSync failed:', err)
     }
-  } catch (err) {
-    console.warn('[buildTimeConfig] Failed to load build-config.json:', err)
+
+    const externalPath = path.join(process.resourcesPath, 'build-config.json')
+    console.log('[buildTimeConfig] Trying external path:', externalPath)
+    try {
+      const content = fs.readFileSync(externalPath, 'utf-8')
+      const config = JSON.parse(content) as BuildTimeConfig
+      cachedConfig = config
+      console.log('[buildTimeConfig] Loaded from external path:', config.authApiBaseUrl)
+      return config
+    } catch (err) {
+      console.warn('[buildTimeConfig] External path read failed:', err)
+    }
+  } else {
+    const devPath = path.join(process.cwd(), 'dist-electron', 'build-config.json')
+    console.log('[buildTimeConfig] Development mode, trying:', devPath)
+    try {
+      const content = fs.readFileSync(devPath, 'utf-8')
+      const config = JSON.parse(content) as BuildTimeConfig
+      cachedConfig = config
+      console.log('[buildTimeConfig] Loaded from development path:', config.authApiBaseUrl)
+      return config
+    } catch (err) {
+      console.warn('[buildTimeConfig] Development path read failed:', err)
+    }
   }
 
-  console.warn('[buildTimeConfig] Using default config:', defaultConfig.authApiBaseUrl)
+  console.warn('[buildTimeConfig] All attempts failed, using default:', defaultConfig.authApiBaseUrl)
   return defaultConfig
 }
 
@@ -85,5 +108,6 @@ export function getAuthApiBaseUrl(): string {
     console.warn('[buildTimeConfig] 认证 API 应在 8000 端口，已自动将 8080 纠正为 8000')
   }
   
+  console.log('[buildTimeConfig] getAuthApiBaseUrl returning:', url)
   return url
 }

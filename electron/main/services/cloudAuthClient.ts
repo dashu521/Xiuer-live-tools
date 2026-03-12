@@ -11,7 +11,9 @@ import type {
 import { getAuthApiBaseUrl } from '../config/buildTimeConfig'
 
 const getBaseUrl = (): string => {
-  return getAuthApiBaseUrl()
+  const url = getAuthApiBaseUrl()
+  console.log('[cloudAuthClient] getBaseUrl() returning:', url)
+  return url
 }
 
 /** 登录/注册接口路径（服务端无 /auth 前缀）：base + 本路径 = 如 http://121.41.179.197:8000/login */
@@ -255,9 +257,20 @@ export async function cloudLogin(
   status?: number
   responseDetail?: string
 }> {
+  const base = getBaseUrl()
+  const loginUrl = `${base}${AUTH_ENDPOINTS.login}`
+  console.log('[cloudAuthClient] cloudLogin called')
+  console.log('[cloudAuthClient] identifier:', identifier)
+  console.log('[cloudAuthClient] final login URL:', loginUrl)
+  
   const { data, status, error, requestUrl, responseDetail } = await request<
     LoginBackendResponse & Partial<CloudAuthResponse>
   >('POST', AUTH_ENDPOINTS.login, { body: { username: identifier, password } })
+  
+  console.log('[cloudAuthClient] login response status:', status)
+  console.log('[cloudAuthClient] login response error:', error?.message)
+  console.log('[cloudAuthClient] login responseDetail:', responseDetail)
+  
   if (error) {
     // 保留完整的错误信息，以便上层判断错误类型
     const errorMessage = error?.message ?? responseDetail ?? '登录失败'
