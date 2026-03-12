@@ -109,7 +109,7 @@ export const MAIN_DIST = app.isPackaged
   : path.join(process.env.APP_ROOT, 'dist-electron')
 
 export const RENDERER_DIST = app.isPackaged
-  ? path.join(process.resourcesPath, 'app.asar.unpacked', 'dist')
+  ? path.join(process.resourcesPath, 'app.asar', 'dist')
   : path.join(process.env.APP_ROOT, 'dist')
 
 export const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
@@ -117,7 +117,7 @@ export const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
   ? path.join(process.env.APP_ROOT, 'public')
   : app.isPackaged
-    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'public')
+    ? path.join(process.resourcesPath, 'app.asar', 'public')
     : path.join(process.env.APP_ROOT, 'public')
 
 // 仅在开发模式下启用远程调试端口
