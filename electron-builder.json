@@ -112,7 +112,7 @@
         "arch": ["x64", "arm64"]
       }
     ],
-    "icon": "public/icon.png",
+    "icon": "public/icon.icns",
     "hardenedRuntime": true,
     "gatekeeperAssess": false,
     "entitlements": "electron/entitlements.mac.plist",
@@ -124,7 +124,7 @@
       { "target": "nsis", "arch": ["x64"] },
       { "target": "zip", "arch": ["x64"] }
     ],
-    "icon": "public/icon.png",
+    "icon": "public/icon-win.ico",
     "artifactName": "Xiuer-Live-Assistant_${version}_win-x64.${ext}",
     "signAndEditExecutable": true,
     "publisherName": "秀儿直播助手",
