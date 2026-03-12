@@ -637,123 +637,136 @@ export const useAuthStore = create<AuthStore>()(
       checkAuth: async () => {
         set({ isLoading: true, authCheckDone: false })
 
-        // [SECURITY] 优先从主进程安全存储获取 token
-        let mainToken: string | null = null
-        let mainRefreshToken: string | null = null
-        if (
-          typeof window !== 'undefined' &&
-          (
-            window as {
-              authAPI?: {
-                getTokens?: () => Promise<{ token: string | null; refreshToken: string | null }>
-              }
-            }
-          ).authAPI?.getTokens
-        ) {
-          try {
-            const tokens = await (
+        try {
+          // [SECURITY] 优先从主进程安全存储获取 token
+          let mainToken: string | null = null
+          let mainRefreshToken: string | null = null
+          if (
+            typeof window !== 'undefined' &&
+            (
               window as {
-                authAPI: {
-                  getTokens: () => Promise<{ token: string | null; refreshToken: string | null }>
+                authAPI?: {
+                  getTokens?: () => Promise<{ token: string | null; refreshToken: string | null }>
                 }
               }
-            ).authAPI.getTokens()
-            mainToken = tokens.token
-            mainRefreshToken = tokens.refreshToken
-            // 同步到内存
-            if (mainToken) {
-              set({ token: mainToken, refreshToken: mainRefreshToken })
+            ).authAPI?.getTokens
+          ) {
+            try {
+              const tokens = await (
+                window as {
+                  authAPI: {
+                    getTokens: () => Promise<{ token: string | null; refreshToken: string | null }>
+                  }
+                }
+              ).authAPI.getTokens()
+              mainToken = tokens.token
+              mainRefreshToken = tokens.refreshToken
+              // 同步到内存
+              if (mainToken) {
+                set({ token: mainToken, refreshToken: mainRefreshToken })
+              }
+            } catch (err) {
+              console.error('[AuthStore] Failed to get tokens from main process:', err)
             }
-          } catch (err) {
-            console.error('[AuthStore] Failed to get tokens from main process:', err)
           }
-        }
 
-        const { token, refreshToken } = get()
-        const effectiveToken = mainToken ?? token
-        const effectiveRefreshToken = mainRefreshToken ?? refreshToken
+          const { token, refreshToken } = get()
+          const effectiveToken = mainToken ?? token
+          const effectiveRefreshToken = mainRefreshToken ?? refreshToken
 
-        if (!effectiveToken && !effectiveRefreshToken) {
+          if (!effectiveToken && !effectiveRefreshToken) {
+            set({
+              isAuthenticated: false,
+              user: null,
+              isLoading: false,
+              authCheckDone: true,
+              isOffline: false,
+            })
+            return
+          }
+
+          const result = await getMe()
+
+          if (result.ok && result.data?.username != null) {
+            const userId = result.data.username
+            set({
+              isAuthenticated: true,
+              user: get().user ?? safeUserFromUsername(userId),
+              isLoading: false,
+              authCheckDone: true,
+              isOffline: false,
+              error: null,
+            })
+
+            // 【修复】启动时加载用户所有数据
+            console.log('[AuthStore] 启动鉴权成功，加载用户数据:', userId)
+            useAccounts.getState().loadUserAccounts(userId)
+            usePlatformPreferenceStore.getState().loadUserPreferences(userId)
+            useAutoReplyConfigStore.getState().loadUserContexts(userId)
+            useAutoMessageStore.getState().loadUserContexts(userId)
+            useAutoPopUpStore.getState().loadUserContexts(userId)
+            useChromeConfigStore.getState().loadUserConfigs(userId)
+            useLiveControlStore.getState().loadUserContexts(userId)
+            useSubAccountStore.getState().loadUserContexts(userId)
+
+            // 获取并同步用户状态
+            getUserStatus()
+              .then(status => {
+                if (status) {
+                  get().setUserStatus(status)
+                  // 同步更新 user.plan - 使用 getEffectivePlan 确保正式套餐优先于试用
+                  const currentUser = get().user
+                  if (currentUser && status.plan) {
+                    const effectivePlan = getEffectivePlan(status.plan, status.trial)
+                    // 如果 username 是手机号格式，更新 phone 和 username 显示
+                    const isPhone = /^1[3-9]\d{9}$/.test(status.username)
+                    set({
+                      user: {
+                        ...currentUser,
+                        plan: effectivePlan,
+                        expire_at: status.expire_at ?? null,
+                        // 如果 username 是手机号，同时更新 phone 和 username 显示
+                        ...(isPhone && {
+                          phone: status.username,
+                          username: status.username,
+                        }),
+                      },
+                    })
+                  }
+                  console.log('[USER-STATUS]', status)
+                }
+              })
+              .catch(error => {
+                console.error('[AuthStore] Failed to fetch user status:', error)
+              })
+            return
+          }
+
+          if (result.status === 401) {
+            get().clearTokensAndUnauth()
+            set({ isLoading: false, authCheckDone: true })
+            return
+          }
+
+          // 断网/超时/5xx：不踢回登录页，保持已登录但离线
+          set({
+            isAuthenticated: true,
+            isLoading: false,
+            authCheckDone: true,
+            isOffline: true,
+          })
+        } catch (error) {
+          // 【修复】捕获所有异常，确保 authCheckDone 被设置为 true，避免页面一直卡在加载中
+          console.error('[AuthStore] checkAuth failed:', error)
           set({
             isAuthenticated: false,
             user: null,
             isLoading: false,
             authCheckDone: true,
             isOffline: false,
+            error: error instanceof Error ? error.message : '认证检查失败',
           })
-          return
         }
-
-        const result = await getMe()
-
-        if (result.ok && result.data?.username != null) {
-          const userId = result.data.username
-          set({
-            isAuthenticated: true,
-            user: get().user ?? safeUserFromUsername(userId),
-            isLoading: false,
-            authCheckDone: true,
-            isOffline: false,
-            error: null,
-          })
-
-          // 【修复】启动时加载用户所有数据
-          console.log('[AuthStore] 启动鉴权成功，加载用户数据:', userId)
-          useAccounts.getState().loadUserAccounts(userId)
-          usePlatformPreferenceStore.getState().loadUserPreferences(userId)
-          useAutoReplyConfigStore.getState().loadUserContexts(userId)
-          useAutoMessageStore.getState().loadUserContexts(userId)
-          useAutoPopUpStore.getState().loadUserContexts(userId)
-          useChromeConfigStore.getState().loadUserConfigs(userId)
-          useLiveControlStore.getState().loadUserContexts(userId)
-          useSubAccountStore.getState().loadUserContexts(userId)
-
-          // 获取并同步用户状态
-          getUserStatus()
-            .then(status => {
-              if (status) {
-                get().setUserStatus(status)
-                // 同步更新 user.plan - 使用 getEffectivePlan 确保正式套餐优先于试用
-                const currentUser = get().user
-                if (currentUser && status.plan) {
-                  const effectivePlan = getEffectivePlan(status.plan, status.trial)
-                  // 如果 username 是手机号格式，更新 phone 和 username 显示
-                  const isPhone = /^1[3-9]\d{9}$/.test(status.username)
-                  set({
-                    user: {
-                      ...currentUser,
-                      plan: effectivePlan,
-                      expire_at: status.expire_at ?? null,
-                      // 如果 username 是手机号，同时更新 phone 和 username 显示
-                      ...(isPhone && {
-                        phone: status.username,
-                        username: status.username,
-                      }),
-                    },
-                  })
-                }
-                console.log('[USER-STATUS]', status)
-              }
-            })
-            .catch(error => {
-              console.error('[AuthStore] Failed to fetch user status:', error)
-            })
-          return
-        }
-
-        if (result.status === 401) {
-          get().clearTokensAndUnauth()
-          set({ isLoading: false, authCheckDone: true })
-          return
-        }
-
-        // 断网/超时/5xx：不踢回登录页，保持已登录但离线
-        set({
-          isAuthenticated: true,
-          isLoading: false,
-          authCheckDone: true,
-          isOffline: true,
-        })
       },
 
       // Set user

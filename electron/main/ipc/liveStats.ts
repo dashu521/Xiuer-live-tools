@@ -162,15 +162,36 @@ function buildUserBehaviorRows(events: LiveStatsExportData['events']): UserBehav
   }))
 }
 
+// 安全的文件名清理函数
+function sanitizeFilename(name: string): string {
+  // 替换 Windows 非法字符和路径遍历
+  return name
+    .replace(/[<>"/\\|?*]/g, '_')  // Windows 非法字符
+    .replace(/\.{2,}/g, '_')        // 路径遍历 ..
+    .replace(/^\.+/, '_')           // 隐藏文件 .
+}
+
+// 验证文件路径是否在目标目录内
+function validateFilePath(filePath: string, baseDir: string): void {
+  const resolvedFilePath = path.resolve(filePath)
+  const resolvedBaseDir = path.resolve(baseDir)
+  if (!resolvedFilePath.startsWith(resolvedBaseDir + path.sep)) {
+    throw new Error('Invalid file path: path traversal detected')
+  }
+}
+
 // 导出数据到 Excel
 async function exportToExcel(data: LiveStatsExportData): Promise<string> {
   const { Workbook } = await import('exceljs')
 
   const exportFolder = getExportFolder()
   const dateTimeStr = formatDateTime(data.endTime)
-  const safeAccountName = (data.accountName || '未知账号').replace(/[<>:"/\\|?*]/g, '_')
+  const safeAccountName = sanitizeFilename(data.accountName || '未知账号')
   const fileName = `直播数据_${safeAccountName}_${dateTimeStr}.xlsx`
   const filePath = path.join(exportFolder, fileName)
+
+  // 验证文件路径，防止目录遍历攻击
+  validateFilePath(filePath, exportFolder)
 
   const allRows = buildUserBehaviorRows(data.events)
   const cols = [18, 20, 10, 40, 12, 10, 10, 20, 20]

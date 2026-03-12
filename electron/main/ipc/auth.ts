@@ -241,39 +241,86 @@ export function setupAuthHandlers() {
     return { success: false, error: '功能开发中' }
   })
 
-  // Token 管理接口（安全存储在主进程）
-  ipcMain.handle('auth:getTokens', async () => {
-    console.log('[Auth IPC] Getting tokens from storage')
+  // [SECURITY-FIX] Token 管理接口已收紧
+  // renderer 不再直接获取/设置完整 token，仅通过最小必要接口操作
+
+  /**
+   * [SECURITY] 获取认证状态摘要（最小必要信息）
+   * 替代 auth:getTokens，不返回完整 token
+   */
+  ipcMain.handle('auth:getAuthSummary', async () => {
     const tokens = await getStoredTokens()
-    console.log('[Auth IPC] Tokens retrieved:', {
-      hasAccessToken: !!tokens.access_token,
-      hasRefreshToken: !!tokens.refresh_token,
-    })
+    // 不返回 token 内容，只返回是否存在
     return {
-      token: tokens.access_token,
-      refreshToken: tokens.refresh_token,
+      isAuthenticated: !!tokens.access_token,
+      hasToken: !!tokens.access_token,
     }
   })
 
+  /**
+   * [SECURITY] 内部使用：主进程代发带鉴权请求
+   * renderer 提供请求配置，main 负责附加 token 并执行
+   * 这是替代直接暴露 token 的安全方案
+   */
   ipcMain.handle(
-    'auth:setTokens',
-    async (_, tokens: { token: string | null; refreshToken: string | null }) => {
-      console.log('[Auth IPC] Setting tokens:', {
-        hasAccessToken: !!tokens.token,
-        hasRefreshToken: !!tokens.refreshToken,
-      })
+    'auth:proxyRequest',
+    async (_, requestConfig: { endpoint: string; method?: string; body?: object }) => {
+      const tokens = await getStoredTokens()
+      if (!tokens.access_token) {
+        return { success: false, error: 'Not authenticated' }
+      }
+
+      const base = getEffectiveBase()
+      const url = `${base}${requestConfig.endpoint}`
+
       try {
-        setStoredTokens({
-          access_token: tokens.token,
-          refresh_token: tokens.refreshToken,
+        const res = await fetch(url, {
+          method: requestConfig.method || 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${tokens.access_token}`,
+          },
+          body: requestConfig.body ? JSON.stringify(requestConfig.body) : undefined,
         })
-        console.log('[Auth IPC] Tokens saved successfully')
+
+        const text = await res.text()
+        let json = null
+        try {
+          json = text ? JSON.parse(text) : null
+        } catch {
+          // ignore
+        }
+
+        return {
+          success: res.ok,
+          status: res.status,
+          data: json,
+          error: res.ok ? undefined : text || res.statusText,
+        }
       } catch (err) {
-        console.error('[Auth IPC] Failed to set tokens:', err)
-        throw err
+        return {
+          success: false,
+          error: err instanceof Error ? err.message : String(err),
+        }
       }
     },
   )
+
+  /**
+   * [DEPRECATED-SECURITY] auth:getTokens 已移除
+   * 原因：直接暴露完整 token 给 renderer 违反最小权限原则
+   * 迁移方案：
+   * - 如需检查登录状态：使用 auth:getAuthSummary
+   * - 如需发起鉴权请求：使用 auth:proxyRequest（由 main 代发）
+   */
+  // ipcMain.handle('auth:getTokens', ... ) // REMOVED for security
+
+  /**
+   * [DEPRECATED-SECURITY] auth:setTokens 已收紧
+   * 仅允许内部使用，renderer 不应直接设置 token
+   * 登录/注册流程由 main 进程内部完成 token 存储
+   */
+  // ipcMain.handle('auth:setTokens', ... ) // REMOVED - 登录流程内部处理
 
   ipcMain.handle('auth:clearTokens', async () => {
     await clearStoredTokens()

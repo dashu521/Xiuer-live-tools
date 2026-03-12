@@ -1,11 +1,23 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { User } from '../../src/types/auth'
 
+/**
+ * [SECURITY-FIX] AuthTokens 接口已标记为内部使用
+ * renderer 不应直接处理完整 token
+ */
 export interface AuthTokens {
+  /** @deprecated Token 不应直接暴露给 renderer，使用 proxyRequest 代替 */
   token: string | null
+  /** @deprecated RefreshToken 不应直接暴露给 renderer */
   refreshToken: string | null
 }
 
+/**
+ * [SECURITY-FIX] 认证 API 已收紧
+ * - 移除 getTokens/setTokens 的直接暴露
+ * - 新增 getAuthSummary 获取最小必要信息
+ * - 新增 proxyRequest 由 main 代发鉴权请求
+ */
 export const authAPI = {
   // Authentication
   register: async (data: {
@@ -43,13 +55,54 @@ export const authAPI = {
     return await ipcRenderer.invoke('auth:restoreSession')
   },
 
-  // Token 管理（安全存储在主进程）
-  getTokens: async (): Promise<AuthTokens> => {
-    return await ipcRenderer.invoke('auth:getTokens')
+  // [SECURITY-FIX] Token 管理接口已收紧
+  // renderer 不再直接获取/设置完整 token
+
+  /**
+   * [SECURITY] 获取认证状态摘要（最小必要信息）
+   * 替代 getTokens，不返回完整 token 内容
+   */
+  getAuthSummary: async (): Promise<{ isAuthenticated: boolean; hasToken: boolean }> => {
+    return await ipcRenderer.invoke('auth:getAuthSummary')
   },
 
-  setTokens: async (tokens: AuthTokens): Promise<void> => {
-    return await ipcRenderer.invoke('auth:setTokens', tokens)
+  /**
+   * [SECURITY] 主进程代发带鉴权请求
+   * renderer 提供请求配置，main 负责附加 token 并执行
+   * 这是替代直接暴露 token 的安全方案
+   */
+  proxyRequest: async (requestConfig: {
+    endpoint: string
+    method?: string
+    body?: object
+  }): Promise<{ success: boolean; status?: number; data?: unknown; error?: string }> => {
+    return await ipcRenderer.invoke('auth:proxyRequest', requestConfig)
+  },
+
+  /**
+   * [DEPRECATED-SECURITY] getTokens 已移除
+   * 原因：直接暴露完整 token 违反最小权限原则
+   * 迁移方案：
+   * - 检查登录状态：使用 getAuthSummary()
+   * - 发起鉴权请求：使用 proxyRequest()
+   */
+  getTokens: async (): Promise<AuthTokens> => {
+    console.warn('[SECURITY] authAPI.getTokens() is deprecated and will return nulls. Use getAuthSummary() or proxyRequest() instead.')
+    return { token: null, refreshToken: null }
+  },
+
+  /**
+   * [DEPRECATED-SECURITY] setTokens 已移除
+   * 原因：renderer 不应直接设置 token
+   * 登录/注册流程内部处理 token 存储
+   */
+  setTokens: async (_tokens: AuthTokens): Promise<void> => {
+    console.warn('[SECURITY] authAPI.setTokens() is deprecated and has no effect. Token storage is handled internally.')
+    // No-op: token storage is handled internally during login/register
+  },
+
+  clearTokens: async (): Promise<void> => {
+    return await ipcRenderer.invoke('auth:clearTokens')
   },
 
   clearTokens: async (): Promise<void> => {

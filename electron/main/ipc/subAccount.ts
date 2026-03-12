@@ -13,6 +13,18 @@ import {
 } from '#/utils'
 import windowManager from '#/windowManager'
 
+// 导入验证库（使用已存在的 zod）
+import { z } from 'zod'
+
+// 子账号导入数据验证 Schema
+const ImportAccountSchema = z.object({
+  id: z.string().min(1).max(100),
+  name: z.string().min(1).max(100),
+  platform: z.enum(['douyin', 'kuaishou', 'taobao', 'xiaohongshu']),
+})
+
+const ImportAccountsArraySchema = z.array(ImportAccountSchema)
+
 const TASK_NAME = '小号互动'
 
 // 为每个账号维护独立的批量发送控制器
@@ -336,11 +348,9 @@ function setupIpcHandlers() {
     IPC_CHANNELS.tasks.subAccount.importAccounts,
     async (_, _accountId, jsonData) => {
       try {
-        const accounts = JSON.parse(jsonData) as Array<{
-          id: string
-          name: string
-          platform: LiveControlPlatform
-        }>
+        // 解析并验证输入数据
+        const parsed = JSON.parse(jsonData)
+        const accounts = ImportAccountsArraySchema.parse(parsed)
 
         let added = 0
         for (const acc of accounts) {
@@ -354,6 +364,9 @@ function setupIpcHandlers() {
 
         return { success: true, added }
       } catch (error) {
+        if (error instanceof z.ZodError) {
+          return { success: false, error: `数据格式错误: ${error.errors.map(e => e.message).join(', ')}` }
+        }
         return { success: false, error: String(error) }
       }
     },

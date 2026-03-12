@@ -235,6 +235,18 @@ export default defineConfig(({ command }) => {
       host: '127.0.0.1',
       port: 5173,
       strictPort: true,
+      // 忽略监视特定文件，防止不必要的页面重载
+      watch: {
+        ignored: [
+          '**/*.md',
+          '**/FINAL_SECURITY_RELEASE_AUDIT.md',
+          '**/.git/**',
+          '**/node_modules/**',
+          '**/dist/**',
+          '**/dist-electron/**',
+          '**/release/**',
+        ],
+      },
     },
     clearScreen: false,
   }

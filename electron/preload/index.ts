@@ -7,11 +7,59 @@ type IpcRendererInvokeReturnType<Channel extends keyof IpcChannels> =
     ? ReturnType<IpcChannels[Channel]>
     : Promise<ReturnType<IpcChannels[Channel]>>
 
+// IPC 通道白名单 - 只允许这些通道被 renderer 调用
+const ALLOWED_IPC_CHANNELS = new Set([
+  // App 相关
+  'app:version',
+  'app:platform',
+  'app:openExternal',
+  // Auth 相关
+  'auth:login',
+  'auth:register',
+  'auth:logout',
+  'auth:getAuthStatus',
+  'auth:restoreSession',
+  'auth:getCurrentUser',
+  'auth:validateToken',
+  'auth:checkFeatureAccess',
+  'auth:requiresAuthentication',
+  'auth:setTokens',
+  'auth:clearTokens',
+  // 任务相关
+  'tasks:liveControl:connect',
+  'tasks:liveControl:disconnect',
+  'tasks:commentListener:configure',
+  'tasks:autoMessage:configure',
+  'tasks:subAccount:importAccounts',
+  'tasks:subAccount:exportAccounts',
+  // 窗口相关
+  'window:minimize',
+  'window:maximize',
+  'window:close',
+  // 更新相关
+  'updater:check',
+  'updater:download',
+  'updater:install',
+  // 其他
+  'liveStats:exportData',
+  'chrome:selectPath',
+])
+
+function isChannelAllowed(channel: string): boolean {
+  return ALLOWED_IPC_CHANNELS.has(channel)
+}
+
 const ipcRendererApi: ElectronAPI['ipcRenderer'] = {
   on<Channel extends keyof IpcChannels>(
     channel: Channel,
     listener: (...args: Parameters<IpcChannels[Channel]>) => void,
   ): () => void {
+    // 只允许白名单内的通道
+    if (!isChannelAllowed(channel as string)) {
+      console.warn(`[Preload] Channel ${channel} is not allowed for on()`)
+      return () => {}
+    }
+
     const subscription = (_event: IpcRendererEvent, ...args: Parameters<IpcChannels[Channel]>) =>
       listener(...args)
 
@@ -25,6 +73,11 @@ const ipcRendererApi: ElectronAPI['ipcRenderer'] = {
     channel: Channel,
     ...args: Parameters<IpcChannels[Channel]>
   ): void => {
+    // 只允许白名单内的通道
+    if (!isChannelAllowed(channel as string)) {
+      console.warn(`[Preload] Channel ${channel} is not allowed for send()`)
+      return
+    }
     ipcRenderer.send(channel as string, ...args)
   },
 
@@ -32,6 +85,11 @@ const ipcRendererApi: ElectronAPI['ipcRenderer'] = {
     channel: Channel,
     ...args: Parameters<IpcChannels[Channel]>
   ): IpcRendererInvokeReturnType<Channel> => {
+    // 只允许白名单内的通道
+    if (!isChannelAllowed(channel as string)) {
+      console.warn(`[Preload] Channel ${channel} is not allowed for invoke()`)
+      return Promise.reject(new Error(`Channel ${channel} is not allowed`)) as IpcRendererInvokeReturnType<Channel>
+    }
     return ipcRenderer.invoke(channel as string, ...args) as IpcRendererInvokeReturnType<Channel>
   },
 }

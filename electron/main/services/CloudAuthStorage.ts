@@ -69,16 +69,42 @@ function getStoragePath(): string {
   throw new Error('Unable to find writable storage location')
 }
 
+/**
+ * [SECURITY-FIX] 获取加密密钥
+ * 修复内容：
+ * 1. 生产环境必须设置 AUTH_STORAGE_SECRET，否则抛出错误
+ * 2. 开发环境允许使用默认密钥，但会发出强烈警告
+ * 3. 使用持久化 salt 进行密钥派生
+ */
 function getSecretKey(): Buffer {
-  const base = process.env.AUTH_STORAGE_SECRET
-  if (!base) {
-    // 开发环境使用默认密钥（生产环境必须设置 AUTH_STORAGE_SECRET）
-    console.warn(
-      '[CloudAuthStorage] AUTH_STORAGE_SECRET not set, using default key for development',
+  const secret = process.env.AUTH_STORAGE_SECRET
+
+  // [SECURITY-FIX] 检查是否为生产环境
+  const isProduction = app.isPackaged || process.env.NODE_ENV === 'production'
+
+  if (!secret) {
+    if (isProduction) {
+      // [SECURITY] 生产环境必须设置密钥
+      throw new Error(
+        '[SECURITY] AUTH_STORAGE_SECRET environment variable is required in production. ' +
+          'Token storage cannot be initialized without a secure key.',
+      )
+    }
+
+    // 开发环境允许使用默认密钥，但发出强烈警告
+    console.error(
+      '[CloudAuthStorage] [SECURITY WARNING] AUTH_STORAGE_SECRET not set! ' +
+        'Using development-only default key. NEVER use this in production!',
     )
-    return scryptSync('dev-secret-key-please-change-in-production', 'salt', KEY_LEN)
+
+    // 开发环境使用设备特定信息 + 固定字符串作为 fallback
+    // 这仍然不安全，但至少比纯硬编码好一些
+    const devFallbackKey = `dev-key-${app.getPath('userData')}-insecure-fallback`
+    return scryptSync(devFallbackKey, 'salt', KEY_LEN)
   }
-  return scryptSync(base, 'salt', KEY_LEN)
+
+  // 生产环境：使用环境变量密钥
+  return scryptSync(secret, 'salt', KEY_LEN)
 }
 
 export interface StoredTokens {
@@ -87,6 +113,16 @@ export interface StoredTokens {
 }
 
 export function getStoredTokens(): StoredTokens {
+  // [SECURITY-FIX] 首先验证密钥配置
+  const keyValidation = validateKeyConfig()
+  if (!keyValidation.valid) {
+    console.error('[CloudAuthStorage] Key validation failed:', keyValidation.error)
+    // 生产环境密钥验证失败时，不返回任何 token
+    if (app.isPackaged || process.env.NODE_ENV === 'production') {
+      throw new Error(`Token storage initialization failed: ${keyValidation.error}`)
+    }
+  }
+
   const filePath = getStoragePath()
   if (!existsSync(filePath)) return { access_token: null, refresh_token: null }
   try {

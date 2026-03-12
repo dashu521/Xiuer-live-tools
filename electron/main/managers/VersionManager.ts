@@ -120,7 +120,9 @@ class VersionManager {
       baseUrl = `https://${sourceUrl}`
     }
 
-    const ymlUrl = new URL(ymlFile, baseUrl).href
+    // 添加缓存破坏参数，防止 CDN 缓存导致版本不一致
+    const cacheBuster = `_${Date.now()}`
+    const ymlUrl = new URL(`${ymlFile}?_t=${cacheBuster}`, baseUrl).href
     logger.debug(`Fetching version info from: ${ymlUrl}`)
 
     const response = await this.fetchWithRetry(ymlUrl)
