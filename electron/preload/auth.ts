@@ -105,10 +105,6 @@ export const authAPI = {
     return await ipcRenderer.invoke('auth:clearTokens')
   },
 
-  clearTokens: async (): Promise<void> => {
-    return await ipcRenderer.invoke('auth:clearTokens')
-  },
-
   // Feature access
   checkFeatureAccess: (token: string, feature: string) =>
     ipcRenderer.invoke('auth:checkFeatureAccess', token, feature),

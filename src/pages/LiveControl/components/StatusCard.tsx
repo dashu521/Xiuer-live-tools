@@ -414,13 +414,17 @@ const ConnectToLiveControl = React.memo(() => {
             toast.info('请在新打开的浏览器窗口中完成登录')
             console.log(`[conn][${account.id}][${traceId}] 浏览器已启动，等待用户扫码登录...`)
           } else {
-            // 不需要登录，直接连接成功
+            // 【修复】不需要登录，直接连接成功，立即更新状态为 connected
             setConnectState({
+              status: 'connected',
               phase: 'streaming',
+              error: null,
+              lastVerifiedAt: Date.now(),
             })
             console.log(
-              `[conn][${account.id}][${traceId}] 浏览器已启动，已登录，等待 notifyAccountName 事件...`,
+              `[conn][${account.id}][${traceId}] 浏览器已启动，已登录，状态已更新为 connected`,
             )
+            toast.success('已成功连接到直播控制台')
           }
           loginTimeoutRef.current = setTimeout(() => {
             // 从 store 获取最新状态，避免闭包陷阱

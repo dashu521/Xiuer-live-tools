@@ -1,27 +1,17 @@
 /**
  * 主进程内云 Auth API 客户端：register / login / refresh / me，401 时自动 refresh 并重试一次
- * 基准地址来自唯一配置 AUTH_API_BASE，路径仅 /login、/register（无 /auth 前缀）
+ * 基准地址来自 buildTimeConfig 或环境变量，路径仅 /login、/register（无 /auth 前缀）
  */
-import { app } from 'electron'
-import { AUTH_API_BASE } from '../../../src/config/authApiBase'
 import type {
   CloudAuthResponse,
   CloudErrorDetail,
   CloudMeResponse,
   CloudRefreshResponse,
 } from '../../../src/types/auth'
+import { getAuthApiBaseUrl } from '../config/buildTimeConfig'
 
 const getBaseUrl = (): string => {
-  let url = (
-    process.env.AUTH_API_BASE_URL ??
-    process.env.VITE_AUTH_API_BASE_URL ??
-    AUTH_API_BASE
-  ).replace(/\/$/, '')
-  if (url?.includes(':8080')) {
-    url = url.replace(/:8080(\/|$)/, ':8000$1')
-    console.warn('[cloudAuthClient] 认证 API 应在 8000 端口，已自动将 8080 纠正为 8000')
-  }
-  return url || (app?.isPackaged ? AUTH_API_BASE : '')
+  return getAuthApiBaseUrl()
 }
 
 /** 登录/注册接口路径（服务端无 /auth 前缀）：base + 本路径 = 如 http://121.41.179.197:8000/login */

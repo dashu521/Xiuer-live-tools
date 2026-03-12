@@ -53,14 +53,16 @@ export class KuaishouPlatform implements IPlatform, IPerformPopup, IPerformComme
     return accountName ?? ''
   }
 
-  async isLive(_session: BrowserSession): Promise<boolean> {
+  async isLive(session: BrowserSession): Promise<boolean> {
     try {
-      if (!this.mainPage) {
+      // 使用传入的 session.page，不使用缓存的 this.mainPage
+      const page = session.page
+      if (!page) {
         return false
       }
       const commentTextareaSelector = elementFinder.commentInput?.TEXTAREA
       const commentTextarea = commentTextareaSelector
-        ? await this.mainPage.$(commentTextareaSelector).catch(() => null)
+        ? await page.$(commentTextareaSelector).catch(() => null)
         : null
       if (commentTextarea) {
         const isDisabled = await commentTextarea.isDisabled().catch(() => true)

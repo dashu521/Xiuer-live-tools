@@ -69,9 +69,11 @@ function useGlobalIpcListener() {
   })
 
   useIpcListener(IPC_CHANNELS.tasks.liveControl.disconnectedEvent, async (id, reason) => {
-    console.log(`[conn][${id}][event] 收到 disconnectedEvent 事件`, {
+    console.log(`[renderer][${id}] ==============================================`)
+    console.log(`[renderer][${id}][event] 🚨 收到 disconnectedEvent 事件`, {
       accountId: id,
       reason: reason || '未知原因',
+      timestamp: new Date().toISOString(),
     })
 
     const reasonStr = (reason || '') as string
@@ -84,16 +86,20 @@ function useGlobalIpcListener() {
     // 【关键】仅在「用户正在登录中」且非致命断开时忽略，避免登录过程中的短暂断开误报
     // 浏览器被关闭、连接已取消、超时等致命原因立即更新 UI，不再转圈
     const currentStatus = useLiveControlStore.getState().contexts[id]?.connectState
+    console.log(`[renderer][${id}] currentStatus before:`, currentStatus)
     if (currentStatus?.phase === 'waiting_for_login' && !isFatalDisconnect) {
-      console.log(`[conn][${id}][event] 忽略 disconnectedEvent：用户正在登录中（非致命断开）`)
+      console.log(`[renderer][${id}][event] ⏭️ 忽略 disconnectedEvent：用户正在登录中（非致命断开）`)
       return
     }
 
+    console.log(`[renderer][${id}] >>> Step 1: setConnectState to disconnected`)
     setConnectState(id, {
       status: 'disconnected',
       phase: 'idle',
       error: reason || '直播中控台已断开连接',
     })
+    console.log(`[renderer][${id}] >>> Step 1 done, new status:`, useLiveControlStore.getState().contexts[id]?.connectState)
+    
     if (reason) {
       // 使用用户友好的错误提示替代原始技术错误
       const friendlyMessage = getFriendlyErrorMessage(reason)
@@ -101,9 +107,11 @@ function useGlobalIpcListener() {
     }
 
     // 只停止该账号的任务，避免误停其他账号的 autoSpeak（TaskManager 为全局单任务）
-    console.log(`[TaskGate] Connection disconnected, stopping all tasks for account ${id}`)
+    console.log(`[renderer][${id}] >>> Step 2: calling stopAllLiveTasks for account ${id}`)
     const { stopAllLiveTasks } = await import('@/utils/stopAllLiveTasks')
     await stopAllLiveTasks(id, 'disconnected', false) // 不显示 toast，避免重复
+    console.log(`[renderer][${id}] >>> Step 2 done, stopAllLiveTasks completed`)
+    console.log(`[renderer][${id}] ==============================================`)
   })
 
   useIpcListener(IPC_CHANNELS.tasks.autoMessage.stoppedEvent, async id => {
@@ -237,25 +245,31 @@ function useGlobalIpcListener() {
   useIpcListener(
     IPC_CHANNELS.tasks.liveControl.streamStateChanged,
     async (accountId: string, streamState: StreamStatus) => {
+      console.log(`[renderer][${accountId}] ==============================================`)
       console.log(
-        `[Gate] Stream state changed event received for account ${accountId}: ${streamState}`,
+        `[renderer][${accountId}][event] 🌡️ streamStateChanged event received: ${streamState}`,
+        { accountId, streamState, timestamp: new Date().toISOString() }
       )
 
       // 获取之前的状态
       const prevState = useLiveControlStore.getState().contexts[accountId]?.streamState
+      console.log(`[renderer][${accountId}] prevState: ${prevState}, newState: ${streamState}`)
 
       // 更新状态
+      console.log(`[renderer][${accountId}] >>> Step 1: setStreamState to ${streamState}`)
       setStreamState(accountId, streamState)
-      console.log(`[Gate] Stream state updated in store for account ${accountId}: ${streamState}`)
+      console.log(`[renderer][${accountId}] >>> Step 1 done, new store state:`, useLiveControlStore.getState().contexts[accountId]?.streamState)
 
       // 如果从 live 变为非 live，只停止该账号的任务，避免误停其他账号的 autoSpeak
       if (prevState === 'live' && streamState !== 'live') {
         console.log(
-          `[TaskGate] Stream ended (${prevState} -> ${streamState}), stopping all tasks for account ${accountId}`,
+          `[renderer][${accountId}] >>> Step 2: Stream ended (${prevState} -> ${streamState}), calling stopAllLiveTasks`,
         )
         const { stopAllLiveTasks } = await import('@/utils/stopAllLiveTasks')
         await stopAllLiveTasks(accountId, 'stream_ended', false) // 不显示 toast，避免重复
+        console.log(`[renderer][${accountId}] >>> Step 2 done, stopAllLiveTasks completed`)
       }
+      console.log(`[renderer][${accountId}] ==============================================`)
     },
   )
 

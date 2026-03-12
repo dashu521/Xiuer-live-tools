@@ -104,8 +104,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 process.env.APP_ROOT = path.join(__dirname, '../..')
 
 // 资源路径配置
+// 注意：dist-electron 被 files 配置包含，打包进 app.asar，不是 app.asar.unpacked
 export const MAIN_DIST = app.isPackaged
-  ? path.join(process.resourcesPath, 'app.asar.unpacked', 'dist-electron')
+  ? path.join(process.resourcesPath, 'app.asar', 'dist-electron')
   : path.join(process.env.APP_ROOT, 'dist-electron')
 
 export const RENDERER_DIST = app.isPackaged
@@ -725,6 +726,20 @@ app
     writeStartupLog('========== app.whenReady 触发 ==========')
     logStartupInfo()
     logWindowDebug('after whenReady')
+
+    // 【修复】开发模式下设置 Dock 图标（macOS）
+    if (process.platform === 'darwin' && !app.isPackaged) {
+      const dockIconPath = path.join(process.env.VITE_PUBLIC ?? '', 'icon.png')
+      if (existsSync(dockIconPath) && app.dock) {
+        try {
+          const dockIcon = nativeImage.createFromPath(dockIconPath)
+          app.dock.setIcon(dockIcon)
+          writeStartupLog('Dock 图标已设置')
+        } catch (err) {
+          writeStartupLog(`设置 Dock 图标失败: ${err}`)
+        }
+      }
+    }
 
     writeStartupLog('开始创建窗口...')
     createWindow()

@@ -113,16 +113,6 @@ export interface StoredTokens {
 }
 
 export function getStoredTokens(): StoredTokens {
-  // [SECURITY-FIX] 首先验证密钥配置
-  const keyValidation = validateKeyConfig()
-  if (!keyValidation.valid) {
-    console.error('[CloudAuthStorage] Key validation failed:', keyValidation.error)
-    // 生产环境密钥验证失败时，不返回任何 token
-    if (app.isPackaged || process.env.NODE_ENV === 'production') {
-      throw new Error(`Token storage initialization failed: ${keyValidation.error}`)
-    }
-  }
-
   const filePath = getStoragePath()
   if (!existsSync(filePath)) return { access_token: null, refresh_token: null }
   try {

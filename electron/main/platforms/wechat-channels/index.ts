@@ -93,19 +93,21 @@ export class WechatChannelPlatform
     return accountName ?? ''
   }
 
-  async isLive(_session: BrowserSession): Promise<boolean> {
+  async isLive(session: BrowserSession): Promise<boolean> {
     try {
-      if (!this.mainPage) {
+      // 使用传入的 session.page，不使用缓存的 this.mainPage
+      const page = session.page
+      if (!page) {
         return false
       }
       // 视频号：如果能访问中控台页面（不是首页），说明正在直播
       // 因为 connect() 中已经检查过，未开播会跳转到首页
-      const currentUrl = this.mainPage.url()
+      const currentUrl = page.url()
       const isInLiveControl =
         !REGEXPS.INDEX_PAGE.test(currentUrl) && !REGEXPS.LOGIN_PAGE.test(currentUrl)
       // 进一步检查：评论输入框是否存在且可用
       if (isInLiveControl) {
-        const commentTextarea = await this.mainPage.$(SELECTORS.COMMENT.TEXTAREA).catch(() => null)
+        const commentTextarea = await page.$(SELECTORS.COMMENT.TEXTAREA).catch(() => null)
         if (commentTextarea) {
           const isDisabled = await commentTextarea.isDisabled().catch(() => true)
           return !isDisabled

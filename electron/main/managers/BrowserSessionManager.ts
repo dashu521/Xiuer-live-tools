@@ -9,7 +9,9 @@ const logger = createLogger('BrowserSessionManager')
 // 加载 playwright-extra（带 stealth 插件）
 let chromium: typeof import('playwright').chromium | null = null
 try {
-  const loadPath = path.join(__dirname, 'runtime', 'load-playwright.cjs')
+  // 打包后 __dirname = app.asar/dist-electron/main/managers
+  // runtime 目录在 dist-electron/main/runtime，需要 ../runtime
+  const loadPath = path.join(__dirname, '../runtime', 'load-playwright.cjs')
   logger.debug(`Loading playwright from: ${loadPath}`)
   logger.debug(`app.isPackaged: ${app?.isPackaged}, resourcesPath: ${process.resourcesPath}`)
   const loaded = require(loadPath) as { chromium: typeof import('playwright').chromium }

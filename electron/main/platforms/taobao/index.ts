@@ -122,14 +122,16 @@ export class TaobaoPlatform implements IPlatform, IPerformPopup, IPerformComment
     }
   }
 
-  async isLive(_session: BrowserSession): Promise<boolean> {
+  async isLive(session: BrowserSession): Promise<boolean> {
     try {
-      if (!this.mainPage) {
+      // 使用传入的 session.page，不使用缓存的 this.mainPage
+      const page = session.page
+      if (!page) {
         return false
       }
       const commentTextareaSelector = elementFinder.commentInput?.TEXTAREA
       const commentTextarea = commentTextareaSelector
-        ? await this.mainPage.$(commentTextareaSelector).catch(() => null)
+        ? await page.$(commentTextareaSelector).catch(() => null)
         : null
       // 淘宝：如果能访问中控台页面，说明正在直播
       // 因为 connect() 中已经检查过，找不到 liveId 会抛出错误

@@ -59,13 +59,16 @@ export class DouyinPlatform implements IPlatform, IPerformPopup, IPerformComment
     return accountName ?? ''
   }
 
-  async isLive(_session: BrowserSession): Promise<boolean> {
+  async isLive(session: BrowserSession): Promise<boolean> {
     try {
-      if (!this.mainPage) {
+      // 使用传入的 session.page，不使用缓存的 this.mainPage
+      // 避免页面刷新/重定向后引用失效的问题
+      const page = session.page
+      if (!page) {
         return false
       }
       // 检测评论输入框是否存在且可用（开播时会有评论输入框）
-      const commentTextarea = await this.mainPage
+      const commentTextarea = await page
         .$(SELECTORS.commentInput.TEXTAREA)
         .catch(() => null)
       if (commentTextarea) {

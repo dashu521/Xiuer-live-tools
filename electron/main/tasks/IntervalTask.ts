@@ -2,6 +2,7 @@ import { Result } from '@praha/byethrow'
 import { ErrorFactory } from '@praha/error-factory'
 import { AbortError, UnexpectedError } from '#/errors/AppError'
 import { randomInt } from '#/utils'
+import { taskRuntimeMonitor } from '#/services/TaskRuntimeMonitor'
 import { type BaseTaskProps, createTask } from './BaseTask'
 import { TaskStopReason } from './ITask'
 
@@ -23,6 +24,9 @@ export function createIntervalTask(
     if (timer) {
       clearTimeout(timer)
       timer = null
+      // 从 logger 的 scope 名称中提取账号信息
+      const scopeName = typeof props.logger.scope === 'function' ? props.logger.scope.name : 'unknown'
+      taskRuntimeMonitor.decrementTimer(scopeName || 'unknown')
     }
   }
 
@@ -73,6 +77,8 @@ export function createIntervalTask(
       if (task.isRunning() && !signal.aborted) {
         const interval = calculateNextInterval()
         timer = setTimeout(() => scheduleNextRun(), interval)
+        const scopeName = typeof props.logger.scope === 'function' ? props.logger.scope.name : 'unknown'
+        taskRuntimeMonitor.incrementTimer(scopeName || 'unknown')
         logger.info(`任务将在 ${interval / 1000} 秒后继续执行。`)
       }
     } catch (error) {

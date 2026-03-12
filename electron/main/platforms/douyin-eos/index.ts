@@ -50,15 +50,17 @@ export class DouyinEosPlatform implements IPlatform, IPerformPopup, IPerformComm
     return accountName ?? ''
   }
 
-  async isLive(_session: BrowserSession): Promise<boolean> {
+  async isLive(session: BrowserSession): Promise<boolean> {
     // 抖音团购和抖店共用相同的检测逻辑
     try {
-      if (!this.mainPage) {
+      // 使用传入的 session.page，不使用缓存的 this.mainPage
+      const page = session.page
+      if (!page) {
         return false
       }
       const commentTextareaSelector = elementFinder.commentInput?.TEXTAREA
       const commentTextarea = commentTextareaSelector
-        ? await this.mainPage.$(commentTextareaSelector).catch(() => null)
+        ? await page.$(commentTextareaSelector).catch(() => null)
         : null
       // 检测评论输入框是否存在且可用
       if (commentTextarea) {
