@@ -272,6 +272,7 @@ export class AccountSession {
     // 根据参数决定发送什么事件
     if (sendDisconnectEvent) {
       // 断开中控台：发送 disconnectedEvent
+      console.log(`[DisconnectedEvent] SOURCE: AccountSession.stopTasksAndUpdateState, accountId: ${accountId}, reason: ${reason}`)
       this.logger.info(`[disconnect][${accountId}] >>> Step 5: sending disconnectedEvent`)
       windowManager.send(IPC_CHANNELS.tasks.liveControl.disconnectedEvent, accountId, reason)
       accountRuntimeManager.setDisconnected(accountId)
