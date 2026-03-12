@@ -14,8 +14,8 @@
     }
   },
   "scripts": {
-    "dev": "cross-env USE_REAL_AUTH=true vite",
-    "dev:force": "node -e \"require('fs').rmSync('dist-electron',{recursive:true,force:true})\" && vite",
+    "dev": "cross-env USE_REAL_AUTH=true VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000 vite",
+    "dev:force": "node -e \"require('fs').rmSync('dist-electron',{recursive:true,force:true})\" && cross-env VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000 vite",
     "build": "tsc && vite build && node scripts/copy-runtime-files.js && node scripts/generate-build-config.js",
     "preview": "vite preview",
     "test": "vitest run",
