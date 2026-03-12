@@ -258,6 +258,38 @@ writeStartupLog(`index.html 存在: ${existsSync(indexHtml)}`)
 writeStartupLog(`RENDERER_DIST: ${RENDERER_DIST}`)
 writeStartupLog(`MAIN_DIST: ${MAIN_DIST}`)
 
+// ========== 调试模式：详细路径诊断 ==========
+writeStartupLog('========== 路径诊断开始 ==========')
+writeStartupLog(`__dirname: ${__dirname}`)
+writeStartupLog(`process.env.APP_ROOT: ${process.env.APP_ROOT}`)
+writeStartupLog(`app.getAppPath(): ${app.getAppPath()}`)
+writeStartupLog(`process.resourcesPath: ${process.resourcesPath || 'N/A'}`)
+writeStartupLog(`process.execPath: ${process.execPath}`)
+writeStartupLog(`process.cwd(): ${process.cwd()}`)
+
+// 检查 RENDERER_DIST 目录内容
+try {
+  if (existsSync(RENDERER_DIST)) {
+    const files = require('fs').readdirSync(RENDERER_DIST)
+    writeStartupLog(`RENDERER_DIST 目录内容: ${files.join(', ')}`)
+  } else {
+    writeStartupLog(`RENDERER_DIST 目录不存在: ${RENDERER_DIST}`)
+  }
+} catch (e) {
+  writeStartupLog(`无法读取 RENDERER_DIST: ${e}`)
+}
+
+// 检查 app.asar 是否存在
+const asarPath = path.join(process.resourcesPath || '', 'app.asar')
+writeStartupLog(`app.asar 路径: ${asarPath}`)
+writeStartupLog(`app.asar 存在: ${existsSync(asarPath)}`)
+
+// 检查 app.asar.unpacked 是否存在
+const unpackedPath = path.join(process.resourcesPath || '', 'app.asar.unpacked')
+writeStartupLog(`app.asar.unpacked 路径: ${unpackedPath}`)
+writeStartupLog(`app.asar.unpacked 存在: ${existsSync(unpackedPath)}`)
+writeStartupLog('========== 路径诊断结束 ==========')
+
 // 持久化配置文件路径
 const getConfigPath = () => path.join(app.getPath('userData'), 'app-config.json')
 
@@ -305,13 +337,18 @@ async function createWindow() {
 
     writeStartupLog('正在创建 BrowserWindow...')
 
+    // ========== 调试模式：强制显示窗口 ==========
+    const DEBUG_FORCE_SHOW = true
+    const shouldShow = DEBUG_FORCE_SHOW || forceShow
+    writeStartupLog(`DEBUG: DEBUG_FORCE_SHOW=${DEBUG_FORCE_SHOW}, shouldShow=${shouldShow}`)
+
     win = new BrowserWindow({
       title: `秀儿直播助手 - v${app.getVersion()}`,
       width: 1280,
       height: 800,
       x: 80,
       y: 60,
-      show: forceShow,
+      show: shouldShow,
       autoHideMenuBar: app.isPackaged,
       icon: existsSync(iconPath) ? iconPath : undefined,
       webPreferences: {
@@ -508,20 +545,58 @@ async function createWindow() {
       writeStartupLog('事件: did-finish-load 触发（页面加载完成）')
       writeMainLog('INFO', 'Page finished loading')
 
-      if (!isQuitting) {
-        await updateManager.silentCheckForUpdate()
-      }
+      // ========== 调试模式：禁用启动时自动更新检查 ==========
+      writeStartupLog('DEBUG: 跳过启动时自动更新检查')
+      // if (!isQuitting) {
+      //   await updateManager.silentCheckForUpdate()
+      // }
     })
 
-    win.webContents.on('did-fail-load', (_, errorCode, errorDescription, validatedURL) => {
-      writeStartupLog(`事件: did-fail-load 触发 - errorCode=${errorCode}, errorDescription=${errorDescription}`)
+    win.webContents.on('did-fail-load', (_, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      writeStartupLog(`事件: did-fail-load 触发 - errorCode=${errorCode}, errorDescription=${errorDescription}, isMainFrame=${isMainFrame}`)
+      writeStartupLog(`事件: did-fail-load - validatedURL=${validatedURL}`)
       writeMainLog('ERROR', `Page failed to load: ${errorDescription} (${errorCode}) at ${validatedURL}`)
+
+      // ========== 调试模式：加载失败时显示错误窗口 ==========
+      if (app.isPackaged && win && !win.isDestroyed()) {
+        writeStartupLog('DEBUG: 加载失败，尝试显示错误信息')
+        win.webContents.executeJavaScript(`
+          document.body.innerHTML = '<div style="padding:20px;font-family:sans-serif;">' +
+            '<h1>页面加载失败</h1>' +
+            '<p>错误码: ${errorCode}</p>' +
+            '<p>错误描述: ${errorDescription}</p>' +
+            '<p>URL: ${validatedURL}</p>' +
+            '<p>主框架: ${isMainFrame}</p>' +
+            '<p>时间: ${new Date().toISOString()}</p>' +
+            '</div>';
+        `).catch(() => {})
+        win.show()
+      }
     })
 
     win.webContents.on('render-process-gone', (_, details) => {
       writeStartupLog(`事件: render-process-gone 触发 - reason=${details.reason}, exitCode=${details.exitCode}`)
+      writeStartupLog(`事件: render-process-gone - details: ${JSON.stringify(details)}`)
       writeMainLog('ERROR', `render-process-gone: ${JSON.stringify(details)}`)
       logWindowDebug(`render-process-gone: ${details.reason}`)
+
+      // ========== 调试模式：渲染进程崩溃时显示错误 ==========
+      if (app.isPackaged && win && !win.isDestroyed()) {
+        writeStartupLog('DEBUG: 渲染进程崩溃，尝试显示错误信息')
+        try {
+          win.webContents.executeJavaScript(`
+            document.body.innerHTML = '<div style="padding:20px;font-family:sans-serif;">' +
+              '<h1>渲染进程崩溃</h1>' +
+              '<p>原因: ${details.reason}</p>' +
+              '<p>退出码: ${details.exitCode}</p>' +
+              '<p>时间: ${new Date().toISOString()}</p>' +
+              '</div>';
+          `).catch(() => {})
+          win.show()
+        } catch (e) {
+          writeStartupLog(`DEBUG: 显示错误信息失败: ${e}`)
+        }
+      }
 
       if (app.isPackaged && process.platform === 'win32' && !isQuitting) {
         setTimeout(() => {
@@ -597,6 +672,11 @@ async function createWindow() {
 
         notification.show()
       }
+    })
+
+    // ========== 调试模式：监听 browser-window-created ==========
+    app.on('browser-window-created', (_, window) => {
+      writeStartupLog(`事件: browser-window-created 触发 - id=${window.id}`)
     })
 
     writeStartupLog('========== createWindow 完成 ==========')
@@ -750,7 +830,11 @@ function writeCrashToTemp(tag: string, err: unknown): void {
 }
 
 process.on('uncaughtException', error => {
-  writeStartupLog(`uncaughtException: ${error instanceof Error ? error.message : String(error)}`)
+  const errorMsg = error instanceof Error ? error.message : String(error)
+  const errorStack = error instanceof Error ? error.stack : 'No stack trace'
+  writeStartupLog(`========== uncaughtException ==========`)
+  writeStartupLog(`uncaughtException 消息: ${errorMsg}`)
+  writeStartupLog(`uncaughtException 堆栈: ${errorStack}`)
   writeCrashToTemp('uncaughtException', error)
   const logger = createLogger('uncaughtException')
   logger.error('--------------意外的未捕获异常---------------')
@@ -766,8 +850,12 @@ process.on('uncaughtException', error => {
   }
 })
 
-process.on('unhandledRejection', reason => {
-  writeStartupLog(`unhandledRejection: ${reason instanceof Error ? reason.message : String(reason)}`)
+process.on('unhandledRejection', (reason, promise) => {
+  const reasonMsg = reason instanceof Error ? reason.message : String(reason)
+  const reasonStack = reason instanceof Error ? reason.stack : 'No stack trace'
+  writeStartupLog(`========== unhandledRejection ==========`)
+  writeStartupLog(`unhandledRejection 原因: ${reasonMsg}`)
+  writeStartupLog(`unhandledRejection 堆栈: ${reasonStack}`)
 
   if (
     reason instanceof Error &&
