@@ -28,6 +28,7 @@ export class StreamStateDetector {
   private pollTimer: NodeJS.Timeout | null = null
   private lastState: StreamStatus = 'unknown'
   private isPolling = false
+  private onStreamEnded: ((reason: string) => void) | null = null
 
   constructor(
     private platform: IPlatform,
@@ -35,6 +36,13 @@ export class StreamStateDetector {
     private accountId: string,
     private logger: ScopedLogger,
   ) {}
+
+  /**
+   * 设置直播结束时的回调（由 AccountSession 调用）
+   */
+  setOnStreamEndedCallback(callback: (reason: string) => void) {
+    this.onStreamEnded = callback
+  }
 
   /**
    * 开始轮询检测直播状态（自适应间隔 + 错峰）
@@ -116,8 +124,9 @@ export class StreamStateDetector {
 
       // 状态变化时发送事件
       if (newState !== this.lastState) {
+        const prevState = this.lastState
         this.logger.info(
-          `[stream] Stream state changed: ${this.lastState} -> ${newState} (isLive=${isLive})`,
+          `[stream] Stream state changed: ${prevState} -> ${newState} (isLive=${isLive})`,
         )
         this.lastState = newState
         windowManager.send(
@@ -125,6 +134,16 @@ export class StreamStateDetector {
           this.accountId,
           newState,
         )
+
+        // 【核心修复】当检测到直播结束（从 live 变为 offline）时，自动触发断开连接
+        // 解决页面刷新/导航时不触发 page.on('close') 的问题
+        if (prevState === 'live' && newState === 'offline' && this.onStreamEnded) {
+          this.logger.info(`[stream][${this.accountId}] Stream ended: ${prevState} -> ${newState}, triggering disconnect...`)
+          // 记录完整的证据链
+          this.logger.info(`[stream][${this.accountId}] >>> calling onStreamEnded callback with reason: "直播已结束"`)
+          this.onStreamEnded('直播已结束')
+          this.logger.info(`[stream][${this.accountId}] >>> onStreamEnded callback completed`)
+        }
       } else {
         this.logger.debug(`[stream] Stream state unchanged: ${newState} (isLive=${isLive})`)
       }
@@ -132,6 +151,7 @@ export class StreamStateDetector {
       this.logger.error('[stream] Failed to check stream state:', error)
       // 检测失败时，如果之前是 live，则设为 offline（保守策略）
       if (this.lastState === 'live') {
+        const prevState = this.lastState
         const newState: StreamStatus = 'offline'
         this.logger.warn('[stream] Stream state set to offline due to detection error')
         this.lastState = newState
@@ -140,6 +160,11 @@ export class StreamStateDetector {
           this.accountId,
           newState,
         )
+        // 【核心修复】检测出错导致状态变为 offline 时，也要触发断开
+        if (prevState === 'live' && newState === 'offline' && this.onStreamEnded) {
+          this.logger.info('[stream] Detection error triggered stream end, disconnecting...')
+          this.onStreamEnded('检测出错，直播可能已结束')
+        }
       }
     }
   }

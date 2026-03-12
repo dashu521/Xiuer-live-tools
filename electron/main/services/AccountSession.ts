@@ -1,3 +1,15 @@
+/**
+ * 账号会话管理
+ * 
+ * @see docs/live-control-lifecycle-spec.md 中控台与直播状态管理总规范
+ * 
+ * 核心规则：
+ * - 停止所有任务 ≠ 断开中控台连接
+ * - 结束直播 ≠ 断开中控台连接
+ * - 断开中控台连接 ≠ 关闭浏览器
+ * - 关播不停止 StreamStateDetector
+ */
+
 import { Result } from '@praha/byethrow'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { TaskNotSupportedError } from '#/errors/AppError'
@@ -17,6 +29,7 @@ import {
   isPinComment,
 } from '#/platforms/IPlatform'
 import { StreamStateDetector } from '#/services/StreamStateDetector'
+import { accountRuntimeManager } from '#/services/AccountScopedRuntimeManager'
 import { createAutoCommentTask } from '#/tasks/AutoCommentTask'
 import { createAutoPopupTask } from '#/tasks/AutoPopupTask'
 import { createCommentListenerTask } from '#/tasks/CommentListenerTask'
@@ -25,6 +38,7 @@ import { createPinCommentTask } from '#/tasks/PinCommentTask'
 import { createSendBatchMessageTask } from '#/tasks/SendBatchMessageTask'
 import { createSubAccountInteractionTask } from '#/tasks/SubAccountInteractionTask'
 import windowManager from '#/windowManager'
+import { taskRuntimeMonitor } from '#/services/TaskRuntimeMonitor'
 
 export class AccountSession {
   private platform: IPlatform
@@ -47,6 +61,12 @@ export class AccountSession {
       this.account.id,
       this.logger.scope('StreamState'),
     )
+    // 【核心修复】设置直播结束回调 - 当检测到关播时只停止任务，不断开中控台
+    this.streamStateDetector.setOnStreamEndedCallback((reason: string) => {
+      this.logger.info(`[StreamState] Stream ended callback triggered: ${reason}`)
+      // 关播时只停止任务，不断开中控台，不关闭浏览器，不发送 disconnectedEvent
+      this.stopForStreamEnded(reason)
+    })
   }
 
   async connect(config: {
@@ -111,8 +131,22 @@ export class AccountSession {
         // 验证 browserSession 仍然存在且匹配
         if (this.browserSession?.page) {
           this.logger.info(`[page-close] 账号 ${this.account.id} 页面关闭，触发断开连接`)
-          emitter.emit('page-closed', { accountId: this.account.id })
+          emitter.emit('page-closed', { accountId: this.account.id, reason: '页面已关闭' })
         }
+      })
+
+      // 【修复】监听浏览器进程断开事件（兜底机制）
+      // 当浏览器被强制关闭或崩溃时，page.on('close') 可能无法触发
+      this.browserSession.browser.on('disconnected', () => {
+        // 如果已经在断开中或已断开，不重复触发
+        if (this.isDisconnecting || this.isDisconnected) {
+          this.logger.info(
+            `[browser-disconnected] 账号 ${this.account.id} 已经在断开中或已断开，忽略重复事件`,
+          )
+          return
+        }
+        this.logger.warn(`[browser-disconnected] 账号 ${this.account.id} 浏览器进程已断开`)
+        emitter.emit('page-closed', { accountId: this.account.id, reason: '浏览器已被关闭' })
       })
       // 【修复】连接成功后进行健康检查，确保直播状态检测可以正常工作
       this.logger.info('[健康检查] 验证直播状态检测功能...')
@@ -169,49 +203,124 @@ export class AccountSession {
     }
   }
 
-  disconnect() {
-    // 【修复】防止重复执行 disconnect
+  /**
+   * 停止所有任务并更新状态
+   * @param reason 原因
+   * @param closeBrowser 是否关闭浏览器
+   * @param sendDisconnectEvent 是否发送 disconnectedEvent（关播时不发送，断开中控台时发送）
+   * @param stopDetector 是否停止 StreamStateDetector（关播时 false，断开中控台时 true）
+   */
+  private stopTasksAndUpdateState(
+    reason: string, 
+    closeBrowser: boolean, 
+    sendDisconnectEvent: boolean,
+    stopDetector: boolean = false
+  ) {
+    const accountId = this.account.id
+    
+    try {
+      // 【关键修复】只有明确要求停止 detector 时才停止（断开中控台时）
+      // 关播时必须保持 detector 活跃，以支持后续再次开播检测
+      if (stopDetector) {
+        this.logger.info(`[disconnect][${accountId}] >>> Step 1a: stopping streamStateDetector (stopDetector=true)`)
+        this.streamStateDetector.stop()
+      } else {
+        this.logger.info(`[disconnect][${accountId}] >>> Step 1a: NOT stopping streamStateDetector (stopDetector=false), keeping for re-detection`)
+      }
+      // 只更新状态，不停止 detector
+      this.streamStateDetector.setState('offline')
+
+      // 关闭浏览器
+      if (closeBrowser && this.browserSession?.browser) {
+        this.logger.info(`[disconnect][${accountId}] >>> Step 2: closing browser`)
+        this.browserSession.browser.close().catch(e => this.logger.error('无法关闭浏览器：', e))
+        this.browserSession = null
+        this.streamStateDetector.updateBrowserSession(null)
+      } else {
+        this.logger.info(`[disconnect][${accountId}] >>> Step 2: NOT closing browser`)
+      }
+
+      // 关闭所有任务
+      this.logger.info(`[disconnect][${accountId}] >>> Step 3: stopping ${this.activeTasks.size} active tasks`)
+      Array.from(this.activeTasks.values()).forEach((task, index) => {
+        const taskType = Array.from(this.activeTasks.keys())[index]
+        this.logger.info(`[disconnect][${accountId}] >>> Stopping task ${index + 1}/${this.activeTasks.size}: ${taskType}`)
+        try {
+          task.stop()
+        } catch (e) {
+          this.logger.warn(`[disconnect][${accountId}] >>> Task ${taskType} stop error (ignored):`, e)
+        }
+      })
+      this.activeTasks.clear()
+      this.logger.info(`[disconnect][${accountId}] >>> Step 4: activeTasks cleared`)
+
+    } catch (error) {
+      this.logger.error(`[disconnect][${accountId}] error:`, error)
+    }
+
+    // 同步到 RuntimeManager
+    accountRuntimeManager.setStreamState(accountId, 'offline')
+
+    // 根据参数决定发送什么事件
+    if (sendDisconnectEvent) {
+      // 断开中控台：发送 disconnectedEvent
+      this.logger.info(`[disconnect][${accountId}] >>> Step 5: sending disconnectedEvent`)
+      windowManager.send(IPC_CHANNELS.tasks.liveControl.disconnectedEvent, accountId, reason)
+      accountRuntimeManager.setDisconnected(accountId)
+    } else {
+      // 关播：只发送 streamStateChanged
+      this.logger.info(`[disconnect][${accountId}] >>> Step 5: sending streamStateChanged (stream ended, not disconnected)`)
+      windowManager.send(IPC_CHANNELS.tasks.liveControl.streamStateChanged, accountId, 'offline')
+    }
+  }
+
+  /**
+   * 关播时调用：只停止任务，不断开中控台，不关闭浏览器，不发送 disconnectedEvent
+   */
+  stopForStreamEnded(reason: string) {
+    const accountId = this.account.id
+    if (this.isDisconnecting) {
+      this.logger.info(`[stopForStreamEnded] 账号 ${accountId} 已在处理中，跳过`)
+      return
+    }
+    this.isDisconnecting = true
+    
+    this.logger.warn(`[stopForStreamEnded][${accountId}] START, reason: ${reason}`)
+    // 【关键】关播时保持 detector 活跃，支持再次开播检测
+    this.stopTasksAndUpdateState(reason, false, false, false) 
+    
+    this.isDisconnecting = false
+    this.logger.warn(`[stopForStreamEnded][${accountId}] END`)
+  }
+
+  /**
+   * 断开中控台：停止任务，更新状态，发送 disconnectedEvent
+   * 
+   * @param reason 断开原因
+   * @param options.closeBrowser 是否关闭浏览器（默认 false，只有浏览器实际关闭时才传 true）
+   */
+  disconnect(reason?: string, options?: { closeBrowser?: boolean }) {
+    // 【修复】默认不关闭浏览器，只有明确要求时才关闭
+    const shouldCloseBrowser = options?.closeBrowser ?? false
+    const accountId = this.account.id
+    
     if (this.isDisconnecting || this.isDisconnected) {
-      this.logger.info(`[disconnect] 账号 ${this.account.id} 已经在断开中或已断开，跳过`)
+      this.logger.info(`[disconnect] 账号 ${accountId} 已经在断开中或已断开，跳过`)
       return
     }
 
     this.isDisconnecting = true
     this.isDisconnected = true
-    const accountId = this.account.id
-    this.logger.warn('与中控台断开连接')
-
-    try {
-      // 停止直播状态检测
-      this.streamStateDetector.stop()
-      this.streamStateDetector.setState('offline')
-
-      // 通过程序关闭浏览器（并非多余的操作，因为 MacOS 的 context 关闭时不会关闭浏览器进程）
-      if (this.browserSession?.browser) {
-        this.browserSession.browser.close().catch(e => this.logger.error('无法关闭浏览器：', e))
-      }
-
-      this.browserSession = null
-      this.streamStateDetector.updateBrowserSession(null)
-
-      // 关闭所有正在进行的任务（任一 task.stop() 可能因页面已关闭而抛错，故放 try 内）
-      Array.from(this.activeTasks.values()).forEach(task => {
-        try {
-          task.stop()
-        } catch (e) {
-          this.logger.warn('[disconnect] 停止任务时出错（可忽略）:', e)
-        }
-      })
-      this.activeTasks.clear()
-
-      this.logger.info(`[disconnect] 账号 ${accountId} 断开连接完成`)
-    } catch (error) {
-      this.logger.error(`[disconnect] 账号 ${accountId} 断开连接时出错:`, error)
-    } finally {
-      // 【关键】无论 try/catch 是否抛错，都通知渲染层，否则前端不会停止「自动回复/自动发言」等任务
-      windowManager.send(IPC_CHANNELS.tasks.liveControl.disconnectedEvent, accountId)
-      this.isDisconnecting = false
-    }
+    const disconnectReason = reason || '与中控台断开连接'
+    
+    this.logger.warn(`[disconnect][${accountId}] START disconnect, reason: ${disconnectReason}, closeBrowser: ${shouldCloseBrowser}`)
+    this.logger.warn(`[disconnect][${accountId}] activeTasks count: ${this.activeTasks.size}`)
+    
+    // 断开中控台时停止 detector
+    this.stopTasksAndUpdateState(disconnectReason, shouldCloseBrowser, true, true)
+    
+    this.isDisconnecting = false
+    this.logger.warn(`[disconnect][${accountId}] END`)
   }
 
   private async ensureAuthenticated(session: BrowserSession, headless = true): Promise<boolean> {
@@ -228,6 +337,8 @@ export class AccountSession {
       }
       // 等待登录
       await this.platform.login(this.browserSession)
+      // 【修复】登录后 page 可能被替换，需要更新 streamStateDetector
+      this.streamStateDetector.updateBrowserSession(this.browserSession)
       // 保存登录状态
       const storageState = await this.browserSession.context.storageState()
       // 无头模式，需要先关闭当前的有头模式，重新打开无头模式
@@ -237,8 +348,8 @@ export class AccountSession {
         this.browserSession = await browserManager.createSession(headless, storageState)
         this.streamStateDetector.updateBrowserSession(this.browserSession)
       }
-      await this.ensureAuthenticated(this.browserSession, headless)
-      return true // 需要登录
+      // 【修复】递归调用后返回结果，确保 needsLogin 状态正确
+      return await this.ensureAuthenticated(this.browserSession, headless)
     }
     return false // 不需要登录
   }
@@ -291,21 +402,36 @@ export class AccountSession {
     if (Result.isFailure(newTask)) {
       return newTask
     }
+    
+    // 注册到运行时监控
+    taskRuntimeMonitor.registerTask(this.account.id, task.type)
+    
     // 任务停止时从任务列表中移除
     newTask.value.addStopListener(() => {
       this.activeTasks.delete(task.type)
+      taskRuntimeMonitor.unregisterTask(`${this.account.id}:${task.type}`)
     })
     await newTask.value.start()
     this.activeTasks.set(task.type, newTask.value)
+    
+    // 输出当前统计
+    const stats = taskRuntimeMonitor.getStatistics()
+    this.logger.info(`[startTask][${this.account.id}] Task ${task.type} started, running tasks: ${stats.runningTasks}, timers: ${stats.activeTimers}, listeners: ${stats.activeListeners}`)
+    
     return Result.succeed()
   }
 
   public stopTask(taskType: LiveControlTask['type']) {
     const task = this.activeTasks.get(taskType)
     if (task) {
+      this.logger.info(`[stopTask][${this.account.id}] Stopping task ${taskType}...`)
       task.stop()
+      
+      // 输出清理后的统计
+      const stats = taskRuntimeMonitor.getStatistics()
+      this.logger.info(`[stopTask][${this.account.id}] Task ${taskType} stopped, running tasks: ${stats.runningTasks}, timers: ${stats.activeTimers}, listeners: ${stats.activeListeners}`)
     } else {
-      this.logger.warn('无法停止任务：未找到正在运行中的任务')
+      this.logger.warn('[stopTask] 无法停止任务：未找到正在运行中的任务')
     }
   }
 
@@ -492,7 +618,7 @@ export class AccountSession {
   }
 }
 
-function makeTask<T extends LiveControlTask>(
+export function makeTask<T extends LiveControlTask>(
   task: T,
   platform: IPlatform,
   account: Account,

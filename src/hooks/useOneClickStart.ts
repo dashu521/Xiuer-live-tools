@@ -11,6 +11,7 @@ import { useMemo, useState } from 'react'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { taskManager } from '@/tasks'
 import type { TaskContext } from '@/tasks/types'
+import { taskStateManager } from '@/utils/TaskStateManager'
 import { useAccounts } from './useAccounts'
 import { useCurrentAutoMessage } from './useAutoMessage'
 import { useAutoPopUpActions, useCurrentAutoPopUp } from './useAutoPopUp'
@@ -175,52 +176,26 @@ export function useOneClickStart(): {
   })
 
   const stopAllTasks = useMemoizedFn(async () => {
-    // 检查数据监控是否运行（用于后面判断是否显示停止提示）
-    const liveStatsStore = useLiveStatsStore.getState()
-    const liveStatsContext = liveStatsStore.contexts[currentAccountId]
-    const wasLiveStatsRunning = liveStatsContext?.isListening
-
-    // 停止自动回复（同时停止评论监听和数据监控，因为它们共享同一个监听器）
-    if (
-      isAutoReplyRunning ||
-      autoReplyListening === 'listening' ||
-      autoReplyListening === 'waiting' ||
-      wasLiveStatsRunning
-    ) {
-      try {
-        await window.ipcRenderer.invoke(
-          IPC_CHANNELS.tasks.autoReply.stopCommentListener,
-          currentAccountId,
-        )
-        console.log('[OneClickStart] Comment listener stopped successfully')
-      } catch (error) {
-        console.error('[OneClickStart] Failed to stop comment listener:', error)
+    // 使用统一的 TaskStateManager 停止所有任务
+    const result = await taskStateManager.stopAllTasksForAccount(
+      currentAccountId,
+      'manual',
+      true,
+      (message) => {
+        if (result.stoppedTasks.length > 0) {
+          toast.success(message)
+        } else if (result.alreadyStopped.length > 0) {
+          toast.info(message)
+        }
       }
-      // 同步更新自动回复和数据监控的状态
-      setAutoReplyListening('stopped')
-      setAutoReplyRunning(false)
-      if (wasLiveStatsRunning) {
-        liveStatsStore.setListening(currentAccountId, false)
-        console.log('[OneClickStart] LiveStats monitoring stopped')
-      }
-    }
-
-    // 停止自动发言（使用 TaskManager 统一管理）
-    // 【修复】传入 accountId 参数，只停止当前账号的任务，避免误停其他账号的任务
-    if (isAutoMessageRunning) {
-      try {
-        await taskManager.stop('autoSpeak', 'manual', currentAccountId)
-      } catch (error) {
-        console.error('[OneClickStart] Failed to stop auto speak:', error)
-      }
-    }
-
-    // 停止自动弹窗
-    if (isAutoPopUpRunning) {
-      setAutoPopUpRunning(false)
-    }
-
-    toast.success('已停止所有任务')
+    )
+    
+    // 记录结果
+    console.log('[OneClickStart] Stop result:', {
+      stopped: result.stoppedTasks,
+      alreadyStopped: result.alreadyStopped,
+      errors: result.errors.length,
+    })
   })
 
   // 检查数据监控是否运行

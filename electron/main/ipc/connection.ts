@@ -119,9 +119,10 @@ function setupIpcHandlers() {
     },
   )
 
-  typedIpcMainHandle(IPC_CHANNELS.tasks.liveControl.disconnect, async (_, accountId) => {
+  typedIpcMainHandle(IPC_CHANNELS.tasks.liveControl.disconnect, async (_, accountId: string) => {
     try {
-      accountManager.closeSession(accountId)
+      // 【修复】断开连接时不关闭浏览器，只断开控制关系
+      accountManager.closeSession(accountId, '用户主动断开', { closeBrowser: false })
       return true
     } catch (error) {
       const logger = createLogger(`@${accountManager.getAccountName(accountId)}`).scope(TASK_NAME)
