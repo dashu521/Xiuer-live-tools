@@ -534,11 +534,6 @@ async function createWindow() {
       }
     })
 
-    win.webContents.on('crashed', (_event, killed) => {
-      writeStartupLog(`事件: crashed 触发 - killed=${killed}`)
-      writeMainLog('ERROR', `Renderer crashed, killed=${killed}`)
-    })
-
     win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
       const levelStr = ['debug', 'info', 'warning', 'error'][level] || 'unknown'
       writeMainLog('RENDERER', `[${levelStr}] ${message} (${sourceId}:${line})`)

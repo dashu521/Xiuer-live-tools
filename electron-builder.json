@@ -126,8 +126,7 @@
     ],
     "icon": "public/icon.png",
     "artifactName": "Xiuer-Live-Assistant_${version}_win-x64.${ext}",
-    "signAndEditExecutable": false,
-    "signDlls": false
+    "signAndEditExecutable": false
   },
   "nsis": {
     "oneClick": false,
