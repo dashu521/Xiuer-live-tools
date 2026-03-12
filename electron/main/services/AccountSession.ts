@@ -273,7 +273,6 @@ export class AccountSession {
     // 根据参数决定发送什么事件
     if (sendDisconnectEvent) {
       // 断开中控台：发送 disconnectedEvent
-      console.log(`[DisconnectedEvent] SOURCE: AccountSession.stopTasksAndUpdateState, accountId: ${accountId}, reason: ${reason}`)
       this.logger.info(`[disconnect][${accountId}] >>> Step 5: sending disconnectedEvent`)
       windowManager.send(IPC_CHANNELS.tasks.liveControl.disconnectedEvent, accountId, reason)
       accountRuntimeManager.setDisconnected(accountId)
@@ -313,22 +312,12 @@ export class AccountSession {
     const shouldCloseBrowser = options?.closeBrowser ?? false
     const accountId = this.account.id
     
-    // 【诊断日志】打印调用栈，确认 disconnect 被谁调用
-    const stack = new Error().stack?.split('\n').slice(2, 6).join('\n') || 'no stack'
-    console.log(`[DisconnectCall] ================================`)
-    console.log(`[DisconnectCall] accountId: ${accountId}`)
-    console.log(`[DisconnectCall] reason: ${reason || '(undefined -> 默认"与中控台断开连接")'}`)
-    console.log(`[DisconnectCall] closeBrowser: ${shouldCloseBrowser}`)
-    console.log(`[DisconnectCall] isWaitingForLogin: ${this.isWaitingForLogin}`)
-    console.log(`[DisconnectCall] stack:\n${stack}`)
-    console.log(`[DisconnectCall] ================================`)
-    
     if (this.isDisconnecting || this.isDisconnected) {
       this.logger.info(`[disconnect] 账号 ${accountId} 已经在断开中或已断开，跳过`)
       return
     }
 
-    // 【修复】在等待登录阶段，非致命断开不发送 disconnectedEvent
+    // 在等待登录阶段，非致命断开不发送 disconnectedEvent
     const isFatalDisconnect = 
       reason?.includes('浏览器已被关闭') ||
       reason?.includes('浏览器已关闭') ||
@@ -337,8 +326,6 @@ export class AccountSession {
     
     if (this.isWaitingForLogin && !isFatalDisconnect) {
       this.logger.info(`[disconnect][${accountId}] 等待登录阶段，忽略非致命断开: ${reason || '无原因'}`)
-      console.log(`[DisconnectCall] IGNORED: 等待登录阶段非致命断开，不发送 disconnectedEvent`)
-      // 只清理状态，不发送 disconnectedEvent
       this.isWaitingForLogin = false
       return
     }

@@ -86,7 +86,6 @@ function setupIpcHandlers() {
           if (sessionExists) {
             // 浏览器已启动，但登录过程中断（如用户关闭浏览器）
             // 清理 session 但返回 browserLaunched=true，让前端知道浏览器已经弹出过
-            console.log(`[DisconnectedEvent] SOURCE: connection.ts catch block (sessionExists), accountId: ${account.id}, error: ${error instanceof Error ? error.message : 'unknown'}`)
             logger.info(
               `${logPrefix}[connect:browser-was-launched] session still exists, cleaning up and returning browserLaunched=true`,
             )
@@ -108,7 +107,6 @@ function setupIpcHandlers() {
           }
 
           // 浏览器未启动，真正失败
-          console.log(`[DisconnectedEvent] SOURCE: connection.ts catch block (browser not launched), accountId: ${account.id}, error: ${error instanceof Error ? error.message : 'unknown'}`)
           windowManager.send(
             IPC_CHANNELS.tasks.liveControl.disconnectedEvent,
             account.id,

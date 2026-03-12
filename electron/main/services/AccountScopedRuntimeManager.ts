@@ -176,7 +176,6 @@ export class AccountScopedRuntimeManager extends EventEmitter {
     runtime.isDisconnected = true
 
     // 发送 disconnectedEvent
-    console.log(`[DisconnectedEvent] SOURCE: AccountScopedRuntimeManager.detachControl, accountId: ${accountId}, reason: ${reason}`)
     windowManager.send(IPC_CHANNELS.tasks.liveControl.disconnectedEvent, accountId, reason)
     taskRuntimeMonitor.logEventCustom('CONTROL_DETACHED', accountId, { reason })
 
