@@ -72,39 +72,69 @@ function getStoragePath(): string {
 /**
  * [SECURITY-FIX] 获取加密密钥
  * 修复内容：
- * 1. 生产环境必须设置 AUTH_STORAGE_SECRET，否则抛出错误
- * 2. 开发环境允许使用默认密钥，但会发出强烈警告
- * 3. 使用持久化 salt 进行密钥派生
+ * 1. 生产环境优先使用 AUTH_STORAGE_SECRET 环境变量
+ * 2. 如果未设置，自动生成随机密钥并存储到 userData 目录
+ * 3. 开发环境允许使用默认密钥，但会发出警告
+ * 4. 使用持久化 salt 进行密钥派生
  */
 function getSecretKey(): Buffer {
   const secret = process.env.AUTH_STORAGE_SECRET
 
-  // [SECURITY-FIX] 检查是否为生产环境
-  const isProduction = app.isPackaged || process.env.NODE_ENV === 'production'
-
-  if (!secret) {
-    if (isProduction) {
-      // [SECURITY] 生产环境必须设置密钥
-      throw new Error(
-        '[SECURITY] AUTH_STORAGE_SECRET environment variable is required in production. ' +
-          'Token storage cannot be initialized without a secure key.',
-      )
-    }
-
-    // 开发环境允许使用默认密钥，但发出强烈警告
-    console.error(
-      '[CloudAuthStorage] [SECURITY WARNING] AUTH_STORAGE_SECRET not set! ' +
-        'Using development-only default key. NEVER use this in production!',
-    )
-
-    // 开发环境使用设备特定信息 + 固定字符串作为 fallback
-    // 这仍然不安全，但至少比纯硬编码好一些
-    const devFallbackKey = `dev-key-${app.getPath('userData')}-insecure-fallback`
-    return scryptSync(devFallbackKey, 'salt', KEY_LEN)
+  if (secret) {
+    return scryptSync(secret, 'salt', KEY_LEN)
   }
 
-  // 生产环境：使用环境变量密钥
-  return scryptSync(secret, 'salt', KEY_LEN)
+  const isProduction = app.isPackaged || process.env.NODE_ENV === 'production'
+  
+  const keyFilePath = path.join(app.getPath('userData'), 'auth', '.key')
+  
+  try {
+    if (existsSync(keyFilePath)) {
+      const storedKey = readFileSync(keyFilePath, 'utf8').trim()
+      if (storedKey && storedKey.length >= 32) {
+        return scryptSync(storedKey, 'salt', KEY_LEN)
+      }
+    }
+  } catch (err) {
+    console.warn('[CloudAuthStorage] Failed to read stored key:', err)
+  }
+
+  const newKey = randomBytes(32).toString('hex')
+  
+  try {
+    const keyDir = path.dirname(keyFilePath)
+    if (!existsSync(keyDir)) {
+      mkdirSync(keyDir, { recursive: true, mode: 0o755 })
+    }
+    writeFileSync(keyFilePath, newKey, { mode: 0o600 })
+    console.log('[CloudAuthStorage] Generated new encryption key at:', keyFilePath)
+  } catch (err) {
+    if (isProduction) {
+      throw new Error(
+        '[SECURITY] Failed to generate encryption key: ' + (err instanceof Error ? err.message : String(err))
+      )
+    }
+    console.error('[CloudAuthStorage] Failed to store key, using fallback:', err)
+  }
+
+  if (existsSync(keyFilePath)) {
+    return scryptSync(newKey, 'salt', KEY_LEN)
+  }
+
+  if (isProduction) {
+    throw new Error(
+      '[SECURITY] AUTH_STORAGE_SECRET environment variable is required in production. ' +
+        'Token storage cannot be initialized without a secure key.',
+    )
+  }
+
+  console.error(
+    '[CloudAuthStorage] [SECURITY WARNING] AUTH_STORAGE_SECRET not set! ' +
+      'Using development-only default key. NEVER use this in production!',
+  )
+
+  const devFallbackKey = `dev-key-${app.getPath('userData')}-insecure-fallback`
+  return scryptSync(devFallbackKey, 'salt', KEY_LEN)
 }
 
 export interface StoredTokens {
