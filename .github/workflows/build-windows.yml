@@ -70,6 +70,10 @@ jobs:
         env:
           VITE_AUTH_API_BASE_URL: ${{ env.VITE_AUTH_API_BASE_URL }}
 
+      # 5.5 Windows 构建配置验证
+      - name: Validate Windows Build Config
+        run: npm run dist:validate
+
       # 6. 清理构建目录
       - name: Clean dist directory
         run: npm run dist:clean
