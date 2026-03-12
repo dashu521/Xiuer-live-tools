@@ -9,11 +9,30 @@ const logger = createLogger('BrowserSessionManager')
 // 加载 playwright-extra（带 stealth 插件）
 let chromium: typeof import('playwright').chromium | null = null
 try {
-  // 打包后 __dirname = app.asar/dist-electron/main/managers
-  // runtime 目录在 dist-electron/main/runtime，需要 ../runtime
-  const loadPath = path.join(__dirname, '../runtime', 'load-playwright.cjs')
+  const fs = require('fs') as typeof import('fs')
+  
+  // 可能的路径列表（按优先级）
+  const possiblePaths = [
+    path.join(__dirname, 'runtime', 'load-playwright.cjs'),           // __dirname = dist-electron/main
+    path.join(__dirname, '../runtime', 'load-playwright.cjs'),        // __dirname = dist-electron/main/managers
+    path.join(__dirname, 'main/runtime', 'load-playwright.cjs'),      // __dirname = dist-electron
+  ]
+  
+  let loadPath: string | null = null
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      loadPath = p
+      break
+    }
+  }
+  
+  if (!loadPath) {
+    throw new Error(`Cannot find load-playwright.cjs in any of: ${possiblePaths.join(', ')}`)
+  }
+  
   logger.debug(`Loading playwright from: ${loadPath}`)
-  logger.debug(`app.isPackaged: ${app?.isPackaged}, resourcesPath: ${process.resourcesPath}`)
+  logger.debug(`__dirname: ${__dirname}`)
+  
   const loaded = require(loadPath) as { chromium: typeof import('playwright').chromium }
   chromium = loaded.chromium
   if (!chromium) {
