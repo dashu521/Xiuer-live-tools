@@ -80,7 +80,33 @@ function setupIpcHandlers() {
             `${logPrefix}[connect:sync-failed] elapsed=0ms error=${error instanceof Error ? error.message : '未知错误'}`,
           )
 
-          // 检查 session 是否仍然存在（浏览器可能已启动）
+          // 检查错误类型：如果是浏览器启动失败，不应该返回 browserLaunched=true
+          const errorMessage = error instanceof Error ? error.message : ''
+          const isBrowserLaunchError = 
+            errorMessage.includes('playwright') ||
+            errorMessage.includes('无法启动浏览器') ||
+            errorMessage.includes('chromium') ||
+            errorMessage.includes('Chrome')
+
+          if (isBrowserLaunchError) {
+            // 浏览器启动失败，清理 session 并返回失败
+            logger.error(`${logPrefix}[connect:browser-launch-failed] 浏览器启动失败，不返回 browserLaunched=true`)
+            accountManager.closeSession(account.id)
+
+            windowManager.send(
+              IPC_CHANNELS.tasks.liveControl.disconnectedEvent,
+              account.id,
+              errorMessage || '浏览器启动失败',
+            )
+
+            return {
+              success: false,
+              browserLaunched: false,
+              error: errorMessage || '浏览器启动失败',
+            }
+          }
+
+          // 检查 session 是否仍然存在（浏览器可能已启动但登录过程中断）
           const sessionExists = accountManager.accountSessions.has(account.id)
 
           if (sessionExists) {
