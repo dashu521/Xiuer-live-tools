@@ -16,6 +16,7 @@
   "files": [
     "dist/**/*",
     "dist-electron/**/*",
+    "dist-electron/build-config.json",
     "electron/platformConfig.js",
     "public/**/*",
     "package.json",

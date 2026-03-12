@@ -1,19 +1,13 @@
 import { ipcMain } from 'electron'
-import { AUTH_API_BASE } from '../../../src/config/authApiBase'
 import type { LoginCredentials, RegisterData, User } from '../../../src/types/auth'
 import { AuthService } from '../services/AuthService'
 import { clearStoredTokens, getStoredTokens, setStoredTokens } from '../services/CloudAuthStorage'
 import { cloudLogin, cloudMe, cloudRefresh, cloudRegister } from '../services/cloudAuthClient'
 import { cloudUserToSafeUser } from '../services/cloudAuthMappers'
+import { getAuthApiBaseUrl } from '../config/buildTimeConfig'
 
 const getEffectiveBase = (): string => {
-  let base = process.env.AUTH_API_BASE_URL ?? process.env.VITE_AUTH_API_BASE_URL ?? AUTH_API_BASE
-  base = base.replace(/\/$/, '')
-  if (base.includes(':8080')) {
-    base = base.replace(/:8080(\/|$)/, ':8000$1')
-    console.warn('[auth] 认证 API 应在 8000 端口，已自动将 8080 纠正为 8000')
-  }
-  return base
+  return getAuthApiBaseUrl()
 }
 const USE_CLOUD_AUTH = !!getEffectiveBase()
 
@@ -22,7 +16,6 @@ function logAuthAuditConfig(): void {
   const base = getEffectiveBase() || '(none)'
   console.log('[AUTH-AUDIT] startup config:', {
     USE_CLOUD_AUTH,
-    AUTH_API_BASE,
     effectiveBase: base,
   })
 }

@@ -1,3 +1,5 @@
+import { app } from 'electron'
+
 export interface BuildTimeConfig {
   authApiBaseUrl: string
 }
@@ -23,32 +25,39 @@ export function getBuildTimeConfig(): BuildTimeConfig {
 
   if (authApiBaseUrl) {
     cachedConfig = { authApiBaseUrl }
+    console.log('[buildTimeConfig] Using environment variable:', authApiBaseUrl)
     return cachedConfig
   }
 
   try {
-    const fs = require('fs')
-    const path = require('path')
-    let configPath: string
+    const fs = require('fs') as typeof import('fs')
+    const path = require('path') as typeof import('path')
+    
+    let configPath: string | null = null
 
-    if (process.resourcesPath) {
-      configPath = path.join(process.resourcesPath, 'build-config.json')
-    } else if (process.cwd) {
-      configPath = path.join(process.cwd(), 'build-config.json')
+    if (app?.isPackaged && process.resourcesPath) {
+      configPath = path.join(process.resourcesPath, 'app.asar', 'dist-electron', 'build-config.json')
+      if (!fs.existsSync(configPath)) {
+        configPath = path.join(process.resourcesPath, 'build-config.json')
+      }
     } else {
-      return defaultConfig
+      configPath = path.join(process.cwd(), 'dist-electron', 'build-config.json')
     }
 
-    if (fs.existsSync(configPath)) {
+    if (configPath && fs.existsSync(configPath)) {
       const content = fs.readFileSync(configPath, 'utf-8')
       const config = JSON.parse(content) as BuildTimeConfig
       cachedConfig = config
+      console.log('[buildTimeConfig] Loaded from:', configPath, '=>', config.authApiBaseUrl)
       return config
+    } else {
+      console.warn('[buildTimeConfig] Config file not found at:', configPath)
     }
   } catch (err) {
     console.warn('[buildTimeConfig] Failed to load build-config.json:', err)
   }
 
+  console.warn('[buildTimeConfig] Using default config:', defaultConfig.authApiBaseUrl)
   return defaultConfig
 }
 
