@@ -180,6 +180,7 @@ export default defineConfig(({ command }) => {
                 external: [
                   'electron',
                   'playwright',
+                  'playwright-core',
                   'playwright-extra',
                   'playwright-extra-plugin-stealth',
                   'puppeteer-extra-plugin-stealth',
@@ -210,6 +211,7 @@ export default defineConfig(({ command }) => {
               rollupOptions: {
                 external: [
                   'playwright',
+                  'playwright-core',
                   'playwright-extra',
                   'playwright-extra-plugin-stealth',
                   'puppeteer-extra-plugin-stealth',
