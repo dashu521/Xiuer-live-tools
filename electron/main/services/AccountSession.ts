@@ -48,6 +48,7 @@ export class AccountSession {
   // 【修复】添加标记防止重复触发 disconnect
   private isDisconnecting = false
   private isDisconnected = false
+  private isWaitingForLogin = false
 
   constructor(
     platformName: LiveControlPlatform,
@@ -318,6 +319,7 @@ export class AccountSession {
     console.log(`[DisconnectCall] accountId: ${accountId}`)
     console.log(`[DisconnectCall] reason: ${reason || '(undefined -> 默认"与中控台断开连接")'}`)
     console.log(`[DisconnectCall] closeBrowser: ${shouldCloseBrowser}`)
+    console.log(`[DisconnectCall] isWaitingForLogin: ${this.isWaitingForLogin}`)
     console.log(`[DisconnectCall] stack:\n${stack}`)
     console.log(`[DisconnectCall] ================================`)
     
@@ -326,8 +328,24 @@ export class AccountSession {
       return
     }
 
+    // 【修复】在等待登录阶段，非致命断开不发送 disconnectedEvent
+    const isFatalDisconnect = 
+      reason?.includes('浏览器已被关闭') ||
+      reason?.includes('浏览器已关闭') ||
+      reason?.includes('应用退出') ||
+      shouldCloseBrowser
+    
+    if (this.isWaitingForLogin && !isFatalDisconnect) {
+      this.logger.info(`[disconnect][${accountId}] 等待登录阶段，忽略非致命断开: ${reason || '无原因'}`)
+      console.log(`[DisconnectCall] IGNORED: 等待登录阶段非致命断开，不发送 disconnectedEvent`)
+      // 只清理状态，不发送 disconnectedEvent
+      this.isWaitingForLogin = false
+      return
+    }
+
     this.isDisconnecting = true
     this.isDisconnected = true
+    this.isWaitingForLogin = false
     const disconnectReason = reason || '与中控台断开连接'
     
     this.logger.warn(`[disconnect][${accountId}] START disconnect, reason: ${disconnectReason}, closeBrowser: ${shouldCloseBrowser}`)
@@ -346,6 +364,10 @@ export class AccountSession {
     const isConnected = await this.platform.connect(this.browserSession)
     // 未登录，需要等待登录
     if (!isConnected) {
+      // 【修复】标记正在等待登录
+      this.isWaitingForLogin = true
+      this.logger.info(`[ensureAuthenticated] 设置 isWaitingForLogin = true`)
+      
       // 无头模式，需要先关闭原先的无头模式，启用有头模式给用户登录
       if (headless) {
         await this.browserSession.browser.close()
@@ -354,6 +376,11 @@ export class AccountSession {
       }
       // 等待登录
       await this.platform.login(this.browserSession)
+      
+      // 【修复】登录成功，清除等待登录标记
+      this.isWaitingForLogin = false
+      this.logger.info(`[ensureAuthenticated] 设置 isWaitingForLogin = false（登录成功）`)
+      
       // 【修复】登录后 page 可能被替换，需要更新 streamStateDetector
       this.streamStateDetector.updateBrowserSession(this.browserSession)
       // 保存登录状态
