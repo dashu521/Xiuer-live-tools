@@ -74,8 +74,12 @@ export class AccountSession {
     storageState?: string
   }): Promise<{ needsLogin: boolean }> {
     try {
-      // 确保 headless 默认值为 false，避免 undefined 导致浏览器无法弹出
       const headless = config.headless ?? false
+      console.log(`[BrowserPopup] [AccountSession] connect() called`, {
+        accountId: this.account.id,
+        headless,
+        hasStorageState: !!config.storageState,
+      })
       this.logger.info(`[连接] 使用headless模式: ${headless}`)
       let storageState: StorageState
       if (config.storageState) {
@@ -83,10 +87,14 @@ export class AccountSession {
         storageState = JSON.parse(config.storageState)
       }
 
+      console.log(`[BrowserPopup] [AccountSession] Calling browserManager.createSession()`)
       this.browserSession = await browserManager.createSession(headless, storageState)
+      console.log(`[BrowserPopup] [AccountSession] createSession() returned, browser exists: ${!!this.browserSession?.browser}`)
       this.streamStateDetector.updateBrowserSession(this.browserSession)
 
+      console.log(`[BrowserPopup] [AccountSession] Calling ensureAuthenticated()`)
       const needsLogin = await this.ensureAuthenticated(this.browserSession, headless)
+      console.log(`[BrowserPopup] [AccountSession] ensureAuthenticated() returned, needsLogin: ${needsLogin}`)
 
       const state = JSON.stringify(await this.browserSession.context.storageState())
 

@@ -85,23 +85,12 @@ export function setupAuthHandlers() {
 
   // Login
   ipcMain.handle('auth:login', async (_, credentials: LoginCredentials) => {
-    console.log('[auth:login] IPC handler called')
-    console.log('[auth:login] USE_CLOUD_AUTH:', USE_CLOUD_AUTH)
-    console.log('[auth:login] identifier:', credentials.username)
-    
     if (USE_CLOUD_AUTH) {
       const identifier = (credentials.username || '').trim()
       if (!identifier) {
         return { success: false, error: '请输入手机号或邮箱' }
       }
-      console.log('[auth:login] Calling cloudLogin...')
       const res = await cloudLogin(identifier, credentials.password)
-      console.log('[auth:login] cloudLogin result:', {
-        success: res.success,
-        status: res.status,
-        hasToken: !!res.access_token,
-        error: res.error
-      })
       if (!res.success) {
         // 根据后端返回的错误信息判断错误类型
         let errorType: string | undefined

@@ -15,7 +15,7 @@ const SALT_LEN = 32
 const TAG_LEN = 16
 
 let cachedStoragePath: string | null = null
-const _useFallbackPath = false
+let cachedSecretKey: Buffer | null = null
 
 function getPrimaryStoragePath(): string {
   const userData = app.getPath('userData')
@@ -35,7 +35,6 @@ function ensureDir(filePath: string): boolean {
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true, mode: 0o755 })
     }
-    // 测试目录是否可写
     const testFile = path.join(dir, '.write-test')
     writeFileSync(testFile, Buffer.from('test'))
     unlinkSync(testFile)
@@ -46,42 +45,35 @@ function ensureDir(filePath: string): boolean {
 }
 
 function getStoragePath(): string {
-  // 如果已缓存路径，直接返回
   if (cachedStoragePath) {
     return cachedStoragePath
   }
 
-  // 尝试主路径
   const primaryPath = getPrimaryStoragePath()
   if (ensureDir(primaryPath)) {
     cachedStoragePath = primaryPath
     return primaryPath
   }
 
-  // 主路径失败，使用备用路径
   const fallbackPath = getFallbackStoragePath()
   if (ensureDir(fallbackPath)) {
     cachedStoragePath = fallbackPath
     return fallbackPath
   }
 
-  // 如果备用路径也失败，抛出错误
   throw new Error('Unable to find writable storage location')
 }
 
-/**
- * [SECURITY-FIX] 获取加密密钥
- * 修复内容：
- * 1. 生产环境优先使用 AUTH_STORAGE_SECRET 环境变量
- * 2. 如果未设置，自动生成随机密钥并存储到 userData 目录
- * 3. 开发环境允许使用默认密钥，但会发出警告
- * 4. 使用持久化 salt 进行密钥派生
- */
 function getSecretKey(): Buffer {
+  if (cachedSecretKey) {
+    return cachedSecretKey
+  }
+
   const secret = process.env.AUTH_STORAGE_SECRET
 
   if (secret) {
-    return scryptSync(secret, 'salt', KEY_LEN)
+    cachedSecretKey = scryptSync(secret, 'salt', KEY_LEN)
+    return cachedSecretKey
   }
 
   const isProduction = app.isPackaged || process.env.NODE_ENV === 'production'
@@ -92,7 +84,8 @@ function getSecretKey(): Buffer {
     if (existsSync(keyFilePath)) {
       const storedKey = readFileSync(keyFilePath, 'utf8').trim()
       if (storedKey && storedKey.length >= 32) {
-        return scryptSync(storedKey, 'salt', KEY_LEN)
+        cachedSecretKey = scryptSync(storedKey, 'salt', KEY_LEN)
+        return cachedSecretKey
       }
     }
   } catch (err) {
@@ -107,7 +100,6 @@ function getSecretKey(): Buffer {
       mkdirSync(keyDir, { recursive: true, mode: 0o755 })
     }
     writeFileSync(keyFilePath, newKey, { mode: 0o600 })
-    console.log('[CloudAuthStorage] Generated new encryption key at:', keyFilePath)
   } catch (err) {
     if (isProduction) {
       throw new Error(
@@ -118,7 +110,8 @@ function getSecretKey(): Buffer {
   }
 
   if (existsSync(keyFilePath)) {
-    return scryptSync(newKey, 'salt', KEY_LEN)
+    cachedSecretKey = scryptSync(newKey, 'salt', KEY_LEN)
+    return cachedSecretKey
   }
 
   if (isProduction) {
@@ -134,7 +127,8 @@ function getSecretKey(): Buffer {
   )
 
   const devFallbackKey = `dev-key-${app.getPath('userData')}-insecure-fallback`
-  return scryptSync(devFallbackKey, 'salt', KEY_LEN)
+  cachedSecretKey = scryptSync(devFallbackKey, 'salt', KEY_LEN)
+  return cachedSecretKey
 }
 
 export interface StoredTokens {

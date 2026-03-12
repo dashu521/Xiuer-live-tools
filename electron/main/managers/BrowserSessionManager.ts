@@ -53,21 +53,24 @@ class BrowserSessionManager {
   }
 
   private async createBrowser(headless = true) {
+    console.log(`[BrowserPopup] [BrowserSessionManager] createBrowser() called with headless=${headless}`)
     logger.info(`[Browser] createBrowser called with headless=${headless}`)
     if (!chromium) {
       const errorMsg = 'playwright-extra 未能正确加载，无法启动浏览器'
+      console.error(`[BrowserPopup] [BrowserSessionManager] chromium is null or undefined`)
       logger.error(errorMsg)
       throw new Error(errorMsg)
     }
 
-    // 检查 chromium.launch 是否为函数
     if (typeof chromium.launch !== 'function') {
       const errorMsg = `chromium.launch 不是函数，chromium 类型: ${typeof chromium}, 属性: ${Object.keys(chromium).join(', ')}`
+      console.error(`[BrowserPopup] [BrowserSessionManager] chromium.launch is not a function`)
       logger.error(errorMsg)
       throw new Error(errorMsg)
     }
 
     const execPath = await this.getChromePathOrDefault()
+    console.log(`[BrowserPopup] [BrowserSessionManager] Chrome path: ${execPath}`)
     logger.info(`Launching browser: headless=${headless}, execPath=${execPath}`)
 
     // 无头模式下使用减内存启动参数，降低多账号并存时的内存占用
@@ -90,27 +93,28 @@ class BrowserSessionManager {
       : []
 
     try {
+      console.log(`[BrowserPopup] [BrowserSessionManager] Calling chromium.launch()`)
       const browser = await chromium.launch({
         headless,
         executablePath: execPath,
         args,
       })
+      console.log(`[BrowserPopup] [BrowserSessionManager] Browser launched successfully, isConnected: ${browser.isConnected()}`)
       logger.info('Browser launched successfully')
       return browser
     } catch (error) {
-      // 详细记录错误信息
       const errorMessage =
         error instanceof Error
           ? error.message || error.name || error.toString()
           : typeof error === 'string'
             ? error
             : JSON.stringify(error)
+      console.error(`[BrowserPopup] [BrowserSessionManager] chromium.launch() failed: ${errorMessage}`)
       const errorStack = error instanceof Error ? error.stack : undefined
       logger.error(`Failed to launch browser: ${errorMessage}`)
       if (errorStack) {
         logger.error(`Stack trace: ${errorStack}`)
       }
-      // 重新抛出带有详细消息的错误
       throw new Error(`浏览器启动失败: ${errorMessage}`)
     }
   }
@@ -119,12 +123,16 @@ class BrowserSessionManager {
     headless = true,
     storageState?: StorageState,
   ): Promise<BrowserSession> {
+    console.log(`[BrowserPopup] [BrowserSessionManager] createSession() called with headless=${headless}`)
     const browser = await this.createBrowser(headless)
+    console.log(`[BrowserPopup] [BrowserSessionManager] Browser created, creating context...`)
     const context = await browser.newContext({
-      viewport: null, // 显式设置 null，关闭固定视口
+      viewport: null,
       storageState,
     })
+    console.log(`[BrowserPopup] [BrowserSessionManager] Context created, creating page...`)
     const page = await context.newPage()
+    console.log(`[BrowserPopup] [BrowserSessionManager] Page created, session ready`)
     return { browser, context, page }
   }
 }

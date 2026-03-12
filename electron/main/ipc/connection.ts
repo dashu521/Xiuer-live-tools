@@ -19,10 +19,18 @@ function setupIpcHandlers() {
       const logPrefix = traceId ? `[conn][${account.id}][${traceId}]` : `[conn][${account.id}]`
       const logger = createLogger(`@${account.name}`).scope(TASK_NAME)
 
+      console.log(`[BrowserPopup] ${logPrefix} IPC received`, {
+        platform,
+        headless,
+        hasChromePath: !!chromePath,
+        hasStorageState: !!storageState,
+      })
+
       try {
         const currentCount = accountManager.accountSessions.size
         if (currentCount >= MAX_CONCURRENT_ACCOUNTS) {
           const msg = `同时连接账号数已达上限（${MAX_CONCURRENT_ACCOUNTS}），请先断开部分账号再连接`
+          console.warn(`[BrowserPopup] ${logPrefix} MAX_CONCURRENT_ACCOUNTS reached: ${currentCount}`)
           createLogger(TASK_NAME).warn(msg)
           return {
             success: false,
@@ -41,28 +49,33 @@ function setupIpcHandlers() {
 
         const accountSession = accountManager.createSession(platform, account)
 
-        // 打点：连接数 + 主进程内存，便于观测多账号资源占用
+        console.log(`[BrowserPopup] ${logPrefix} Session created, calling connect()`)
+
         const mem = process.memoryUsage()
         createLogger(TASK_NAME).info(
           `${logPrefix}[资源] 当前连接数=${accountManager.accountSessions.size} heapUsed=${Math.round(mem.heapUsed / 1024 / 1024)}MB rss=${Math.round(mem.rss / 1024 / 1024)}MB`,
         )
 
-        // 等待异步连接完成，确保真正成功后才返回
         createLogger(TASK_NAME).info(`${logPrefix}[connect:launching] headless 参数：${headless}`)
         try {
+          console.log(`[BrowserPopup] ${logPrefix} Calling accountSession.connect() with headless=${headless}`)
+          
           const connectResult = await accountSession.connect({
             headless,
             storageState,
           })
 
+          console.log(`[BrowserPopup] ${logPrefix} connect() returned`, {
+            needsLogin: connectResult.needsLogin,
+          })
           logger.info(`${logPrefix}[connect:async-started] returning browserLaunched=true`)
-          // 如果返回了 needsLogin，说明浏览器已启动但需要用户登录
           return {
             success: true,
             browserLaunched: true,
             needsLogin: connectResult.needsLogin,
           }
         } catch (error) {
+          console.error(`[BrowserPopup] ${logPrefix} connect() threw error:`, error instanceof Error ? error.message : error)
           logger.error(
             `${logPrefix}[connect:sync-failed] elapsed=0ms error=${error instanceof Error ? error.message : '未知错误'}`,
           )
