@@ -309,9 +309,17 @@ export class AccountSession {
    * @param options.closeBrowser 是否关闭浏览器（默认 false，只有浏览器实际关闭时才传 true）
    */
   disconnect(reason?: string, options?: { closeBrowser?: boolean }) {
-    // 【修复】默认不关闭浏览器，只有明确要求时才关闭
     const shouldCloseBrowser = options?.closeBrowser ?? false
     const accountId = this.account.id
+    
+    // 【诊断日志】打印调用栈，确认 disconnect 被谁调用
+    const stack = new Error().stack?.split('\n').slice(2, 6).join('\n') || 'no stack'
+    console.log(`[DisconnectCall] ================================`)
+    console.log(`[DisconnectCall] accountId: ${accountId}`)
+    console.log(`[DisconnectCall] reason: ${reason || '(undefined -> 默认"与中控台断开连接")'}`)
+    console.log(`[DisconnectCall] closeBrowser: ${shouldCloseBrowser}`)
+    console.log(`[DisconnectCall] stack:\n${stack}`)
+    console.log(`[DisconnectCall] ================================`)
     
     if (this.isDisconnecting || this.isDisconnected) {
       this.logger.info(`[disconnect] 账号 ${accountId} 已经在断开中或已断开，跳过`)
