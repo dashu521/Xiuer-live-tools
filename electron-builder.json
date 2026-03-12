@@ -126,7 +126,8 @@
     ],
     "icon": "public/icon.png",
     "artifactName": "Xiuer-Live-Assistant_${version}_win-x64.${ext}",
-    "signAndEditExecutable": false
+    "signAndEditExecutable": false,
+    "publisherName": "秀儿直播助手"
   },
   "nsis": {
     "oneClick": false,
