@@ -6,10 +6,7 @@
   "asarUnpack": [
     "node_modules/better-sqlite3/**",
     "node_modules/playwright/**",
-    "node_modules/playwright-core/**",
-    "node_modules/playwright-extra/**",
-    "node_modules/playwright-extra-plugin-stealth/**",
-    "node_modules/puppeteer-extra-plugin-stealth/**"
+    "node_modules/playwright-core/**"
   ],
   "directories": {
     "app": ".",
@@ -19,8 +16,8 @@
   "files": [
     "dist/**/*",
     "dist-electron/**/*",
-    "dist-electron/main/runtime/**",
     "electron/platformConfig.js",
+    "public/**/*",
     "package.json",
     "!**/*.map",
     "!**/*.d.ts",
@@ -102,19 +99,25 @@
     "!**/*.sqlite3"
   ],
   "afterPack": "scripts/electron-after-pack.js",
+  "afterSign": "scripts/notarize.cjs",
   "extraMetadata": {
     "main": "dist-electron/main/index.js"
   },
   "electronLanguages": ["zh-CN", "en-US"],
   "mac": {
-    "artifactName": "秀儿直播助手_${version}_macos_${arch}.${ext}",
+    "artifactName": "Xiuer-Live-Assistant_${version}_macos_${arch}.${ext}",
     "target": [
       {
         "target": "dmg",
         "arch": ["x64", "arm64"]
       }
     ],
-    "icon": "public/icon.png"
+    "icon": "public/icon.png",
+    "hardenedRuntime": true,
+    "gatekeeperAssess": false,
+    "entitlements": "electron/entitlements.mac.plist",
+    "entitlementsInherit": "electron/entitlements.mac.plist",
+    "category": "public.app-category.utilities"
   },
   "win": {
     "target": [
@@ -122,14 +125,22 @@
       { "target": "zip", "arch": ["x64"] }
     ],
     "icon": "public/icon.png",
-    "artifactName": "Xiuer-Live-Assistant_${version}_win-x64.${ext}"
+    "artifactName": "Xiuer-Live-Assistant_${version}_win-x64.${ext}",
+    "signAndEditExecutable": false,
+    "signDlls": false
   },
   "nsis": {
     "oneClick": false,
     "perMachine": false,
     "allowToChangeInstallationDirectory": true,
     "deleteAppDataOnUninstall": false,
-    "differentialPackage": true
+    "differentialPackage": true,
+    "installerIcon": "public/icon.png",
+    "uninstallerIcon": "public/icon.png",
+    "license": "LICENSE",
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "秀儿直播助手"
   },
   "publish": {
     "provider": "generic",

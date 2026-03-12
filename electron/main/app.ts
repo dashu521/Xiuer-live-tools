@@ -19,39 +19,70 @@ import { accountManager } from './managers/AccountManager'
 import { updateManager } from './managers/UpdateManager'
 import windowManager from './windowManager'
 import './ipc'
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createLogger, setAppQuitting } from './logger'
 
-// const _require = createRequire(import.meta.url)
+// ==================== 启动期日志系统 ====================
+const STARTUP_LOG_DIR = path.join(app.getPath('userData'), 'logs')
+const STARTUP_LOG_PATH = path.join(STARTUP_LOG_DIR, 'startup.log')
+const MAIN_LOG_PATH = path.join(STARTUP_LOG_DIR, 'main.log')
 
-// The built directory structure
-//
-// ├─┬ dist-electron
-// │ ├─┬ main
-// │ │ └── index.js    > Electron-Main
-// │ └─┬ preload
-// │   └── index.mjs   > Preload-Scripts
-// ├─┬ dist
-// │ └── index.html    > Electron-Renderer
-//
+function ensureLogDir() {
+  try {
+    if (!existsSync(STARTUP_LOG_DIR)) {
+      mkdirSync(STARTUP_LOG_DIR, { recursive: true })
+    }
+  } catch (e) {
+    // 忽略错误
+  }
+}
+
+function writeStartupLog(message: string) {
+  ensureLogDir()
+  const timestamp = new Date().toISOString()
+  const logLine = `[${timestamp}] [STARTUP] ${message}\n`
+  try {
+    appendFileSync(STARTUP_LOG_PATH, logLine)
+    appendFileSync(MAIN_LOG_PATH, logLine)
+  } catch (e) {
+    try {
+      const tempLog = path.join(process.env.TEMP || os.tmpdir(), 'xiuer-startup.log')
+      appendFileSync(tempLog, logLine)
+    } catch {
+      // 忽略
+    }
+  }
+  console.log(`[STARTUP] ${message}`)
+}
+
+function writeMainLog(level: string, message: string) {
+  ensureLogDir()
+  const timestamp = new Date().toISOString()
+  const logLine = `[${timestamp}] [${level}] ${message}\n`
+  try {
+    appendFileSync(MAIN_LOG_PATH, logLine)
+  } catch (e) {
+    // 忽略
+  }
+}
+
+writeStartupLog('========== 应用启动 ==========')
+writeStartupLog(`Node.js 版本: ${process.versions.node}`)
+writeStartupLog(`Electron 版本: ${process.versions.electron}`)
+writeStartupLog(`平台: ${process.platform} ${process.arch}`)
+writeStartupLog(`是否打包: ${app.isPackaged}`)
+writeStartupLog(`应用路径: ${app.getAppPath()}`)
+writeStartupLog(`用户数据目录: ${app.getPath('userData')}`)
+writeStartupLog(`资源目录: ${process.resourcesPath || 'N/A'}`)
+writeStartupLog(`当前工作目录: ${process.cwd()}`)
+writeStartupLog(`命令行参数: ${process.argv.join(' ')}`)
 
 function createBoxedString(lines: string[]) {
-  // 1. 计算最长的一行文字长度
   const maxLength = Math.max(...lines.map(line => line.length))
-
-  // 2. 定义边框样式
-  // 顶部和底部边框 (例如: +----------------+)
   const horizontalLine = `+${'-'.repeat(maxLength + 2)}+`
-
-  // 3. 生成中间的内容行
   const content = lines
-    .map(line => {
-      // 使用 padEnd 补齐空格，使得右边框对齐
-      return `| ${line.padEnd(maxLength)} |`
-    })
+    .map(line => `| ${line.padEnd(maxLength)} |`)
     .join('\n')
-
-  // 4. 拼接结果
   return `\n${horizontalLine}\n${content}\n${horizontalLine}`
 }
 
@@ -72,44 +103,83 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 process.env.APP_ROOT = path.join(__dirname, '../..')
 
-export const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron')
-export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
+// 资源路径配置
+export const MAIN_DIST = app.isPackaged
+  ? path.join(process.resourcesPath, 'app.asar.unpacked', 'dist-electron')
+  : path.join(process.env.APP_ROOT, 'dist-electron')
+
+export const RENDERER_DIST = app.isPackaged
+  ? path.join(process.resourcesPath, 'app.asar.unpacked', 'dist')
+  : path.join(process.env.APP_ROOT, 'dist')
+
 export const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL
 
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
   ? path.join(process.env.APP_ROOT, 'public')
   : app.isPackaged
-    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'dist')
-    : RENDERER_DIST
+    ? path.join(process.resourcesPath, 'app.asar.unpacked', 'public')
+    : path.join(process.env.APP_ROOT, 'public')
 
 // 仅在开发模式下启用远程调试端口
 if (!app.isPackaged) {
   app.commandLine.appendSwitch('remote-debugging-port', '9222')
 }
 
-// Disable GPU Acceleration for Windows 7
+// Windows 7 禁用 GPU 加速
 if (os.release().startsWith('6.1')) app.disableHardwareAcceleration()
 
-// Set application name for Windows 10+ notifications
+// Windows 10+ 通知设置
 if (process.platform === 'win32') app.setAppUserModelId(app.getName())
 
-// 开发模式下不启用单实例锁，确保每次 npm run dev 都能弹出新窗口（避免旧实例在托盘导致看不到窗口）
-if (app.isPackaged && !app.requestSingleInstanceLock()) {
+// ==================== 单实例锁 ====================
+const gotTheLock = app.requestSingleInstanceLock()
+writeStartupLog(`单实例锁获取结果: ${gotTheLock}`)
+
+if (!gotTheLock) {
+  writeStartupLog('未能获取单实例锁，退出应用')
   app.quit()
   process.exit(0)
 }
 
+app.on('second-instance', (_event, commandLine, workingDirectory) => {
+  writeStartupLog(`second-instance 触发，命令行: ${commandLine.join(' ')}`)
+  writeMainLog('INFO', 'second-instance: 检测到第二个实例启动，唤醒主窗口')
+
+  if (win) {
+    writeStartupLog('second-instance: 主窗口存在，准备显示')
+    if (win.isMinimized()) {
+      win.restore()
+    }
+    if (!win.isVisible()) {
+      win.show()
+    }
+    win.setSkipTaskbar(false)
+    win.focus()
+    win.moveTop()
+    writeStartupLog('second-instance: 主窗口已显示并聚焦')
+  } else {
+    writeStartupLog('second-instance: 主窗口不存在，创建新窗口')
+    writeMainLog('WARN', 'second-instance: mainWindow not created yet, creating new window')
+    createWindow()
+  }
+})
+
 const XIUER_DEBUG_PATH = path.join(process.env.TEMP ?? os.tmpdir(), 'xiuer-window-debug.txt')
 function logWindowDebug(phase: string, w: BrowserWindow | null = win): void {
   const ts = new Date().toISOString()
-  // 安全检查：确保窗口存在且未被销毁
   const isVisible = w && !w.isDestroyed() ? w.isVisible() : false
   const isMinimized = w && !w.isDestroyed() ? w.isMinimized() : false
-  const line = `${ts} pid=${process.pid} ${phase} mainWindow=${!!w} visible=${isVisible} minimized=${isMinimized}\n`
-  appendFileSync(XIUER_DEBUG_PATH, line)
+  const isFocused = w && !w.isDestroyed() ? w.isFocused() : false
+  const line = `${ts} pid=${process.pid} ${phase} mainWindow=${!!w} visible=${isVisible} minimized=${isMinimized} focused=${isFocused}\n`
+  try {
+    appendFileSync(XIUER_DEBUG_PATH, line)
+  } catch (e) {
+    // 忽略
+  }
+  writeStartupLog(`[WindowDebug] ${phase} - visible=${isVisible}, minimized=${isMinimized}, focused=${isFocused}`)
 }
 
-/** 开发模式：等待 localhost:5173 可连接再 loadURL，避免 ERR_CONNECTION_REFUSED 白屏 */
+/** 开发模式：等待开发服务器可连接 */
 function waitForDevServer(
   url: string,
   maxWaitMs = 60000,
@@ -123,7 +193,7 @@ function waitForDevServer(
     host = u.hostname || host
     port = u.port ? Number.parseInt(u.port, 10) : 5173
   } catch {
-    /* 用默认 */
+    // 用默认
   }
   return new Promise(resolve => {
     const start = Date.now()
@@ -156,14 +226,41 @@ function waitForDevServer(
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
-// vite-plugin-electron outputs preload as .js file
-const preload = path.join(__dirname, '../preload/index.js')
-const indexHtml = path.join(RENDERER_DIST, 'index.html')
+let isFirstLaunch = true
 
-// 持久化配置文件的路径
+// ==================== Preload 路径解析 ====================
+const possiblePreloadPaths = [
+  path.join(__dirname, '../preload/index.js'),
+  path.join(__dirname, '../preload/index.mjs'),
+  path.join(MAIN_DIST, 'preload/index.js'),
+  path.join(MAIN_DIST, 'preload/index.mjs'),
+  path.join(process.resourcesPath || '', 'app.asar.unpacked/dist-electron/preload/index.js'),
+  path.join(process.resourcesPath || '', 'app/dist-electron/preload/index.js'),
+]
+
+let preload = ''
+for (const p of possiblePreloadPaths) {
+  if (existsSync(p)) {
+    preload = p
+    writeStartupLog(`找到 preload: ${p}`)
+    break
+  }
+}
+
+if (!preload) {
+  writeStartupLog('警告: 未找到 preload 文件，将尝试使用默认路径')
+  preload = possiblePreloadPaths[0]
+}
+
+const indexHtml = path.join(RENDERER_DIST, 'index.html')
+writeStartupLog(`index.html 路径: ${indexHtml}`)
+writeStartupLog(`index.html 存在: ${existsSync(indexHtml)}`)
+writeStartupLog(`RENDERER_DIST: ${RENDERER_DIST}`)
+writeStartupLog(`MAIN_DIST: ${MAIN_DIST}`)
+
+// 持久化配置文件路径
 const getConfigPath = () => path.join(app.getPath('userData'), 'app-config.json')
 
-// 读取配置
 function getConfig(): { hideToTrayTipDismissed: boolean } {
   const configPath = getConfigPath()
   if (existsSync(configPath)) {
@@ -177,7 +274,6 @@ function getConfig(): { hideToTrayTipDismissed: boolean } {
   return { hideToTrayTipDismissed: false }
 }
 
-// 写入配置
 function setConfig(config: { hideToTrayTipDismissed: boolean }) {
   const configPath = getConfigPath()
   try {
@@ -188,23 +284,36 @@ function setConfig(config: { hideToTrayTipDismissed: boolean }) {
 }
 
 async function createWindow() {
+  writeStartupLog('========== createWindow 开始 ==========')
+  logWindowDebug('createWindow called')
+
   const isDev = !!VITE_DEV_SERVER_URL
-  // 未打包（npm run dev）时一律视为开发环境，保证窗口一定会显示，不依赖 VITE_DEV_SERVER_URL 是否注入
-  const showUnpackaged = !app.isPackaged
-  // Windows 打包版优先可见，避免“进程在跑但没有窗口”的误判
-  const forceShowOnWindows = app.isPackaged && process.platform === 'win32'
-  const showOnStart = isDev || showUnpackaged || forceShowOnWindows
+  writeStartupLog(`VITE_DEV_SERVER_URL: ${VITE_DEV_SERVER_URL || 'N/A'}`)
+  writeStartupLog(`isDev: ${isDev}`)
+
+  // 首次启动强制显示窗口
+  const forceShow = isFirstLaunch || !app.isPackaged || process.platform === 'win32'
+  writeStartupLog(`isFirstLaunch: ${isFirstLaunch}`)
+  writeStartupLog(`forceShow: ${forceShow}`)
+  writeStartupLog(`preload 路径: ${preload}`)
+  writeStartupLog(`preload 存在: ${existsSync(preload)}`)
+
   try {
-    logWindowDebug('createWindow called')
+    const iconPath = path.join(process.env.VITE_PUBLIC ?? '', 'favicon.png')
+    writeStartupLog(`图标路径: ${iconPath}`)
+    writeStartupLog(`图标存在: ${existsSync(iconPath)}`)
+
+    writeStartupLog('正在创建 BrowserWindow...')
+
     win = new BrowserWindow({
       title: `秀儿直播助手 - v${app.getVersion()}`,
       width: 1280,
       height: 800,
-      x: showOnStart ? 80 : undefined,
-      y: showOnStart ? 60 : undefined,
-      show: showOnStart,
+      x: 80,
+      y: 60,
+      show: forceShow,
       autoHideMenuBar: app.isPackaged,
-      icon: path.join(process.env.VITE_PUBLIC ?? '', 'favicon.png'),
+      icon: existsSync(iconPath) ? iconPath : undefined,
       webPreferences: {
         preload,
         nodeIntegration: false,
@@ -213,50 +322,105 @@ async function createWindow() {
       },
     })
 
+    writeStartupLog('BrowserWindow 创建成功')
+    writeMainLog('INFO', 'BrowserWindow created successfully')
+    logWindowDebug('BrowserWindow created')
+
+    // 窗口事件监听
     win.once('ready-to-show', () => {
+      writeStartupLog('事件: ready-to-show 触发')
       logWindowDebug('ready-to-show')
-      win?.show()
-      if (isDev || showUnpackaged) win?.focus()
+
+      if (win && !win.isDestroyed()) {
+        win.show()
+        writeStartupLog('窗口已显示 (ready-to-show)')
+
+        if (isDev || isFirstLaunch) {
+          win.focus()
+          writeStartupLog('窗口已聚焦')
+        }
+
+        if (isFirstLaunch) {
+          isFirstLaunch = false
+          writeStartupLog('首次启动标记已清除')
+        }
+      }
+    })
+
+    win.on('show', () => {
+      writeStartupLog('事件: show 触发')
+      logWindowDebug('show')
+      writeMainLog('INFO', 'Window shown')
+    })
+
+    win.on('focus', () => {
+      writeStartupLog('事件: focus 触发')
+      logWindowDebug('focus')
     })
 
     win.on('closed', () => {
+      writeStartupLog('事件: closed 触发')
       logWindowDebug('window closed')
-      // 清理窗口引用前检查是否已销毁
+
       if (win?.isDestroyed()) {
         win = null
+        writeStartupLog('窗口引用已清理')
       }
+
       // Windows 打包版兜底：若窗口被异常关闭且应用未退出，自动重建主窗口
       if (app.isPackaged && process.platform === 'win32' && !isQuitting) {
+        writeStartupLog('检测到窗口异常关闭，准备重建窗口...')
         setTimeout(() => {
           if (!win && !isQuitting) {
             logWindowDebug('window closed recovery: recreate window')
+            writeMainLog('WARN', 'Window closed unexpectedly, recreating...')
             void createWindow()
           }
         }, 1000)
       }
     })
 
+    win.on('unresponsive', () => {
+      writeStartupLog('事件: unresponsive 触发（窗口无响应）')
+      writeMainLog('ERROR', 'Window became unresponsive')
+    })
+
+    win.on('responsive', () => {
+      writeStartupLog('事件: responsive 触发（窗口恢复响应）')
+      writeMainLog('INFO', 'Window became responsive again')
+    })
+
+    // 确保任务栏显示
     win.setSkipTaskbar(false)
     windowManager.setMainWindow(win)
+    writeStartupLog('窗口已设置到 WindowManager')
 
-    // 仅开发环境：从 Vite 开发服务器加载（localhost:5173）。打包后 VITE_DEV_SERVER_URL 未注入，走 else 分支 loadFile，不会出现“连不上 5173”的白屏。
+    // 页面加载逻辑
     const DEV_LOAD_RETRY_MAX = 5
     const DEV_LOAD_RETRY_DELAY_MS = 6000
     let devLoadRetryCount = 0
 
     if (VITE_DEV_SERVER_URL) {
-      console.log('[main] 等待 Vite 开发服务器 (localhost:5173)…')
+      writeStartupLog('开发模式：从 Vite 开发服务器加载')
+      console.log('[main] 等待 Vite 开发服务器 (localhost:5173)...')
       await waitForDevServer(VITE_DEV_SERVER_URL).catch(() => {})
       console.log('[main] 正在加载页面:', VITE_DEV_SERVER_URL)
-      win.loadURL(VITE_DEV_SERVER_URL).catch(err => {
-        createLogger('window').error('loadURL failed:', err)
+      writeStartupLog(`正在加载页面: ${VITE_DEV_SERVER_URL}`)
+
+      win.loadURL(VITE_DEV_SERVER_URL).then(() => {
+        writeStartupLog('loadURL 成功')
+      }).catch(err => {
+        writeStartupLog(`loadURL 失败: ${err.message}`)
+        writeMainLog('ERROR', `loadURL failed: ${err.message}`)
         logWindowDebug('loadURL failed')
       })
 
-      // 开发环境：首次加载失败（ERR_CONNECTION_REFUSED）时自动重试，减少“关进程/删 dist/重启”的困扰
+      // 开发环境：首次加载失败时自动重试
       win.webContents.on(
         'did-fail-load',
         (_, errorCode, errorDescription, validatedURL, isMainFrame) => {
+          writeStartupLog(`did-fail-load: errorCode=${errorCode}, errorDescription=${errorDescription}`)
+
           if (
             !VITE_DEV_SERVER_URL ||
             !isMainFrame ||
@@ -267,23 +431,14 @@ async function createWindow() {
             return
           }
           if (devLoadRetryCount >= DEV_LOAD_RETRY_MAX) {
-            console.log(
-              '[main] 开发页面加载已重试',
-              DEV_LOAD_RETRY_MAX,
-              '次，请检查 Vite 是否已启动或执行 npm run dev:force',
-            )
+            console.log('[main] 开发页面加载已重试', DEV_LOAD_RETRY_MAX, '次，请检查 Vite 是否已启动')
+            writeStartupLog(`开发页面加载已重试 ${DEV_LOAD_RETRY_MAX} 次，放弃重试`)
             return
           }
           devLoadRetryCount += 1
-          console.log(
-            '[main] 开发页面加载失败，',
-            DEV_LOAD_RETRY_DELAY_MS / 1000,
-            '秒后重试 (',
-            devLoadRetryCount,
-            '/',
-            DEV_LOAD_RETRY_MAX,
-            ')',
-          )
+          console.log('[main] 开发页面加载失败，', DEV_LOAD_RETRY_DELAY_MS / 1000, '秒后重试')
+          writeStartupLog(`开发页面加载失败，${DEV_LOAD_RETRY_DELAY_MS / 1000}秒后重试 (${devLoadRetryCount}/${DEV_LOAD_RETRY_MAX})`)
+
           setTimeout(() => {
             if (
               win &&
@@ -301,15 +456,46 @@ async function createWindow() {
 
       win.webContents.openDevTools()
     } else {
-      win.loadFile(indexHtml).catch(err => {
-        createLogger('window').error('loadFile failed:', err)
+      // 生产环境：从本地文件加载
+      writeStartupLog('生产模式：从本地文件加载')
+      writeStartupLog(`正在加载文件: ${indexHtml}`)
+
+      // 检查文件是否存在
+      if (!existsSync(indexHtml)) {
+        const errorMsg = `index.html 不存在: ${indexHtml}`
+        writeStartupLog(`错误: ${errorMsg}`)
+        writeMainLog('ERROR', errorMsg)
+
+        // 尝试列出目录内容以便诊断
+        try {
+          const parentDir = path.dirname(indexHtml)
+          if (existsSync(parentDir)) {
+            const files = require('fs').readdirSync(parentDir)
+            writeStartupLog(`目录 ${parentDir} 内容: ${files.join(', ')}`)
+          } else {
+            writeStartupLog(`父目录不存在: ${parentDir}`)
+          }
+        } catch (e) {
+          writeStartupLog(`无法列出目录: ${e}`)
+        }
+      }
+
+      win.loadFile(indexHtml).then(() => {
+        writeStartupLog('loadFile 成功')
+      }).catch(err => {
+        writeStartupLog(`loadFile 失败: ${err.message}`)
+        writeMainLog('ERROR', `loadFile failed: ${err.message}`)
         logWindowDebug('loadFile failed')
-        // 打包版主页面加载失败时重试，减少“启动无窗口”概率
+
+        // 打包版主页面加载失败时重试
         if (app.isPackaged && process.platform === 'win32') {
+          writeStartupLog('准备重试加载...')
           setTimeout(() => {
             if (win && !win.isDestroyed()) {
+              writeStartupLog('重试加载文件...')
               win.loadFile(indexHtml).catch(retryErr => {
-                createLogger('window').error('loadFile retry failed:', retryErr)
+                writeStartupLog(`重试失败: ${retryErr.message}`)
+                writeMainLog('ERROR', `loadFile retry failed: ${retryErr.message}`)
               })
             }
           }, 1200)
@@ -317,24 +503,45 @@ async function createWindow() {
       })
     }
 
+    // webContents 事件监听
+    win.webContents.on('did-finish-load', async () => {
+      writeStartupLog('事件: did-finish-load 触发（页面加载完成）')
+      writeMainLog('INFO', 'Page finished loading')
+
+      if (!isQuitting) {
+        await updateManager.silentCheckForUpdate()
+      }
+    })
+
+    win.webContents.on('did-fail-load', (_, errorCode, errorDescription, validatedURL) => {
+      writeStartupLog(`事件: did-fail-load 触发 - errorCode=${errorCode}, errorDescription=${errorDescription}`)
+      writeMainLog('ERROR', `Page failed to load: ${errorDescription} (${errorCode}) at ${validatedURL}`)
+    })
+
     win.webContents.on('render-process-gone', (_, details) => {
-      createLogger('window').error('render-process-gone:', details)
+      writeStartupLog(`事件: render-process-gone 触发 - reason=${details.reason}, exitCode=${details.exitCode}`)
+      writeMainLog('ERROR', `render-process-gone: ${JSON.stringify(details)}`)
       logWindowDebug(`render-process-gone: ${details.reason}`)
+
       if (app.isPackaged && process.platform === 'win32' && !isQuitting) {
         setTimeout(() => {
           if (!win || win.isDestroyed()) {
             logWindowDebug('render-process-gone recovery: recreate window')
+            writeMainLog('WARN', 'Recreating window after render process crash')
             void createWindow()
           }
         }, 1000)
       }
     })
 
-    win.webContents.on('did-finish-load', async () => {
-      // 应用退出时不发起更新检查
-      if (!isQuitting) {
-        await updateManager.silentCheckForUpdate()
-      }
+    win.webContents.on('crashed', (_event, killed) => {
+      writeStartupLog(`事件: crashed 触发 - killed=${killed}`)
+      writeMainLog('ERROR', `Renderer crashed, killed=${killed}`)
+    })
+
+    win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
+      const levelStr = ['debug', 'info', 'warning', 'error'][level] || 'unknown'
+      writeMainLog('RENDERER', `[${levelStr}] ${message} (${sourceId}:${line})`)
     })
 
     win.webContents.setWindowOpenHandler(({ url }) => {
@@ -342,101 +549,79 @@ async function createWindow() {
       return { action: 'deny' }
     })
 
-    // 未打包时：300ms 与 1500ms 两次强制显示并置前，避免 ready-to-show 未触发导致窗口一直不出现
-    if (showUnpackaged) {
-      const forceShow = () => {
-        if (win && !win.isDestroyed()) {
-          if (!win.isVisible()) {
-            logWindowDebug('fallback show')
-            win.show()
-          }
-          win.focus()
-          win.moveTop()
-        }
-      }
-      setTimeout(forceShow, 300)
-      setTimeout(forceShow, 1500)
-    } else {
-      setTimeout(() => {
-        if (win && !win.isDestroyed() && !win.isVisible()) {
-          logWindowDebug('fallback show')
-          win.show()
-          win.focus()
-        }
-      }, 1500)
+    // 关闭窗口事件处理
+    win.on('close', e => {
+      writeStartupLog(`事件: close 触发 - isQuitting=${isQuitting}, isFirstLaunch=${isFirstLaunch}`)
 
-      // 打包版启动兜底：若异常情况下没有任何可见窗口，强制恢复窗口
-      setTimeout(() => {
-        const windows = BrowserWindow.getAllWindows()
-        const visible = windows.some(w => !w.isDestroyed() && w.isVisible())
-        if (!visible) {
-          logWindowDebug('startup visibility watchdog: no visible window, recovering')
+      if (win && win.isDestroyed()) {
+        return
+      }
+
+      if (isQuitting) {
+        writeStartupLog('应用正在退出，允许关闭窗口')
+        return
+      }
+
+      // 首次启动时，不允许隐藏到托盘
+      if (isFirstLaunch) {
+        writeStartupLog('首次启动，不允许隐藏到托盘，强制保持窗口显示')
+        e.preventDefault()
+        win?.show()
+        win?.focus()
+        return
+      }
+
+      // 非首次启动：拦截关闭，改为隐藏到托盘
+      e.preventDefault()
+      writeStartupLog('拦截关闭事件，改为隐藏到托盘')
+
+      const config = getConfig()
+      const shouldShowTip = !config.hideToTrayTipDismissed
+
+      if (win && !win.isDestroyed()) {
+        win.hide()
+        win.setSkipTaskbar(true)
+        writeStartupLog('窗口已隐藏到托盘')
+      }
+
+      if (shouldShowTip && Notification.isSupported()) {
+        const notification = new Notification({
+          title: '已最小化到托盘',
+          body: '应用仍在后台运行，可从托盘图标打开。可在设置中关闭此提示。',
+          icon: path.join(process.env.VITE_PUBLIC, 'favicon.png'),
+          silent: false,
+        })
+
+        notification.on('click', () => {
           if (win && !win.isDestroyed()) {
             win.show()
             win.setSkipTaskbar(false)
             win.focus()
-          } else {
-            createWindow()
           }
-        }
-      }, 5000)
-    }
+        })
 
-    // 仅在窗口创建成功后注册：拦截关闭事件，改为隐藏到托盘
-    win.on('close', e => {
-      // 安全检查：确保窗口未被销毁
-      if (win && win.isDestroyed()) {
-        return
-      }
-      
-      if (!isQuitting) {
-        e.preventDefault()
-
-        // 检查是否需要显示首次提示（在隐藏前检查，确保能立即显示）
-        const config = getConfig()
-        const shouldShowTip = !config.hideToTrayTipDismissed
-
-        // 隐藏窗口并设置不在任务栏显示
-        if (win && !win.isDestroyed()) {
-          win.hide()
-          win.setSkipTaskbar(true)
-        }
-
-        // 立即显示系统通知（不依赖渲染进程）
-        if (shouldShowTip && Notification.isSupported()) {
-          const notification = new Notification({
-            title: '已最小化到托盘',
-            body: '应用仍在后台运行，可从托盘图标打开。可在设置中关闭此提示。',
-            icon: path.join(process.env.VITE_PUBLIC, 'favicon.png'),
-            silent: false,
-          })
-
-          notification.on('click', () => {
-            // 点击通知时显示主窗口
-            if (win && !win.isDestroyed()) {
-              win.show()
-              win.setSkipTaskbar(false)
-              win.focus()
-            }
-          })
-
-          notification.show()
-        }
+        notification.show()
       }
     })
+
+    writeStartupLog('========== createWindow 完成 ==========')
   } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err)
+    writeStartupLog(`createWindow 错误: ${errorMsg}`)
+    writeMainLog('ERROR', `createWindow failed: ${errorMsg}`)
     logWindowDebug('createWindow error')
-    createLogger('window').error('createWindow failed:', err)
-    dialog.showErrorBox('窗口创建失败', err instanceof Error ? err.message : String(err))
+
+    if (!app.isPackaged) {
+      dialog.showErrorBox('窗口创建失败', errorMsg)
+    }
   }
 }
 
-/** 有连接账号时，每 60 秒打点主进程内存，便于观测多账号资源占用 */
+/** 内存日志间隔 */
 const MEMORY_LOG_INTERVAL_MS = 60_000
 let memoryLogInterval: NodeJS.Timeout | null = null
 
 function startMemoryLogInterval() {
-  // 避免重复启动
   if (memoryLogInterval) return
 
   memoryLogInterval = setInterval(() => {
@@ -456,93 +641,107 @@ function stopMemoryLogInterval() {
   }
 }
 
+writeStartupLog('before whenReady')
 logWindowDebug('before whenReady')
+
 app
   .whenReady()
-  .then(logStartupInfo)
   .then(() => {
+    writeStartupLog('========== app.whenReady 触发 ==========')
+    logStartupInfo()
     logWindowDebug('after whenReady')
+
+    writeStartupLog('开始创建窗口...')
     createWindow()
+
+    writeStartupLog('开始创建托盘...')
     createTray()
+
+    writeStartupLog('启动内存日志...')
     startMemoryLogInterval()
+
+    writeStartupLog('========== 应用启动完成 ==========')
+  })
+  .catch(err => {
+    const errorMsg = err instanceof Error ? err.message : String(err)
+    writeStartupLog(`app.whenReady 错误: ${errorMsg}`)
+    writeMainLog('ERROR', `app.whenReady failed: ${errorMsg}`)
+    console.error('app.whenReady failed:', err)
   })
 
 app.on('window-all-closed', async () => {
-  // Windows/Linux: 不退出应用，保持托盘运行
-  // macOS: 保持默认行为（dock 图标仍存在）
+  writeStartupLog(`事件: window-all-closed 触发 - platform=${process.platform}`)
+
   if (process.platform === 'darwin') {
     // macOS 保持默认行为
   } else {
     // Windows/Linux: 不退出，应用继续在后台运行（托盘）
-    // 只有通过托盘菜单"退出程序"才会真正退出
+    writeStartupLog('Windows/Linux: 保持后台运行')
   }
 })
 
 app.on('before-quit', (event) => {
-  // 防止应用立即退出，给清理工作留出时间
+  writeStartupLog(`事件: before-quit 触发 - isQuitting=${isQuitting}`)
+
   if (!isQuitting) {
     isQuitting = true
     setAppQuitting(true)
     stopMemoryLogInterval()
-    
-    // 清理账户管理器
+
     try {
       accountManager.cleanup()
+      writeStartupLog('账户管理器已清理')
     } catch (error) {
-      createLogger('app').error('清理账户管理器失败:', error)
+      writeMainLog('ERROR', `清理账户管理器失败: ${error}`)
     }
   }
 })
 
 app.on('will-quit', (event) => {
-  // 确保所有异步操作完成后再退出
-  createLogger('app').info('应用即将退出，执行最终清理...')
-  
-  // 销毁托盘
+  writeStartupLog('事件: will-quit 触发')
+  writeMainLog('INFO', '应用即将退出，执行最终清理...')
+
   if (tray) {
     try {
       tray.destroy()
       tray = null
-      createLogger('app').info('托盘已销毁')
+      writeStartupLog('托盘已销毁')
     } catch (error) {
-      createLogger('app').error('销毁托盘失败:', error)
+      writeMainLog('ERROR', `销毁托盘失败: ${error}`)
     }
   }
-  
-  // 清理窗口引用
+
   if (win) {
     try {
       win.removeAllListeners()
       win = null
-      createLogger('app').info('窗口已清理')
+      writeStartupLog('窗口已清理')
     } catch (error) {
-      createLogger('app').error('清理窗口失败:', error)
+      writeMainLog('ERROR', `清理窗口失败: ${error}`)
     }
   }
 })
 
-app.on('second-instance', () => {
-  logWindowDebug('second-instance triggered')
-  if (win) {
-    if (win.isMinimized()) win.restore()
-    win.show()
-    win.setSkipTaskbar(false)
-    win.focus()
-  } else {
-    createLogger('app').info('second-instance: mainWindow not created yet, ensuring createWindow')
-    app.whenReady().then(() => createWindow())
-  }
-})
-
 app.on('activate', () => {
+  writeStartupLog('事件: activate 触发')
+
   const allWindows = BrowserWindow.getAllWindows()
+  writeStartupLog(`activate: 现有窗口数=${allWindows.length}`)
+
   if (allWindows.length) {
-    allWindows[0].focus()
+    const w = allWindows[0]
+    if (!w.isDestroyed()) {
+      w.show()
+      w.focus()
+      writeStartupLog('activate: 聚焦现有窗口')
+    }
   } else {
+    writeStartupLog('activate: 无窗口，创建新窗口')
     createWindow()
   }
 })
 
+// 崩溃和错误处理
 const XIUER_CRASH_PATH = path.join(process.env.TEMP ?? os.tmpdir(), 'xiuer-crash.txt')
 function writeCrashToTemp(tag: string, err: unknown): void {
   try {
@@ -551,31 +750,30 @@ function writeCrashToTemp(tag: string, err: unknown): void {
     const msg = err instanceof Error ? err.message : String(err)
     appendFileSync(XIUER_CRASH_PATH, `\n[${ts}] ${tag}\n${msg}\n${stack}\n`)
   } catch {
-    // 忽略写入错误，避免在崩溃处理中引发新的错误导致无限递归
+    // 忽略
   }
 }
 
 process.on('uncaughtException', error => {
+  writeStartupLog(`uncaughtException: ${error instanceof Error ? error.message : String(error)}`)
   writeCrashToTemp('uncaughtException', error)
   const logger = createLogger('uncaughtException')
   logger.error('--------------意外的未捕获异常---------------')
   logger.error(error)
   logger.error('---------------------------------------------')
 
-  // 应用退出时不显示错误对话框，避免"Object has been destroyed"错误
   if (!isQuitting) {
     try {
       dialog.showErrorBox('应用程序错误', `发生了一个意外的错误，请联系技术支持：\n${error.message}`)
     } catch (dialogError) {
-      // 忽略对话框错误，避免在退出时引发新的错误
       logger.error('显示错误对话框失败:', dialogError)
     }
   }
 })
 
 process.on('unhandledRejection', reason => {
-  // playwright-extra 插件问题：在 browser.close() 时概率触发
-  // https://github.com/berstend/puppeteer-extra/issues/858
+  writeStartupLog(`unhandledRejection: ${reason instanceof Error ? reason.message : String(reason)}`)
+
   if (
     reason instanceof Error &&
     reason.message.includes('cdpSession.send: Target page, context or browser has been closed')
@@ -591,36 +789,40 @@ process.on('unhandledRejection', reason => {
 
 // 创建系统托盘
 function createTray() {
-  // 使用应用图标作为托盘图标
+  writeStartupLog('createTray 开始')
+
   const iconPath = path.join(process.env.VITE_PUBLIC, 'favicon.png')
   let trayIcon: NativeImage
 
   try {
     trayIcon = nativeImage.createFromPath(iconPath)
-    // 如果图标太大，调整尺寸（Windows 推荐 16x16）
     if (trayIcon.getSize().width > 16) {
       trayIcon = trayIcon.resize({ width: 16, height: 16 })
     }
+    writeStartupLog('托盘图标加载成功')
   } catch (error) {
-    createLogger('tray').warn('Failed to load tray icon, using default:', error)
-    // 如果加载失败，创建一个简单的默认图标
+    writeStartupLog(`托盘图标加载失败: ${error}`)
+    writeMainLog('WARN', `Failed to load tray icon: ${error}`)
     trayIcon = nativeImage.createEmpty()
   }
 
   tray = new Tray(trayIcon)
   tray.setToolTip(app.getName())
+  writeStartupLog('托盘已创建')
 
-  // 创建托盘菜单
   const contextMenu = Menu.buildFromTemplate([
     {
       label: '显示主窗口',
       click: () => {
-        // 安全检查：确保窗口未被销毁
+        writeStartupLog('托盘菜单: 显示主窗口')
         if (win && !win.isDestroyed()) {
           win.show()
-          win.setSkipTaskbar(false) // 恢复任务栏显示
+          win.setSkipTaskbar(false)
           win.focus()
+          win.moveTop()
+          writeStartupLog('主窗口已显示')
         } else {
+          writeStartupLog('主窗口不存在，创建新窗口')
           createWindow()
         }
       },
@@ -631,7 +833,7 @@ function createTray() {
     {
       label: '退出程序',
       click: () => {
-        // 统一的退出方法，避免竞态条件
+        writeStartupLog('托盘菜单: 退出程序')
         quitApp()
       },
     },
@@ -639,83 +841,85 @@ function createTray() {
 
   tray.setContextMenu(contextMenu)
 
-  // 托盘图标单击：显示/聚焦主窗口
   tray.on('click', () => {
-    // 安全检查：确保窗口未被销毁
+    writeStartupLog('托盘点击事件')
     if (win && !win.isDestroyed()) {
       if (win.isVisible()) {
         win.focus()
+        writeStartupLog('托盘点击: 窗口已可见，执行聚焦')
       } else {
         win.show()
-        win.setSkipTaskbar(false) // 恢复任务栏显示
+        win.setSkipTaskbar(false)
         win.focus()
+        writeStartupLog('托盘点击: 窗口已显示并聚焦')
       }
     } else {
+      writeStartupLog('托盘点击: 窗口不存在，创建新窗口')
       createWindow()
     }
   })
+
+  writeStartupLog('createTray 完成')
 }
 
 /**
  * 统一的退出应用方法
- * 确保所有清理工作按正确顺序执行
  */
 function quitApp() {
+  writeStartupLog(`quitApp 调用 - isQuitting=${isQuitting}`)
+
   if (isQuitting) {
-    // 已经在退出过程中，忽略重复调用
     return
   }
-  
-  createLogger('app').info('开始退出应用...')
+
+  writeMainLog('INFO', '开始退出应用...')
   isQuitting = true
   setAppQuitting(true)
-  
-  // 停止内存日志
+
   stopMemoryLogInterval()
-  
-  // 清理账户管理器
+
   try {
     accountManager.cleanup()
+    writeStartupLog('账户管理器已清理')
   } catch (error) {
-    createLogger('app').error('清理账户管理器失败:', error)
+    writeMainLog('ERROR', `清理账户管理器失败: ${error}`)
   }
-  
-  // 销毁托盘（在 will-quit 中会再次检查）
+
   if (tray && !tray.isDestroyed()) {
     try {
       tray.destroy()
       tray = null
-      createLogger('app').info('托盘已销毁')
+      writeStartupLog('托盘已销毁')
     } catch (error) {
-      createLogger('app').error('销毁托盘失败:', error)
+      writeMainLog('ERROR', `销毁托盘失败: ${error}`)
     }
   }
-  
-  // 清理窗口
+
   if (win && !win.isDestroyed()) {
     try {
       win.removeAllListeners()
       win.close()
       win = null
-      createLogger('app').info('窗口已关闭')
+      writeStartupLog('窗口已关闭')
     } catch (error) {
-      createLogger('app').error('关闭窗口失败:', error)
+      writeMainLog('ERROR', `关闭窗口失败: ${error}`)
     }
   }
-  
-  // 触发应用退出
+
+  writeStartupLog('调用 app.quit()')
   app.quit()
 }
 
-// IPC 处理：设置"不再提示"标记
+// IPC 处理
 ipcMain.handle('app:setHideToTrayTipDismissed', (_, dismissed: boolean) => {
+  writeStartupLog(`IPC: setHideToTrayTipDismissed=${dismissed}`)
   const config = getConfig()
   config.hideToTrayTipDismissed = dismissed
   setConfig(config)
 })
 
-// IPC 处理：获取"不再提示"标记
 ipcMain.handle('app:getHideToTrayTipDismissed', () => {
   const config = getConfig()
+  writeStartupLog(`IPC: getHideToTrayTipDismissed=${config.hideToTrayTipDismissed}`)
   return config.hideToTrayTipDismissed
 })

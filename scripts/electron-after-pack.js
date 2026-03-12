@@ -2,12 +2,11 @@
  * electron-builder afterPack：将运行所需的 node_modules 复制到 app.asar.unpacked，
  * 使主进程 require('better-sqlite3')、playwright 等能从 app.asar.unpacked/node_modules 解析。
  *
- * 优化策略 v2.0：
- * 1. 使用白名单模式，只复制主进程运行时需要的依赖
- * 2. 排除 source map、类型声明、测试文件
- * 3. 删除 Native 模块源码（better-sqlite3/deps）
- * 4. 裁剪多平台二进制（7zip-bin 仅保留 win/x64）
- * 5. 删除 playwright 调试资源（traceViewer、htmlReport）
+ * 平台隔离策略 v3.0：
+ * 1. 根据 electronPlatformName 判断当前构建平台
+ * 2. Windows 构建：保留 Windows 原生模块，删除 Mac/Linux 二进制
+ * 3. Mac 构建：保留 Mac 原生模块，删除 Windows/Linux 二进制
+ * 4. 绝不跨平台混合
  */
 const path = require('path')
 const fs = require('fs')
@@ -285,7 +284,7 @@ function cleanupBetterSqlite3Round2(destNodeModules) {
 const KEEP_LOCALES = new Set(['zh_CN.lproj', 'en.lproj'])
 
 /**
- * 第二轮优化：Electron Framework 仅保留 zh-CN 与 en-US，删除其余 locale
+ * 仅 Mac 构建：Electron Framework 仅保留 zh-CN 与 en-US，删除其余 locale
  */
 function stripElectronLocales(appOutDir, productFilename) {
   // 处理中文应用名可能导致的编码问题
@@ -330,32 +329,68 @@ function stripElectronLocales(appOutDir, productFilename) {
 }
 
 /**
- * 裁剪多平台二进制文件
+ * 平台特定的多平台二进制文件裁剪
+ * @param {string} destNodeModules - node_modules 目录
+ * @param {string} electronPlatformName - 构建平台名称 (darwin/win32/linux)
  */
-function trimMultiPlatformBinaries(destNodeModules) {
+function trimMultiPlatformBinaries(destNodeModules, electronPlatformName) {
   if (!fs.existsSync(destNodeModules)) return
 
-  console.log('[afterPack] Trimming multi-platform binaries...')
+  console.log(`[afterPack] Trimming multi-platform binaries for ${electronPlatformName}...`)
 
-  // 1. 7zip-bin：仅保留 win/x64
+  // 确定当前构建平台
+  const isWindows = electronPlatformName === 'win32'
+  const isMac = electronPlatformName === 'darwin'
+  const isLinux = electronPlatformName === 'linux'
+
+  // 1. 7zip-bin：根据平台保留对应二进制
   const zipBinDir = path.join(destNodeModules, '7zip-bin')
   if (fs.existsSync(zipBinDir)) {
-    const platformsToRemove = ['mac', 'linux']
-    for (const platform of platformsToRemove) {
-      const platformDir = path.join(zipBinDir, platform)
-      if (fs.existsSync(platformDir)) {
-        fs.rmSync(platformDir, { recursive: true, force: true })
-        console.log(`[afterPack]   - Removed 7zip-bin/${platform}`)
+    if (isWindows) {
+      // Windows 构建：删除 mac 和 linux
+      const platformsToRemove = ['mac', 'linux']
+      for (const platform of platformsToRemove) {
+        const platformDir = path.join(zipBinDir, platform)
+        if (fs.existsSync(platformDir)) {
+          fs.rmSync(platformDir, { recursive: true, force: true })
+          console.log(`[afterPack]   - Removed 7zip-bin/${platform}`)
+        }
       }
-    }
-    // 删除 win/ia32 和 win/arm64
-    const winDir = path.join(zipBinDir, 'win')
-    if (fs.existsSync(winDir)) {
-      for (const arch of ['ia32', 'arm64']) {
-        const archDir = path.join(winDir, arch)
-        if (fs.existsSync(archDir)) {
-          fs.rmSync(archDir, { recursive: true, force: true })
-          console.log(`[afterPack]   - Removed 7zip-bin/win/${arch}`)
+      // Windows 构建：仅保留 win/x64
+      const winDir = path.join(zipBinDir, 'win')
+      if (fs.existsSync(winDir)) {
+        for (const arch of ['ia32', 'arm64']) {
+          const archDir = path.join(winDir, arch)
+          if (fs.existsSync(archDir)) {
+            fs.rmSync(archDir, { recursive: true, force: true })
+            console.log(`[afterPack]   - Removed 7zip-bin/win/${arch}`)
+          }
+        }
+      }
+    } else if (isMac) {
+      // Mac 构建：删除 win 和 linux
+      const platformsToRemove = ['win', 'linux']
+      for (const platform of platformsToRemove) {
+        const platformDir = path.join(zipBinDir, platform)
+        if (fs.existsSync(platformDir)) {
+          fs.rmSync(platformDir, { recursive: true, force: true })
+          console.log(`[afterPack]   - Removed 7zip-bin/${platform}`)
+        }
+      }
+      // Mac 构建：仅保留 mac/arm64 和 mac/x64
+      const macDir = path.join(zipBinDir, 'mac')
+      if (fs.existsSync(macDir)) {
+        // Mac 目录通常只有 arm64 和 x64，都保留
+        console.log('[afterPack]   - Kept 7zip-bin/mac')
+      }
+    } else if (isLinux) {
+      // Linux 构建：删除 win 和 mac
+      const platformsToRemove = ['win', 'mac']
+      for (const platform of platformsToRemove) {
+        const platformDir = path.join(zipBinDir, platform)
+        if (fs.existsSync(platformDir)) {
+          fs.rmSync(platformDir, { recursive: true, force: true })
+          console.log(`[afterPack]   - Removed 7zip-bin/${platform}`)
         }
       }
     }
@@ -373,17 +408,37 @@ function trimMultiPlatformBinaries(destNodeModules) {
       for (const pkg of packages) {
         if (!pkg.isDirectory()) continue
 
-        // 删除非 win-x64 的平台特定包
         const pkgName = pkg.name.toLowerCase()
-        if (
-          (pkgName.includes('darwin') ||
+        const pkgDir = path.join(scopeDir, pkg.name)
+
+        // 根据构建平台决定删除哪些包
+        let shouldRemove = false
+
+        if (isWindows) {
+          // Windows 构建：删除 darwin 和 linux 相关的包
+          shouldRemove = (
+            pkgName.includes('darwin') ||
             pkgName.includes('linux') ||
-            pkgName.includes('-arm64') ||
-            pkgName.includes('-arm-') ||
-            pkgName.includes('-ia32')) &&
-          !pkgName.includes('win32-x64')
-        ) {
-          const pkgDir = path.join(scopeDir, pkg.name)
+            (pkgName.includes('-arm64') && !pkgName.includes('win32')) ||
+            (pkgName.includes('-arm-') && !pkgName.includes('win32'))
+          )
+        } else if (isMac) {
+          // Mac 构建：删除 win32 和 linux 相关的包
+          shouldRemove = (
+            pkgName.includes('win32') ||
+            pkgName.includes('linux') ||
+            (pkgName.includes('-ia32') && !pkgName.includes('darwin'))
+          )
+        } else if (isLinux) {
+          // Linux 构建：删除 darwin 和 win32 相关的包
+          shouldRemove = (
+            pkgName.includes('darwin') ||
+            pkgName.includes('win32') ||
+            (pkgName.includes('-arm64') && !pkgName.includes('linux'))
+          )
+        }
+
+        if (shouldRemove) {
           fs.rmSync(pkgDir, { recursive: true, force: true })
           console.log(`[afterPack]   - Removed ${scope.name}/${pkg.name}`)
         }
@@ -520,6 +575,20 @@ module.exports = async function (context) {
   const appOutDir = context.appOutDir
   const electronPlatformName = context.electronPlatformName
 
+  console.log('')
+  console.log('╔══════════════════════════════════════════════════════════════════╗')
+  console.log('║  [afterPack] Electron Builder After Pack Hook                    ║')
+  console.log('╠══════════════════════════════════════════════════════════════════╣')
+  console.log(`║  Build Platform: ${electronPlatformName}`)
+  console.log(`║  Host Platform: ${process.platform}`)
+  console.log('╚══════════════════════════════════════════════════════════════════╝')
+  console.log('')
+
+  // 平台隔离检查
+  if (!['darwin', 'win32', 'linux'].includes(electronPlatformName)) {
+    console.warn(`[afterPack] WARNING: Unknown platform ${electronPlatformName}`)
+  }
+
   let resourcesDir
   if (electronPlatformName === 'darwin') {
     const appName = context.packager.appInfo.productFilename
@@ -531,11 +600,9 @@ module.exports = async function (context) {
   const unpackedDir = path.join(resourcesDir, 'app.asar.unpacked')
   const destNodeModules = path.join(unpackedDir, 'node_modules')
 
-  console.log('\n========================================')
-  console.log('[afterPack] Starting post-pack cleanup...')
-  console.log(`[afterPack] Platform: ${electronPlatformName}`)
+  console.log(`[afterPack] Resources dir: ${resourcesDir}`)
   console.log(`[afterPack] Unpacked dir: ${unpackedDir}`)
-  console.log('========================================\n')
+  console.log('')
 
   if (!fs.existsSync(destNodeModules)) {
     console.warn('[afterPack] No unpacked node_modules found, skipping cleanup')
@@ -544,13 +611,16 @@ module.exports = async function (context) {
 
   const beforeSize = getDirectorySize(destNodeModules)
   console.log(`[afterPack] Before cleanup: ${(beforeSize / 1024 / 1024).toFixed(2)} MB`)
+  console.log('')
 
+  // 执行清理
   cleanupNativeModules(destNodeModules)
   cleanupBetterSqlite3Round2(destNodeModules)
-  trimMultiPlatformBinaries(destNodeModules)
+  trimMultiPlatformBinaries(destNodeModules, electronPlatformName) // 传入平台参数
   cleanupPlaywright(destNodeModules)
   cleanupInstallTimeDeps(destNodeModules)
 
+  // 仅在 Mac 构建时清理 Electron 语言包
   if (electronPlatformName === 'darwin') {
     const appName = context.packager.appInfo.productFilename
     stripElectronLocales(appOutDir, appName)
@@ -558,7 +628,14 @@ module.exports = async function (context) {
 
   const afterSize = getDirectorySize(destNodeModules)
   const saved = beforeSize - afterSize
-  console.log('\n========================================')
-  console.log(`[afterPack] Completed! ${(beforeSize / 1024 / 1024).toFixed(2)} MB → ${(afterSize / 1024 / 1024).toFixed(2)} MB (saved ${(saved / 1024 / 1024).toFixed(2)} MB)`)
-  console.log('========================================\n')
+
+  console.log('')
+  console.log('╔══════════════════════════════════════════════════════════════════╗')
+  console.log('║  [afterPack] Cleanup Completed                                   ║')
+  console.log('╠══════════════════════════════════════════════════════════════════╣')
+  console.log(`║  Before: ${(beforeSize / 1024 / 1024).toFixed(2)} MB`)
+  console.log(`║  After:  ${(afterSize / 1024 / 1024).toFixed(2)} MB`)
+  console.log(`║  Saved:  ${(saved / 1024 / 1024).toFixed(2)} MB`)
+  console.log('╚══════════════════════════════════════════════════════════════════╝')
+  console.log('')
 }
