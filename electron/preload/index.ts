@@ -1,5 +1,6 @@
 import { contextBridge, type IpcRendererEvent, ipcRenderer } from 'electron'
 import type { ElectronAPI, IpcChannels } from 'shared/electron-api'
+import { isChannelAllowed } from './ipcWhitelist.gen'
 import './auth'
 
 type IpcRendererInvokeReturnType<Channel extends keyof IpcChannels> =
@@ -7,47 +8,8 @@ type IpcRendererInvokeReturnType<Channel extends keyof IpcChannels> =
     ? ReturnType<IpcChannels[Channel]>
     : Promise<ReturnType<IpcChannels[Channel]>>
 
-// IPC 通道白名单 - 只允许这些通道被 renderer 调用
-const ALLOWED_IPC_CHANNELS = new Set([
-  // App 相关
-  'app:version',
-  'app:platform',
-  'app:openExternal',
-  // Auth 相关
-  'auth:login',
-  'auth:register',
-  'auth:logout',
-  'auth:getAuthStatus',
-  'auth:restoreSession',
-  'auth:getCurrentUser',
-  'auth:validateToken',
-  'auth:checkFeatureAccess',
-  'auth:requiresAuthentication',
-  'auth:setTokens',
-  'auth:clearTokens',
-  // 任务相关
-  'tasks:liveControl:connect',
-  'tasks:liveControl:disconnect',
-  'tasks:commentListener:configure',
-  'tasks:autoMessage:configure',
-  'tasks:subAccount:importAccounts',
-  'tasks:subAccount:exportAccounts',
-  // 窗口相关
-  'window:minimize',
-  'window:maximize',
-  'window:close',
-  // 更新相关
-  'updater:check',
-  'updater:download',
-  'updater:install',
-  // 其他
-  'liveStats:exportData',
-  'chrome:selectPath',
-])
-
-function isChannelAllowed(channel: string): boolean {
-  return ALLOWED_IPC_CHANNELS.has(channel)
-}
+// IPC 通道白名单已迁移到 ipcWhitelist.gen.ts
+// 由 scripts/generateIpcWhitelist.ts 从 shared/ipcChannels.ts 自动生成
 
 const ipcRendererApi: ElectronAPI['ipcRenderer'] = {
   on<Channel extends keyof IpcChannels>(
@@ -56,15 +18,27 @@ const ipcRendererApi: ElectronAPI['ipcRenderer'] = {
   ): () => void {
     // 只允许白名单内的通道
     if (!isChannelAllowed(channel as string)) {
-      console.warn(`[Preload] Channel ${channel} is not allowed for on()`)
+      console.warn(`[Preload][on] ❌ Channel ${channel} is NOT in whitelist, listener NOT registered`)
       return () => {}
     }
 
-    const subscription = (_event: IpcRendererEvent, ...args: Parameters<IpcChannels[Channel]>) =>
+    console.log(`[Preload][on] ✅ Registered listener for channel: ${String(channel)}`)
+    
+    const subscription = (_event: IpcRendererEvent, ...args: Parameters<IpcChannels[Channel]>) => {
+      const receiveTime = Date.now()
+      const accountId = args[0] || 'unknown'
+      console.log(`[Preload][on] 📥 Forwarding event: ${String(channel)}`, ...args)
+      console.log(`[Preload][on] 📊 Receive time: ${receiveTime}, accountId: ${accountId}`)
+      // 通过自定义事件通知 renderer 记录时间
+      window.dispatchEvent(new CustomEvent('ipc-receive', { 
+        detail: { channel: String(channel), accountId, receiveTime } 
+      }))
       listener(...args)
+    }
 
     ipcRenderer.on(channel as string, subscription)
     return () => {
+      console.log(`[Preload][on] 🔚 Unregistered listener for channel: ${String(channel)}`)
       ipcRenderer.off(channel as string, subscription)
     }
   },

@@ -1,4 +1,11 @@
 export const IPC_CHANNELS = {
+  diagnostics: {
+    getRuntimeStats: 'diagnostics:getRuntimeStats',
+    getAccountTasks: 'diagnostics:getAccountTasks',
+    getTimeline: 'diagnostics:getTimeline',
+    printSummary: 'diagnostics:printSummary',
+    reset: 'diagnostics:reset',
+  },
   tasks: {
     liveControl: {
       connect: 'tasks:liveControl:connect',

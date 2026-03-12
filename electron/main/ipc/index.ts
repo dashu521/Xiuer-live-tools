@@ -5,6 +5,7 @@ import { setupAutoMessageIpcHandlers } from './autoMessage'
 import { setupAutoPopUpIpcHandlers } from './autoPopUp'
 import { setupBrowserIpcHandlers } from './browser'
 import { setupAutoReplyIpcHandlers } from './commentListener'
+import { setupDiagnosticsIpcHandlers } from './diagnostics'
 import { setupLiveControlIpcHandlers } from './connection'
 import { setupGiftCardIpcHandlers } from './giftCard'
 import { setupLiveStatsIpcHandlers } from './liveStats'
@@ -12,6 +13,7 @@ import { setupPinCommentIpcHandler } from './pinComment'
 import { setupSubAccountIpcHandlers } from './subAccount'
 import { setupUpdateIpcHandlers } from './update'
 
+setupDiagnosticsIpcHandlers()
 setupLiveControlIpcHandlers()
 setupAIChatIpcHandlers()
 setupAutoPopUpIpcHandlers()

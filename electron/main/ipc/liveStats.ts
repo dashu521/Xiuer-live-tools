@@ -1,5 +1,9 @@
 /**
- * 直播数据导出 IPC 处理
+ * [SECURITY-FIX] 直播数据导出 IPC 处理
+ * 修复内容：
+ * 1. 使用安全路径解析，防止目录逃逸
+ * 2. 文件名白名单清洗
+ * 3. 校验 resolvedPath 必须位于 baseDir 内
  */
 
 import fs from 'node:fs'
@@ -7,6 +11,8 @@ import path from 'node:path'
 import { app, shell } from 'electron'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { typedIpcMainHandle } from '#/utils'
+// [SECURITY-FIX] 引入安全路径工具
+import { resolveSafePath, validateFileName } from '#/utils/securityValidators'
 
 // 导出数据结构（与渲染进程保持一致）
 interface LiveStatsExportData {
@@ -70,6 +76,21 @@ function formatDateTime(timestamp: number): string {
   const minutes = String(date.getMinutes()).padStart(2, '0')
   const seconds = String(date.getSeconds()).padStart(2, '0')
   return `${year}-${month}-${day}_${hours}-${minutes}-${seconds}`
+}
+
+/**
+ * [SECURITY-FIX] 安全文件名生成
+ * 1. 白名单清洗：只保留安全字符
+ * 2. 限制长度
+ * 3. 防止空文件名
+ */
+function sanitizeFileName(input: string): string {
+  // 只保留字母、数字、中文、下划线、连字符、点、空格
+  const sanitized = input.replace(/[^a-zA-Z0-9\u4e00-\u9fa5._\- ]/g, '_')
+  // 限制长度
+  const truncated = sanitized.slice(0, 100)
+  // 防止空文件名
+  return truncated || 'unknown'
 }
 
 // 格式化时长文本
@@ -186,9 +207,17 @@ async function exportToExcel(data: LiveStatsExportData): Promise<string> {
 
   const exportFolder = getExportFolder()
   const dateTimeStr = formatDateTime(data.endTime)
-  const safeAccountName = sanitizeFilename(data.accountName || '未知账号')
+
+  // [SECURITY-FIX] 使用安全文件名生成
+  const safeAccountName = sanitizeFileName(data.accountName || '未知账号')
   const fileName = `直播数据_${safeAccountName}_${dateTimeStr}.xlsx`
-  const filePath = path.join(exportFolder, fileName)
+
+  // [SECURITY-FIX] 安全路径解析，防止目录逃逸
+  const pathValidation = resolveSafePath(exportFolder, fileName)
+  if (!pathValidation.valid) {
+    throw new Error(`Invalid file path: ${pathValidation.error}`)
+  }
+  const filePath = pathValidation.fullPath!
 
   // 验证文件路径，防止目录遍历攻击
   validateFilePath(filePath, exportFolder)

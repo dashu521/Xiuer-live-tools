@@ -12,6 +12,15 @@ import {
   typedIpcMainHandle,
 } from '#/utils'
 import windowManager from '#/windowManager'
+// [SECURITY-FIX] 引入输入校验工具
+import {
+  safeJsonParse,
+  validateAccountId,
+  validatePlatform,
+  validateSchema,
+  validateUrl,
+  type SchemaField,
+} from '#/utils/securityValidators'
 
 // 导入验证库（使用已存在的 zod）
 import { z } from 'zod'
@@ -175,9 +184,17 @@ function setupIpcHandlers() {
     IPC_CHANNELS.tasks.subAccount.enterLiveRoom,
     async (_, accountId, subAccountId, liveRoomUrl) => {
       const logger = createLogger(`@${accountManager.getAccountName(accountId)}`).scope(TASK_NAME)
-      logger.info(`小号 ${subAccountId} 正在进入直播间: ${liveRoomUrl}`)
 
-      const result = await subAccountManager.enterLiveRoom(subAccountId, liveRoomUrl)
+      // [SECURITY-FIX] 校验直播间 URL
+      const urlValidation = validateUrl(liveRoomUrl)
+      if (!urlValidation.valid) {
+        logger.error('进入直播间失败：无效的 URL', urlValidation.error)
+        return { success: false, error: `Invalid URL: ${urlValidation.error}` }
+      }
+
+      logger.info(`小号 ${subAccountId} 正在进入直播间: ${urlValidation.url}`)
+
+      const result = await subAccountManager.enterLiveRoom(subAccountId, urlValidation.url!)
       if (Result.isFailure(result)) {
         logger.error('进入直播间失败：', result.error)
         return { success: false, error: result.error.message }
@@ -347,26 +364,68 @@ function setupIpcHandlers() {
   typedIpcMainHandle(
     IPC_CHANNELS.tasks.subAccount.importAccounts,
     async (_, _accountId, jsonData) => {
-      try {
-        // 解析并验证输入数据
-        const parsed = JSON.parse(jsonData)
-        const accounts = ImportAccountsArraySchema.parse(parsed)
+      // [SECURITY-FIX] 安全解析 JSON，限制大小
+      const parseResult = safeJsonParse(jsonData, 5 * 1024 * 1024) // 5MB limit
+      if (!parseResult.valid) {
+        return { success: false, error: `JSON parse error: ${parseResult.error}` }
+      }
 
+      // [SECURITY-FIX] Schema 校验导入数据
+      const accountSchema: SchemaField = {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', required: false, maxLength: 128 },
+            name: { type: 'string', required: true, minLength: 1, maxLength: 100 },
+            platform: { type: 'string', required: true, pattern: /^[a-z_]+$/ },
+          },
+        },
+      }
+
+      const schemaResult = validateSchema(parseResult.data, accountSchema)
+      if (!schemaResult.valid) {
+        return { success: false, error: `Schema validation error: ${schemaResult.error}` }
+      }
+
+      try {
+        const accounts = parseResult.data as Array<{
+          id?: string
+          name: string
+          platform: string
+        }>
+
+        // [SECURITY-FIX] 额外校验每个账号数据
         let added = 0
         for (const acc of accounts) {
+          // 校验平台类型
+          const platformValidation = validatePlatform(acc.platform)
+          if (!platformValidation.valid) {
+            console.warn(`[SubAccountIPC] Skipping account with invalid platform: ${acc.platform}`)
+            continue
+          }
+
+          // 生成或校验 ID
+          let accountId = acc.id
+          if (accountId) {
+            const idValidation = validateAccountId(accountId)
+            if (!idValidation.valid) {
+              accountId = crypto.randomUUID()
+            }
+          } else {
+            accountId = crypto.randomUUID()
+          }
+
           const result = subAccountManager.addAccount({
-            id: acc.id || crypto.randomUUID(),
-            name: acc.name,
-            platform: acc.platform,
+            id: accountId,
+            name: acc.name.slice(0, 100), // 限制长度
+            platform: platformValidation.platform! as LiveControlPlatform,
           })
           if (Result.isSuccess(result)) added++
         }
 
         return { success: true, added }
       } catch (error) {
-        if (error instanceof z.ZodError) {
-          return { success: false, error: `数据格式错误: ${error.errors.map(e => e.message).join(', ')}` }
-        }
         return { success: false, error: String(error) }
       }
     },
