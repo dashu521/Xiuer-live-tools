@@ -4,7 +4,8 @@
  */
 import { AUTH_API_BASE } from './authApiBase'
 
-const rawBase = import.meta.env.VITE_AUTH_API_BASE_URL ?? AUTH_API_BASE
+// 【修复】增加 trim() 处理，避免前后空格导致 URL 解析失败
+const rawBase = (import.meta.env.VITE_AUTH_API_BASE_URL ?? AUTH_API_BASE).trim()
 
 // 直接使用配置的基址（默认来自 AUTH_API_BASE），不再强制改写端口
 export const API_BASE_URL = rawBase

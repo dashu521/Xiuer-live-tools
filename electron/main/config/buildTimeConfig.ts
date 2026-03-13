@@ -83,11 +83,12 @@ export function getBuildTimeConfig(): BuildTimeConfig {
 
 export function getAuthApiBaseUrl(): string {
   const config = getBuildTimeConfig()
-  let url = config.authApiBaseUrl.replace(/\/$/, '')
-  
+  // 【修复】增加 trim() 处理，避免前后空格导致 URL 解析失败
+  let url = config.authApiBaseUrl.trim().replace(/\/$/, '')
+
   if (url?.includes(':8080')) {
     url = url.replace(/:8080(\/|$)/, ':8000$1')
   }
-  
+
   return url
 }
