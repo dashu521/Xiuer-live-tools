@@ -693,7 +693,7 @@ async function createWindow() {
       e.preventDefault()
       writeStartupLog('拦截关闭事件，改为隐藏到托盘')
 
-      const config = getConfig()
+      // 复用已获取的 config，避免重复声明
       const shouldShowTip = !config.hideToTrayTipDismissed
 
       if (win && !win.isDestroyed()) {
