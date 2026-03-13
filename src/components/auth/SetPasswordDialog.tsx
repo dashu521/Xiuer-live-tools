@@ -41,11 +41,11 @@ export function SetPasswordDialog({ isOpen, onClose, mode }: SetPasswordDialogPr
     setError(null)
 
     if (newPassword.length < 6) {
-      setError('密码至少 6 位')
+      setError('密码至少要 6 位')
       return
     }
     if (newPassword !== confirmPassword) {
-      setError('两次输入的密码不一致')
+      setError('两次输入的密码不一样，请重新输入')
       return
     }
     if (mode === 'change' && !oldPassword) {
@@ -61,16 +61,16 @@ export function SetPasswordDialog({ isOpen, onClose, mode }: SetPasswordDialogPr
           : await changePassword(oldPassword, newPassword)
 
       if (result.ok) {
-        toast.success(mode === 'set' ? '密码设置成功，下次可用密码登录' : '密码修改成功')
+        toast.success(mode === 'set' ? '密码设置成功，下次可以直接用手机号和密码登录' : '密码修改成功')
         onClose()
       } else {
-        const msg = result.error?.message || '操作失败，请稍后重试'
+        const msg = result.error?.message || '操作没有成功，请稍后再试'
         setError(msg)
         toast.error(msg)
       }
     } catch {
-      setError('操作失败，请稍后重试')
-      toast.error('操作失败，请稍后重试')
+      setError('操作没有成功，请稍后再试')
+      toast.error('操作没有成功，请稍后再试')
     } finally {
       setIsSubmitting(false)
     }

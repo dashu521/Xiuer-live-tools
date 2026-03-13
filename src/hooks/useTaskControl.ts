@@ -77,11 +77,13 @@ export function useTaskControl<T extends TaskType>(params: UseTaskControlParams<
 
     if (result) {
       setIsRunning(true)
-      toast.success(startSuccessMessage || `${taskType}任务已启动`)
+      const taskName = taskType === 'auto-comment' ? '自动发言' : '自动弹窗'
+      toast.success(startSuccessMessage || `${taskName}已启动`)
       console.log(`[TaskGate] ${taskType} task started successfully for account ${accountId}`)
     } else {
       setIsRunning(false)
-      toast.error(startFailureMessage || `${taskType}任务启动失败，请重试`)
+      const taskName = taskType === 'auto-comment' ? '自动发言' : '自动弹窗'
+      toast.error(startFailureMessage || `${taskName}启动失败，请重试`)
       console.error(`[TaskGate] Failed to start ${taskType} task for account ${accountId}`)
     }
   }, [

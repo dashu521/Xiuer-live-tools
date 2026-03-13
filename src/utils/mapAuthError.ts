@@ -20,11 +20,11 @@ export type AuthErrorInput =
 
 const SMS_ERROR_MAP: Record<string, string> = {
   invalid_phone: '手机号格式不对，请检查一下',
-  too_many_requests: '发送太快了，请等 1 分钟后再试',
+  too_many_requests: '发送太快了，请 1 分钟后再试',
   daily_limit_exceeded: '今天的验证码次数用完了，明天再来吧',
   too_many_failures: '验证码输错太多次，请 10 分钟后再试',
   invalid_code: '验证码不对，请重新输入',
-  code_expired: '验证码过期了，点击重新获取',
+  code_expired: '验证码已经过期了，请重新获取',
   sms_send_failed: '短信发送失败，稍后再试一下',
 }
 
@@ -94,13 +94,13 @@ export function mapAuthError(raw: AuthErrorInput): MapAuthErrorResult {
     switch (errorType) {
       case 'USER_NOT_FOUND':
         return {
-          userMessage: '这个手机号还没注册，请检查一下或立即注册',
+          userMessage: '这个手机号还没有注册，可以先注册后再登录',
           rawForDev,
           showRegisterHint: true,
         }
       case 'INVALID_PASSWORD':
         return {
-          userMessage: '手机号或密码不对，再检查一下',
+          userMessage: '手机号或密码不对，请再检查一下',
           rawForDev,
           showRegisterHint: true,
         }
@@ -116,7 +116,7 @@ export function mapAuthError(raw: AuthErrorInput): MapAuthErrorResult {
   if (isNetworkError(raw)) {
     const rawForDev = raw instanceof Error ? raw.message : JSON.stringify(raw)
     return {
-      userMessage: '网络连不上，检查一下网络后重试',
+      userMessage: '网络连不上，检查一下网络后再试',
       rawForDev,
     }
   }
@@ -124,7 +124,7 @@ export function mapAuthError(raw: AuthErrorInput): MapAuthErrorResult {
   if (status === 401) {
     const rawForDev = requestUrl ? `401 ${detailStr} (${requestUrl})` : `401 ${detailStr}`
     return {
-      userMessage: '手机号或密码不对，再检查一下',
+      userMessage: '手机号或密码不对，请再检查一下',
       rawForDev,
       showRegisterHint: true,
     }
@@ -150,5 +150,5 @@ export function mapAuthError(raw: AuthErrorInput): MapAuthErrorResult {
       : status !== undefined
         ? `${status} ${detailStr}`
         : detailStr || 'unknown'
-  return { userMessage: '登录失败了，稍后再试一下', rawForDev }
+  return { userMessage: '操作没有成功，请稍后再试', rawForDev }
 }

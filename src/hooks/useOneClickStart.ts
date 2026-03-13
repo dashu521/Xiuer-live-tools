@@ -152,7 +152,7 @@ export function useOneClickStart(): {
       const totalCount = results.length
 
       if (successCount === totalCount) {
-        toast.success('已同时启动自动回复、自动发言和自动弹窗')
+        toast.success('已开始启动自动任务，请稍等一下')
       } else {
         const failedTasks = results
           .filter(r => !r.success)
@@ -161,7 +161,7 @@ export function useOneClickStart(): {
         toast.error(`${failedTasks}启动失败，请重试`)
       }
     } catch (error) {
-      toast.error('启动任务失败，请重试')
+      toast.error('部分功能启动失败，你可以重试一次或单独开启')
       console.error('[OneClickStart] Failed to start tasks:', error)
     } finally {
       setIsLoading(false)
@@ -169,14 +169,13 @@ export function useOneClickStart(): {
   })
 
   const stopAllTasks = useMemoizedFn(async () => {
-    // 使用统一的 TaskStateManager 停止所有任务
     const result = await taskStateManager.stopAllTasksForAccount(
       currentAccountId,
       'manual',
       true,
       (message) => {
         if (result.stoppedTasks.length > 0) {
-          toast.success(message)
+          toast.success('已停止当前账号的自动任务')
         } else if (result.alreadyStopped.length > 0) {
           toast.info(message)
         }

@@ -109,7 +109,7 @@ export function PhoneAuthDialog({
 
   const validateResetFields = (): string | null => {
     if (newPassword.length < 6) return '密码至少要 6 位'
-    if (newPassword !== confirmPassword) return '两次密码不一样，请重新输入'
+    if (newPassword !== confirmPassword) return '两次输入的密码不一样，请重新输入'
     return null
   }
 

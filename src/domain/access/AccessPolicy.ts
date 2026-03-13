@@ -227,7 +227,7 @@ export function canConnectLiveControl(context: AccessContext): AccessDecision {
     if (context.trialExpired) {
       return {
         allowed: false,
-        reason: '试用期已结束，升级会员可以继续使用',
+        reason: '试用已经结束，升级会员后就能继续使用全部功能',
         action: 'subscribe',
       }
     }
@@ -238,7 +238,7 @@ export function canConnectLiveControl(context: AccessContext): AccessDecision {
 
   return {
     allowed: false,
-    reason: '开通免费试用或升级会员，即可使用全部功能',
+    reason: '开通免费试用或升级会员后，就可以使用这个功能了',
     action: 'subscribe',
   }
 }
@@ -306,9 +306,18 @@ export function canAddMoreLiveAccounts(context: AccessContext): AccessDecision {
   const planName = PLAN_TEXT_MAP[context.plan]
   const nextPlanName = requiredPlan ? PLAN_TEXT_MAP[requiredPlan] : ''
   
+  let reason = ''
+  if (context.plan === 'pro') {
+    reason = '当前专业版最多可添加 1 个直播账号。想添加更多账号，可以升级到 Pro Max。'
+  } else if (context.plan === 'pro_max') {
+    reason = '当前 Pro Max 最多可添加 3 个直播账号。想添加更多账号，可以升级到 Ultra。'
+  } else {
+    reason = `${planName}最多可添加 ${maxLiveAccounts} 个直播账号${requiredPlan ? `，升级到${nextPlanName}可以添加更多` : ''}`
+  }
+  
   return {
     allowed: false,
-    reason: `${planName}最多支持 ${maxLiveAccounts} 个直播账号${requiredPlan ? `，升级到${nextPlanName}可以添加更多` : ''}`,
+    reason,
     action: 'upgrade',
     requiredPlan,
   }
@@ -325,5 +334,5 @@ export function getAccountLimitMessage(context: AccessContext): string {
   }
 
   const planName = PLAN_TEXT_MAP[context.plan]
-  return `${planName}最多可以添加 ${maxAccounts} 个直播账号`
+  return `${planName}最多可添加 ${maxAccounts} 个直播账号`
 }

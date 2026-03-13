@@ -324,13 +324,13 @@ const ConnectToLiveControl = React.memo(() => {
       action: async () => {
         try {
           if (!account) {
-            toast.error('找不到当前账号，请重新选择')
+            toast.error('没找到当前账号，请重新选择后再试')
             return
           }
 
           if (connectState.status === 'connecting') {
             console.warn(`[conn][${account.id}] 重入拒绝：正在连接中`)
-            toast.error('正在连接中，请稍等')
+            toast.error('正在连接中控台，请稍等')
             return
           }
 
@@ -482,7 +482,7 @@ const ConnectToLiveControl = React.memo(() => {
 
   const disconnectLiveControl = useMemoizedFn(async () => {
     if (!account) {
-      toast.error('找不到当前账号，请重新选择')
+      toast.error('没找到当前账号，请重新选择后再试')
       return
     }
     try {
@@ -498,7 +498,7 @@ const ConnectToLiveControl = React.memo(() => {
         error: null,
       })
 
-      toast.success('已断开连接')
+      toast.success('已断开中控台连接')
     } catch (error) {
       console.error('[State Machine] Disconnect failed:', error)
       toast.error('断开连接失败，请重试')

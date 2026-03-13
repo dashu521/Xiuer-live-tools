@@ -30,7 +30,7 @@ export const CONNECTION_ERROR_MAP: Record<string, ErrorMessageConfig> = {
   'browser has been closed': {
     title: '浏览器已关闭',
     message: '检测到浏览器窗口被关闭了',
-    solution: '点击「连接直播中控台」按钮，系统会重新打开浏览器',
+    solution: '点击「连接直播中控台」，系统会重新打开浏览器',
     level: 'warning',
     showRetry: true,
   },
@@ -52,13 +52,13 @@ export const CONNECTION_ERROR_MAP: Record<string, ErrorMessageConfig> = {
   'net::ERR_CONNECTION_REFUSED': {
     title: '无法连接到直播平台',
     message: '直播平台拒绝了连接请求',
-    solution: '检查一下：1. 网络是否正常 2. 直播平台是否可以访问 3. 稍后再试',
+    solution: '检查一下网络是否正常，确认直播平台可以访问后再试',
     level: 'error',
     showRetry: true,
   },
   'net::ERR_INTERNET_DISCONNECTED': {
     title: '网络已断开',
-    message: '您的电脑似乎断开了网络连接',
+    message: '电脑似乎断开了网络连接',
     solution: '检查一下网络连接（WiFi/网线），恢复网络后再试',
     level: 'error',
     showRetry: true,
@@ -79,7 +79,7 @@ export const CONNECTION_ERROR_MAP: Record<string, ErrorMessageConfig> = {
   },
   timeout: {
     title: '操作超时',
-    message: '操作花费时间太长，系统已自动取消',
+    message: '操作花费时间太长，已自动取消',
     solution: '网络可能不太稳定，检查一下网络后再试',
     level: 'warning',
     showRetry: true,
@@ -101,7 +101,7 @@ export const CONNECTION_ERROR_MAP: Record<string, ErrorMessageConfig> = {
   },
   需要登录: {
     title: '需要登录账号',
-    message: '检测到您还没有登录直播平台',
+    message: '检测到还没有登录直播平台',
     solution: '在弹出的浏览器窗口中完成登录，然后返回本软件',
     level: 'info',
     showRetry: false,
@@ -109,14 +109,14 @@ export const CONNECTION_ERROR_MAP: Record<string, ErrorMessageConfig> = {
 
   视频号助手无法一号多登: {
     title: '账号在其他地方登录',
-    message: '您的视频号账号在另一个设备或浏览器中登录了',
+    message: '视频号账号在另一个设备或浏览器中登录了',
     solution: '视频号不支持同时多处登录。请确保只在直播助手中登录，关闭其他地方的登录',
     level: 'warning',
     showRetry: true,
   },
   人机验证: {
     title: '需要进行安全验证',
-    message: '直播平台检测到异常，需要您完成安全验证',
+    message: '直播平台检测到异常，需要完成安全验证',
     solution: '在弹出的浏览器中按照提示完成验证（如拖动滑块、选择图片等）',
     level: 'info',
     showRetry: false,
@@ -131,7 +131,7 @@ export const CONNECTION_ERROR_MAP: Record<string, ErrorMessageConfig> = {
 
   连接已取消: {
     title: '连接已取消',
-    message: '您取消了连接操作',
+    message: '已取消连接操作',
     solution: '如需连接，请重新点击「连接直播中控台」按钮',
     level: 'info',
     showRetry: false,
@@ -146,13 +146,13 @@ export const CONNECTION_ERROR_MAP: Record<string, ErrorMessageConfig> = {
   网络连接失败: {
     title: '网络连接失败',
     message: '无法连接到网络或直播平台',
-    solution: '检查一下：1. WiFi/网线是否连接正常 2. 能否正常访问其他网站 3. 稍后再试',
+    solution: '检查一下 WiFi/网线是否连接正常，确认能正常访问其他网站后再试',
     level: 'error',
     showRetry: true,
   },
   连接失败: {
     title: '连接失败',
-    message: '无法连接到直播中控台',
+    message: '连接没有成功，请检查一下网络或重新连接',
     solution: '检查一下网络连接，确认直播平台可以访问后再试。如果还是不行，请联系客服',
     level: 'error',
     showRetry: true,
@@ -160,7 +160,7 @@ export const CONNECTION_ERROR_MAP: Record<string, ErrorMessageConfig> = {
   },
   找不到对应账号: {
     title: '账号信息异常',
-    message: '无法找到当前选中的账号信息',
+    message: '没找到当前账号，请重新选择后再试',
     solution: '尝试切换账号或重新添加账号，如果还是不行请重启软件',
     level: 'error',
     showRetry: true,
@@ -180,29 +180,36 @@ export const TASK_ERROR_MAP: Record<string, ErrorMessageConfig> = {
   },
   'Task already running': {
     title: '任务已在运行',
-    message: '您尝试启动的任务已经在运行中了',
+    message: '这个任务已经在运行中了',
     solution: '无需重复启动，您可以在左侧导航栏看到运行状态（绿色指示点）',
     level: 'info',
     showRetry: false,
   },
   'Task not found': {
     title: '任务不存在',
-    message: '找不到您要操作的任务',
+    message: '找不到要操作的任务',
     solution: '刷新页面后再试，或者重启软件',
     level: 'error',
     showRetry: true,
   },
   请先连接直播中控台: {
     title: '需要先连接中控台',
-    message: '使用此功能前，请先连接直播中控台',
-    solution: '先点击左侧「打开中控台」，完成连接后再使用此功能',
+    message: '使用这个功能前，请先连接直播中控台',
+    solution: '先点击「连接直播中控台」，完成连接后再使用这个功能',
     level: 'info',
     showRetry: false,
   },
   请先登录: {
     title: '需要先登录',
-    message: '使用此功能前，请先登录您的账号',
+    message: '使用这个功能前，请先登录账号',
     solution: '点击右上角登录按钮完成登录',
+    level: 'info',
+    showRetry: false,
+  },
+  请先开播: {
+    title: '需要先开播',
+    message: '当前还没有开播，开播后才能使用这个功能',
+    solution: '先在直播平台开始直播，然后再使用这个功能',
     level: 'info',
     showRetry: false,
   },
@@ -318,7 +325,7 @@ export const SUBACCOUNT_ERROR_MAP: Record<string, ErrorMessageConfig> = {
 export const GENERIC_ERROR_MAP: Record<string, ErrorMessageConfig> = {
   UNKNOWN_ERROR: {
     title: '发生未知错误',
-    message: '系统遇到了意外情况',
+    message: '操作没有成功，请稍后再试',
     solution: '尝试刷新页面或重启软件。如果问题持续存在，请联系客服',
     level: 'error',
     showRetry: true,
@@ -326,15 +333,22 @@ export const GENERIC_ERROR_MAP: Record<string, ErrorMessageConfig> = {
   },
   NETWORK_ERROR: {
     title: '网络异常',
-    message: '网络连接出现问题',
+    message: '网络连不上，检查一下网络后再试',
     solution: '检查一下网络连接，确认能正常访问互联网后再试',
     level: 'error',
     showRetry: true,
   },
   SERVER_ERROR: {
     title: '服务器繁忙',
-    message: '服务器暂时无法处理您的请求',
+    message: '服务器有点忙，稍后再试一下',
     solution: '稍等一下后再试，如果还是不行请联系客服',
+    level: 'warning',
+    showRetry: true,
+  },
+  TIMEOUT_ERROR: {
+    title: '等待超时',
+    message: '等待时间有点久了，请再试一次',
+    solution: '网络可能不太稳定，检查一下网络后再试',
     level: 'warning',
     showRetry: true,
   },
