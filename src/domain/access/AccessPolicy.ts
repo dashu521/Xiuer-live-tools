@@ -211,7 +211,6 @@ export function isFreeUser(context: AccessContext): boolean {
  * 规则：已登录 + (付费用户 | 试用有效)
  */
 export function canConnectLiveControl(context: AccessContext): AccessDecision {
-  // 未登录
   if (!context.isAuthenticated) {
     return {
       allowed: false,
@@ -220,17 +219,15 @@ export function canConnectLiveControl(context: AccessContext): AccessDecision {
     }
   }
 
-  // 付费用户直接放行
   if (context.isPaidUser) {
     return { allowed: true }
   }
 
-  // 试用用户检查试用状态
   if (context.plan === 'trial') {
     if (context.trialExpired) {
       return {
         allowed: false,
-        reason: '试用已过期，请升级套餐',
+        reason: '试用期已结束，升级会员可以继续使用',
         action: 'subscribe',
       }
     }
@@ -239,10 +236,9 @@ export function canConnectLiveControl(context: AccessContext): AccessDecision {
     }
   }
 
-  // 免费用户需要开通试用
   return {
     allowed: false,
-    reason: '需要开通试用或升级套餐',
+    reason: '开通免费试用或升级会员，即可使用全部功能',
     action: 'subscribe',
   }
 }
@@ -298,21 +294,21 @@ export function getLiveAccountLimit(context: AccessContext): number {
 export function canAddMoreLiveAccounts(context: AccessContext): AccessDecision {
   const { maxLiveAccounts, currentAccountCount } = context
 
-  // 无限制
   if (maxLiveAccounts < 0) {
     return { allowed: true }
   }
 
-  // 未达上限
   if (currentAccountCount < maxLiveAccounts) {
     return { allowed: true }
   }
 
-  // 已达上限
   const requiredPlan = getUpgradeSuggestion(context.plan)
+  const planName = PLAN_TEXT_MAP[context.plan]
+  const nextPlanName = requiredPlan ? PLAN_TEXT_MAP[requiredPlan] : ''
+  
   return {
     allowed: false,
-    reason: `已达到账号数量上限 (${currentAccountCount}/${maxLiveAccounts})，升级套餐可添加更多账号`,
+    reason: `${planName}最多支持 ${maxLiveAccounts} 个直播账号${requiredPlan ? `，升级到${nextPlanName}可以添加更多` : ''}`,
     action: 'upgrade',
     requiredPlan,
   }
@@ -325,9 +321,9 @@ export function getAccountLimitMessage(context: AccessContext): string {
   const maxAccounts = context.maxLiveAccounts
 
   if (maxAccounts < 0) {
-    return '当前套餐不限制直播账号数量'
+    return '当前会员不限制直播账号数量'
   }
 
   const planName = PLAN_TEXT_MAP[context.plan]
-  return `${planName}最多可添加 ${maxAccounts} 个直播账号`
+  return `${planName}最多可以添加 ${maxAccounts} 个直播账号`
 }

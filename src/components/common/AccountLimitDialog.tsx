@@ -22,19 +22,19 @@ const UPGRADE_SUGGESTIONS: Record<
 > = {
   free: {
     title: '升级专业版，解锁更多功能',
-    description: '专业版支持自动回复、自动发言、AI助手等高级功能',
+    description: '专业版支持自动回复、自动发言、AI 助手等高级功能',
     nextPlan: '专业版',
     nextPlanLimit: 1,
   },
   trial: {
-    title: '试用期即将结束，升级继续享受全部功能',
-    description: '专业版支持自动回复、自动发言、AI助手等高级功能',
+    title: '试用期即将结束，升级继续使用全部功能',
+    description: '专业版支持自动回复、自动发言、AI 助手等高级功能',
     nextPlan: '专业版',
     nextPlanLimit: 1,
   },
   pro: {
     title: '升级专业增强版，管理更多直播间',
-    description: '专业增强版支持添加3个直播账号，适合多店铺运营',
+    description: '专业增强版支持添加 3 个直播账号，适合多店铺运营',
     nextPlan: '专业增强版',
     nextPlanLimit: 3,
   },
@@ -45,7 +45,7 @@ const UPGRADE_SUGGESTIONS: Record<
     nextPlanLimit: -1,
   },
   ultra: {
-    title: '您已是旗舰版用户',
+    title: '您已是旗舰版会员',
     description: '如有特殊需求，请联系客服定制方案',
     nextPlan: '定制方案',
     nextPlanLimit: -1,
@@ -88,7 +88,7 @@ export function AccountLimitDialog({ isOpen, onClose, onContinue }: AccountLimit
             <DialogTitle>账号数量限制</DialogTitle>
           </div>
           <DialogDescription className="pt-2">
-            亲爱哒，您的当前会员等级为{' '}
+            您当前的会员等级是{' '}
             <span className="font-semibold text-primary">{planName}</span>
           </DialogDescription>
         </DialogHeader>

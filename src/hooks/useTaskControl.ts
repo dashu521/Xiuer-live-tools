@@ -77,11 +77,11 @@ export function useTaskControl<T extends TaskType>(params: UseTaskControlParams<
 
     if (result) {
       setIsRunning(true)
-      toast.success(startSuccessMessage || `${taskType} 任务已启动`)
+      toast.success(startSuccessMessage || `${taskType}任务已启动`)
       console.log(`[TaskGate] ${taskType} task started successfully for account ${accountId}`)
     } else {
       setIsRunning(false)
-      toast.error(startFailureMessage || `${taskType} 任务启动失败`)
+      toast.error(startFailureMessage || `${taskType}任务启动失败，请重试`)
       console.error(`[TaskGate] Failed to start ${taskType} task for account ${accountId}`)
     }
   }, [

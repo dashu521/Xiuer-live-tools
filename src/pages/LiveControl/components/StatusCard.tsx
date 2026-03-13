@@ -324,14 +324,13 @@ const ConnectToLiveControl = React.memo(() => {
       action: async () => {
         try {
           if (!account) {
-            toast.error('找不到对应账号')
+            toast.error('找不到当前账号，请重新选择')
             return
           }
 
-          // 重入保护：防止重复点击
           if (connectState.status === 'connecting') {
             console.warn(`[conn][${account.id}] 重入拒绝：正在连接中`)
-            toast.error('正在连接中，请稍候...')
+            toast.error('正在连接中，请稍等')
             return
           }
 
@@ -407,14 +406,12 @@ const ConnectToLiveControl = React.memo(() => {
 
           // 阶段 3: 浏览器已启动
           if (result.needsLogin) {
-            // 需要登录，显示扫码提示
             setConnectState({
               phase: 'waiting_for_login',
             })
             toast.info('请在新打开的浏览器窗口中完成登录')
             console.log(`[conn][${account.id}][${traceId}] 浏览器已启动，等待用户扫码登录...`)
           } else {
-            // 【修复】不需要登录，直接连接成功，立即更新状态为 connected
             setConnectState({
               status: 'connected',
               phase: 'streaming',
@@ -424,7 +421,7 @@ const ConnectToLiveControl = React.memo(() => {
             console.log(
               `[conn][${account.id}][${traceId}] 浏览器已启动，已登录，状态已更新为 connected`,
             )
-            toast.success('已成功连接到直播控制台')
+            toast.success('已成功连接到直播中控台')
           }
           loginTimeoutRef.current = setTimeout(() => {
             // 从 store 获取最新状态，避免闭包陷阱
@@ -434,15 +431,14 @@ const ConnectToLiveControl = React.memo(() => {
             if (latestStatus === 'connecting') {
               console.log('[State Machine] Login timeout, status transition: connecting → error')
               setConnectState({
-                status: 'error',
-                error: '登录超时，请检查是否已完成扫码登录',
-              })
-              // 使用用户友好的错误提示
-              const timeoutError = getFullErrorInfo('登录超时')
-              toast.error(`${timeoutError.title}：${timeoutError.message}`)
-              setTimeout(() => {
-                toast.info(`💡 ${timeoutError.solution}`)
-              }, 1000)
+              status: 'error',
+              error: '登录超时，请检查是否已完成扫码登录',
+            })
+            const timeoutError = getFullErrorInfo('登录超时')
+            toast.error(`${timeoutError.title}：${timeoutError.message}`)
+            setTimeout(() => {
+              toast.info(`💡 ${timeoutError.solution}`)
+            }, 1000)
             } else if (latestStatus === 'connected') {
               // 已经在 connected 状态，说明登录成功了，只是 notifyAccountName 事件可能延迟
               console.log('[State Machine] Login already succeeded, ignoring timeout')
@@ -486,7 +482,7 @@ const ConnectToLiveControl = React.memo(() => {
 
   const disconnectLiveControl = useMemoizedFn(async () => {
     if (!account) {
-      toast.error('找不到对应账号')
+      toast.error('找不到当前账号，请重新选择')
       return
     }
     try {
@@ -505,7 +501,7 @@ const ConnectToLiveControl = React.memo(() => {
       toast.success('已断开连接')
     } catch (error) {
       console.error('[State Machine] Disconnect failed:', error)
-      toast.error('断开连接失败')
+      toast.error('断开连接失败，请重试')
     }
   })
 

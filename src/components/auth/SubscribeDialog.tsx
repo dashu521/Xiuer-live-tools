@@ -87,10 +87,10 @@ export function SubscribeDialog({
         return
       }
       if (result.errorCode === 'trial_already_used') {
-        setTrialError('试用已使用完毕，如需继续使用请升级。')
+        setTrialError('试用机会已用完，升级会员可以继续使用全部功能')
         return
       }
-      setTrialError(result.message ?? '网络异常，请稍后重试。')
+      setTrialError(result.message ?? '网络不太好，稍后再试一下')
     } finally {
       setLoading(false)
     }
@@ -106,10 +106,10 @@ export function SubscribeDialog({
           </DialogTitle>
           <DialogDescription>
             {trialExpired
-              ? '您的 3 天试用已结束。可再次开通试用继续使用全部功能（不收费）。'
+              ? '您的 3 天试用期已结束。升级会员可以继续使用全部功能。'
               : actionName
-                ? `「${actionName}」需要开通试用后使用。可免费试用全部功能 3 天。`
-                : '可免费试用全部功能 3 天，无需支付。'}
+                ? `使用「${actionName}」需要先开通试用。可以免费试用全部功能 3 天。`
+                : '可以免费试用全部功能 3 天，无需支付。'}
           </DialogDescription>
           {trialError && (
             <p className="text-sm text-destructive mt-2" role="alert">

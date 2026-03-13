@@ -19,13 +19,13 @@ export type AuthErrorInput =
   | Error
 
 const SMS_ERROR_MAP: Record<string, string> = {
-  invalid_phone: '请输入正确的手机号',
-  too_many_requests: '发送过于频繁，请60秒后再试',
-  daily_limit_exceeded: '今日发送次数已用完，请明天再试',
-  too_many_failures: '验证码尝试次数过多，请10分钟后再试',
-  invalid_code: '验证码错误，请检查后重试',
-  code_expired: '验证码已过期，请重新获取',
-  sms_send_failed: '短信发送失败，请稍后重试',
+  invalid_phone: '手机号格式不对，请检查一下',
+  too_many_requests: '发送太快了，请等 1 分钟后再试',
+  daily_limit_exceeded: '今天的验证码次数用完了，明天再来吧',
+  too_many_failures: '验证码输错太多次，请 10 分钟后再试',
+  invalid_code: '验证码不对，请重新输入',
+  code_expired: '验证码过期了，点击重新获取',
+  sms_send_failed: '短信发送失败，稍后再试一下',
 }
 
 /** 对象形式的鉴权错误入参，与 AuthErrorInput 的对象分支一致 */
@@ -93,23 +93,21 @@ export function mapAuthError(raw: AuthErrorInput): MapAuthErrorResult {
 
     switch (errorType) {
       case 'USER_NOT_FOUND':
-        // 账号不存在，显示注册引导
         return {
-          userMessage: '该账号未注册，请检查账号或立即注册',
+          userMessage: '这个手机号还没注册，请检查一下或立即注册',
           rawForDev,
           showRegisterHint: true,
         }
       case 'INVALID_PASSWORD':
-        // 密码错误，显示注册引导（可能是账号输错）
         return {
-          userMessage: '账号或密码错误，请检查后再试',
+          userMessage: '手机号或密码不对，再检查一下',
           rawForDev,
           showRegisterHint: true,
         }
       case 'ACCOUNT_DISABLED':
-        return { userMessage: '该账号已被禁用，请联系管理员', rawForDev }
+        return { userMessage: '账号已被停用，请联系客服处理', rawForDev }
       case 'SERVER_ERROR':
-        return { userMessage: '服务器开小差了，请稍后再试', rawForDev }
+        return { userMessage: '服务器有点忙，稍后再试一下', rawForDev }
       default:
         break
     }
@@ -118,16 +116,15 @@ export function mapAuthError(raw: AuthErrorInput): MapAuthErrorResult {
   if (isNetworkError(raw)) {
     const rawForDev = raw instanceof Error ? raw.message : JSON.stringify(raw)
     return {
-      userMessage: '无法连接认证服务器，请检查网络后重试；也可尝试下方「手机验证码登录」。',
+      userMessage: '网络连不上，检查一下网络后重试',
       rawForDev,
     }
   }
 
   if (status === 401) {
     const rawForDev = requestUrl ? `401 ${detailStr} (${requestUrl})` : `401 ${detailStr}`
-    // 401 错误显示友好提示，并引导用户注册
     return {
-      userMessage: '账号或密码错误，请检查后再试',
+      userMessage: '手机号或密码不对，再检查一下',
       rawForDev,
       showRegisterHint: true,
     }
@@ -135,7 +132,7 @@ export function mapAuthError(raw: AuthErrorInput): MapAuthErrorResult {
 
   if (status === 403 && /disabled|禁用|account_disabled/.test(detailStr)) {
     const rawForDev = requestUrl ? `403 ${detailStr} (${requestUrl})` : `403 ${detailStr}`
-    return { userMessage: '该账号已被禁用，请联系管理员', rawForDev }
+    return { userMessage: '账号已被停用，请联系客服处理', rawForDev }
   }
 
   if (typeof status === 'number' && status >= 500) {
@@ -143,7 +140,7 @@ export function mapAuthError(raw: AuthErrorInput): MapAuthErrorResult {
       ? `${status} ${detailStr} (${requestUrl})`
       : `${status} ${detailStr}`
     const userMessage =
-      status === 502 || status === 503 ? '服务暂时不可用，请稍后再试' : '服务器开小差了，请稍后再试'
+      status === 502 || status === 503 ? '服务器正在维护，稍后再试一下' : '服务器有点忙，稍后再试一下'
     return { userMessage, rawForDev }
   }
 
@@ -153,5 +150,5 @@ export function mapAuthError(raw: AuthErrorInput): MapAuthErrorResult {
       : status !== undefined
         ? `${status} ${detailStr}`
         : detailStr || 'unknown'
-  return { userMessage: '登录失败，请稍后重试', rawForDev }
+  return { userMessage: '登录失败了，稍后再试一下', rawForDev }
 }

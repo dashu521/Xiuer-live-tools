@@ -95,7 +95,6 @@ export function useOneClickStart(): {
       setAutoReplyListening('listening')
       setAutoReplyRunning(true)
 
-      // 同步 LiveStats 的监听状态（与 AutoReply/index.tsx 保持一致）
       useLiveStatsStore.getState().setListening(currentAccountId, true)
       console.log('[OneClickStart] Comment listener started successfully')
 
@@ -114,14 +113,11 @@ export function useOneClickStart(): {
     const results: { task: string; success: boolean }[] = []
 
     try {
-      // 1. 启动自动回复（会自动启动数据监控）
       const autoReplySuccess = await startAutoReply()
       results.push({ task: '自动回复', success: autoReplySuccess })
 
-      // 2. 启动自动发言（使用 TaskManager 统一管理）
       if (!isAutoMessageRunning) {
         try {
-          // 创建 TaskContext 对象
           const ctx: TaskContext = {
             accountId: currentAccountId,
             toast: {
@@ -129,7 +125,6 @@ export function useOneClickStart(): {
               error: (message: string) => toast.error(message),
             },
             ipcInvoke: async <T = unknown>(channel: string, ...args: unknown[]): Promise<T> => {
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-return -- IPC channel 动态调用，需放宽类型
               return (window as any).ipcRenderer.invoke(channel, ...args) as Promise<T>
             },
           }
@@ -145,16 +140,14 @@ export function useOneClickStart(): {
           results.push({ task: '自动发言', success: false })
         }
       } else {
-        results.push({ task: '自动发言', success: true }) // 已在运行
+        results.push({ task: '自动发言', success: true })
       }
 
-      // 3. 启动自动弹窗
       if (!isAutoPopUpRunning) {
         setAutoPopUpRunning(true)
         results.push({ task: '自动弹窗', success: true })
       }
 
-      // 显示结果
       const successCount = results.filter(r => r.success).length
       const totalCount = results.length
 
@@ -165,7 +158,7 @@ export function useOneClickStart(): {
           .filter(r => !r.success)
           .map(r => r.task)
           .join('、')
-        toast.error(`${failedTasks} 启动失败`)
+        toast.error(`${failedTasks}启动失败，请重试`)
       }
     } catch (error) {
       toast.error('启动任务失败，请重试')

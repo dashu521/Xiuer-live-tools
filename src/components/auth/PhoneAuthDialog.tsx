@@ -97,19 +97,19 @@ export function PhoneAuthDialog({
   const validatePhone = (): string | null => {
     const phoneRegex = /^1[3-9]\d{9}$/
     if (!phone || !phone.trim()) return '请输入手机号'
-    if (!phoneRegex.test(phone)) return '请输入有效的手机号'
+    if (!phoneRegex.test(phone)) return '手机号格式不对，请检查一下'
     return null
   }
 
   const validateCode = (): string | null => {
     if (!code || !code.trim()) return '请输入验证码'
-    if (code.length !== 6) return '验证码为6位数字'
+    if (code.length !== 6) return '验证码是 6 位数字'
     return null
   }
 
   const validateResetFields = (): string | null => {
-    if (newPassword.length < 6) return '密码至少 6 位'
-    if (newPassword !== confirmPassword) return '两次输入的密码不一致'
+    if (newPassword.length < 6) return '密码至少要 6 位'
+    if (newPassword !== confirmPassword) return '两次密码不一样，请重新输入'
     return null
   }
 
@@ -146,18 +146,18 @@ export function PhoneAuthDialog({
 
         let errorMsg = message
         if (status === 429 || message.includes('limit') || message.includes('limit_exceeded')) {
-          errorMsg = '发送过于频繁，请稍后再试（每日有发送限制）'
+          errorMsg = '发送太快了，请稍后再试'
         }
 
         setValidationError(errorMsg)
         toast.error(errorMsg)
       } else {
-        setValidationError('发送失败，请稍后重试')
-        toast.error('发送失败，请稍后重试')
+        setValidationError('发送失败了，稍后再试')
+        toast.error('发送失败了，稍后再试')
       }
     } catch (error) {
       console.error('[PhoneAuthDialog] Send code error:', error)
-      const errorMsg = '发送失败，请稍后重试'
+      const errorMsg = '发送失败了，稍后再试'
       setValidationError(errorMsg)
       toast.error(errorMsg)
     } finally {
@@ -186,7 +186,7 @@ export function PhoneAuthDialog({
       const authAPI = (window as { authAPI?: { loginWithSms?: (phone: string, code: string) => Promise<unknown> } }).authAPI
       console.log('[PhoneAuthDialog] authAPI 存在:', !!authAPI, 'loginWithSms 存在:', !!authAPI?.loginWithSms)
       if (!authAPI?.loginWithSms) {
-        toast.error('登录功能不可用，请重启应用')
+        toast.error('登录功能暂时不可用，请重启软件')
         setIsSubmitting(false)
         return
       }
@@ -283,16 +283,16 @@ export function PhoneAuthDialog({
           window.dispatchEvent(new CustomEvent('auth:closeMainDialog'))
         }
       } else if (!result.success) {
-        const errorMsg = result.error || '操作失败，请检查验证码'
+        const errorMsg = result.error || '验证码不对，请重新输入'
         setValidationError(errorMsg)
         toast.error(errorMsg)
       } else {
-        setValidationError('操作失败，请检查验证码')
-        toast.error('操作失败，请检查验证码')
+        setValidationError('验证码不对，请重新输入')
+        toast.error('验证码不对，请重新输入')
       }
     } catch (err) {
       console.error('[PhoneAuthDialog] 短信登录异常:', err)
-      const errorMsg = '操作失败，请稍后重试'
+      const errorMsg = '操作失败了，稍后再试'
       setValidationError(errorMsg)
       toast.error(errorMsg)
     } finally {
@@ -324,17 +324,17 @@ export function PhoneAuthDialog({
     try {
       const result = await resetPasswordWithSms(phone, code, newPassword)
       if (result.ok) {
-        toast.success('密码重置成功，请用新密码登录')
+        toast.success('密码重置成功，可以用新密码登录了')
         onClose()
         window.dispatchEvent(new CustomEvent('auth:closeMainDialog'))
       } else {
-        const msg = result.error?.message || '重置失败，请稍后重试'
+        const msg = result.error?.message || '重置失败了，稍后再试'
         setValidationError(msg)
         toast.error(msg)
       }
     } catch {
-      setValidationError('重置失败，请稍后重试')
-      toast.error('重置失败，请稍后重试')
+      setValidationError('重置失败了，稍后再试')
+      toast.error('重置失败了，稍后再试')
     } finally {
       setIsSubmitting(false)
     }
