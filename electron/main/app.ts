@@ -185,7 +185,7 @@ function waitForDevServer(
   url: string,
   maxWaitMs = 60000,
   intervalMs = 1000,
-  initialDelayMs = 5000,
+  initialDelayMs = 500,
 ): Promise<void> {
   let host = '127.0.0.1'
   let port = 5173
