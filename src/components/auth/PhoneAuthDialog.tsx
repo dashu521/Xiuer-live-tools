@@ -15,7 +15,6 @@ import { useSubAccountStore } from '@/hooks/useSubAccount'
 import { useToast } from '@/hooks/useToast'
 import {
   getUserStatus,
-  loginWithSmsCode,
   resetPasswordWithSms,
   sendSmsCode,
 } from '@/services/apiClient'
@@ -181,11 +180,31 @@ export function PhoneAuthDialog({
     }
 
     setIsSubmitting(true)
+    console.log('[PhoneAuthDialog] 开始短信登录流程, phone末4位:', phone.slice(-4), 'code长度:', code.length)
     try {
-      const result = await loginWithSmsCode(phone, code)
+      // [SECURITY-FIX] 使用主进程代理登录，内部处理 token 存储
+      const authAPI = (window as { authAPI?: { loginWithSms?: (phone: string, code: string) => Promise<unknown> } }).authAPI
+      console.log('[PhoneAuthDialog] authAPI 存在:', !!authAPI, 'loginWithSms 存在:', !!authAPI?.loginWithSms)
+      if (!authAPI?.loginWithSms) {
+        toast.error('登录功能不可用，请重启应用')
+        setIsSubmitting(false)
+        return
+      }
+
+      console.log('[PhoneAuthDialog] 调用 authAPI.loginWithSms...')
+      const result = await authAPI.loginWithSms(phone, code) as {
+        success: boolean
+        user?: { id: string; username: string; email?: string; phone?: string; status?: string; created_at?: string; last_login_at?: string }
+        token?: string
+        refresh_token?: string
+        needs_password?: boolean
+        error?: string
+      }
+
       console.log('[PhoneAuthDialog] 短信登录返回结果:', JSON.stringify(result, null, 2))
-      if (result.ok && result.data?.token) {
-        const { user, refresh_token, needs_password } = result.data
+
+      if (result.success && result.token) {
+        const { user, refresh_token, needs_password } = result
         console.log('[PhoneAuthDialog] 解析后的 user 对象:', JSON.stringify(user, null, 2))
         console.log('[PhoneAuthDialog] user.id:', user?.id)
         console.log('[PhoneAuthDialog] user.phone:', user?.phone)
@@ -212,36 +231,11 @@ export function PhoneAuthDialog({
         }
         console.log('[PhoneAuthDialog] 构建的 safeUser:', JSON.stringify(safeUser, null, 2))
 
-        // [SECURITY] 将敏感 token 保存到主进程安全存储（与密码登录保持一致）
-        console.log('[PhoneAuthDialog] Saving tokens to main process...')
-        if (typeof window !== 'undefined') {
-          const authAPI = (
-            window as {
-              authAPI?: {
-                setTokens?: (tokens: {
-                  token: string | null
-                  refreshToken: string | null
-                }) => Promise<void>
-              }
-            }
-          ).authAPI
-          if (authAPI?.setTokens) {
-            try {
-              await authAPI.setTokens({
-                token: result.data.token,
-                refreshToken: refresh_token ?? null,
-              })
-              console.log('[PhoneAuthDialog] Tokens saved to main process successfully')
-            } catch (err) {
-              console.error('[PhoneAuthDialog] Failed to save tokens to main process:', err)
-            }
-          } else {
-            console.warn('[PhoneAuthDialog] authAPI.setTokens not available')
-          }
-        }
+        // [SECURITY] token 已由主进程内部存储，这里只更新 renderer 状态
+        console.log('[PhoneAuthDialog] Token 已由主进程存储，更新 renderer 状态...')
 
         setUser(safeUser)
-        setToken(result.data.token)
+        setToken(result.token)
         if (refresh_token) {
           setRefreshToken(refresh_token)
         }
@@ -288,15 +282,16 @@ export function PhoneAuthDialog({
           onClose()
           window.dispatchEvent(new CustomEvent('auth:closeMainDialog'))
         }
-      } else if (!result.ok && result.error) {
-        const errorMsg = result.error.message || '操作失败，请检查验证码'
+      } else if (!result.success) {
+        const errorMsg = result.error || '操作失败，请检查验证码'
         setValidationError(errorMsg)
         toast.error(errorMsg)
       } else {
         setValidationError('操作失败，请检查验证码')
         toast.error('操作失败，请检查验证码')
       }
-    } catch {
+    } catch (err) {
+      console.error('[PhoneAuthDialog] 短信登录异常:', err)
       const errorMsg = '操作失败，请稍后重试'
       setValidationError(errorMsg)
       toast.error(errorMsg)

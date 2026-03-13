@@ -274,3 +274,81 @@ export async function cloudMe(accessToken: string): Promise<{
     subscription: data.subscription,
   }
 }
+
+/**
+ * 手机验证码登录
+ * 后端端点: POST /auth/sms/login?phone=xxx&code=xxx
+ * 后端返回: { user, token, refresh_token, needs_password } - 注意是 token 不是 access_token
+ */
+export async function cloudSmsLogin(
+  phone: string,
+  code: string,
+): Promise<{
+  success: boolean
+  user?: CloudAuthResponse['user']
+  access_token?: string
+  refresh_token?: string
+  needs_password?: boolean
+  error?: string
+  status?: number
+  responseDetail?: string
+}> {
+  const prefix = getAuthPathPrefix()
+  const url = `${prefix}/auth/sms/login?phone=${encodeURIComponent(phone)}&code=${encodeURIComponent(code)}`
+  
+  console.log('[cloudSmsLogin] 开始请求:', {
+    action: 'cloudSmsLogin',
+    phoneSuffix: phone.slice(-4),
+    codeLength: code.length,
+    method: 'POST',
+    url: url,
+    paramType: 'query',
+  })
+  
+  const { data, status, error, requestUrl, responseDetail } = await request<
+    { user: CloudAuthResponse['user']; token: string; refresh_token?: string; needs_password?: boolean }
+  >('POST', url)
+  
+  console.log('[cloudSmsLogin] 后端响应:', {
+    status,
+    hasData: !!data,
+    hasToken: !!(data?.token),
+    hasRefreshToken: !!(data?.refresh_token),
+    hasUser: !!(data?.user),
+    needsPassword: data?.needs_password,
+    error: error?.message,
+    responseDetail,
+  })
+  
+  if (error) {
+    console.error('[cloudSmsLogin] 请求失败:', error?.message, responseDetail)
+    return {
+      success: false,
+      error: error?.message ?? responseDetail ?? '验证码登录失败',
+      status,
+      responseDetail: responseDetail || error?.message,
+    }
+  }
+  
+  // [FIX] 后端返回的是 token，不是 access_token
+  const ok = status === 200 && data != null && !!data.token
+  if (!ok) {
+    console.error('[cloudSmsLogin] 响应数据不完整:', { status, hasData: !!data, hasToken: !!(data?.token) })
+    return {
+      success: false,
+      error: responseDetail || '验证码登录失败（响应数据不完整）',
+      status,
+      responseDetail,
+    }
+  }
+  
+  console.log('[cloudSmsLogin] 登录成功, token已获取')
+  
+  return {
+    success: true,
+    user: data.user,
+    access_token: data.token, // [FIX] 后端返回 token，映射到 access_token
+    refresh_token: data.refresh_token,
+    needs_password: data.needs_password,
+  }
+}

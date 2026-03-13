@@ -1,13 +1,27 @@
 # 连接回归问题修复方案
 
+> **版本**: v1.0
+> **最后更新**: 2026-03-14
+> **状态**: 已完成归档
+> **负责人**: TEAM
+> **当前适用性**: 仅供历史参考
+> **关联主文档**: docs/REGRESSION_CHECKLIST.md
+> **问题状态**: 已修复归档
+
+---
+
+> ⚠️ **注意**: 本文档为历史修复记录，已归档。当前回归验证请参考 [docs/REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md)。
+
+---
+
 ## 根因总结
 
 经过代码分析，问题根因是：
 
 ### 1. **IPC 返回值逻辑混乱**
 `electron/main/ipc/connection.ts` 中：
-- 成功时返回 `{success: true, browserLaunched: true}`  
-- 同步失败时返回 `{success: false, browserLaunched: false, error}`  
+- 成功时返回 `{success: true, browserLaunched: true}`
+- 同步失败时返回 `{success: false, browserLaunched: false, error}`
 
 但前端 `StatusCard.tsx` 只判断 `!result.browserLaunched`，导致：
 - 同步失败时弹出toast.error（第一次"连接失败"）

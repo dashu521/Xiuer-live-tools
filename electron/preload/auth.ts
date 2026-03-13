@@ -34,6 +34,23 @@ export const authAPI = {
     return await ipcRenderer.invoke('auth:login', credentials)
   },
 
+  /**
+   * 手机验证码登录（内部处理 token 存储）
+   * 成功后 token 已写入主进程安全存储
+   */
+  loginWithSms: async (phone: string, code: string): Promise<{
+    success: boolean
+    user?: { id: string; username: string; email?: string; phone?: string; status?: string }
+    token?: string
+    refresh_token?: string
+    needs_password?: boolean
+    error?: string
+    status?: number
+    responseDetail?: string
+  }> => {
+    return await ipcRenderer.invoke('auth:loginWithSms', phone, code)
+  },
+
   logout: async () => {
     return ipcRenderer.invoke('auth:logout')
   },
@@ -77,6 +94,14 @@ export const authAPI = {
     body?: object
   }): Promise<{ success: boolean; status?: number; data?: unknown; error?: string }> => {
     return await ipcRenderer.invoke('auth:proxyRequest', requestConfig)
+  },
+
+  /**
+   * [INTERNAL-SECURITY] 获取 token 用于 apiClient 请求
+   * 仅限内部使用，不直接暴露给业务代码
+   */
+  getTokenInternal: async (): Promise<AuthTokens> => {
+    return await ipcRenderer.invoke('auth:getTokenInternal')
   },
 
   /**

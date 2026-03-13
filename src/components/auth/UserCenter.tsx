@@ -20,7 +20,7 @@ const PRIMARY_STYLES = {
 } as const
 
 export function UserCenter({ isOpen, onClose }: UserCenterProps) {
-  const { user, logout, refreshUserStatus, userStatus } = useAuthStore()
+  const { user, logout, refreshUserStatus } = useAuthStore()
   const { toast } = useToast()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
@@ -40,25 +40,26 @@ export function UserCenter({ isOpen, onClose }: UserCenterProps) {
     // 从权限上下文获取套餐信息
     const plan = accessContext.plan
 
-    // 计算到期信息
+    // 计算到期信息 - 统一从 accessContext 获取
     let expiry: ExpiryInfo = {
       date: null,
       isExpired: false,
       isPermanent: false,
     }
 
-    if (userStatus?.trial?.end_at) {
-      const endDate = new Date(userStatus.trial.end_at)
+    // 优先使用试用到期时间，其次使用正式套餐到期时间
+    if (accessContext.trialEndsAt) {
+      const endDate = new Date(accessContext.trialEndsAt)
       expiry = {
         date: endDate,
-        isExpired: userStatus.trial.is_expired ?? false,
+        isExpired: accessContext.trialExpired,
         isPermanent: false,
       }
-    } else if (user.expire_at) {
-      const endDate = new Date(user.expire_at)
+    } else if (accessContext.expiresAt) {
+      const endDate = new Date(accessContext.expiresAt)
       expiry = {
         date: endDate,
-        isExpired: user.expire_at < Date.now(),
+        isExpired: accessContext.expiresAt < Date.now(),
         isPermanent: false,
       }
     } else {
@@ -75,7 +76,7 @@ export function UserCenter({ isOpen, onClose }: UserCenterProps) {
         ? Math.max(0, Math.ceil((expiry.date.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
         : null
 
-    // 【重构】从权限上下文获取账号上限显示
+    // 从权限上下文获取账号上限显示
     const maxAccounts = accessContext.maxLiveAccounts
     const accountLimitDisplay = maxAccounts < 0 ? '无限制' : `${maxAccounts} 个`
 
@@ -85,7 +86,7 @@ export function UserCenter({ isOpen, onClose }: UserCenterProps) {
       accountLimitDisplay,
       remainingDays,
     }
-  }, [user, userStatus, accessContext])
+  }, [user, accessContext])
 
   const handleLogout = useCallback(async () => {
     setShowLogoutConfirm(true)

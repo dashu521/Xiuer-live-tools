@@ -1,5 +1,14 @@
 # 回归验证清单
 
+> **版本**: v1.0
+> **最后更新**: 2026-03-14
+> **状态**: 已固化
+> **负责人**: TEAM
+> **当前适用性**: 当前有效
+> **关联主文档**: 本文档为回归验证的唯一可信来源
+
+---
+
 > 每次修改代码后，必须验证所有相关项目。标记 `[R]` 表示必须验证，`[O]` 表示可选验证。
 
 ---
@@ -23,6 +32,19 @@
 | 开发态 | 验证码过期/错误时显示正确提示 | [ ] |
 | 打包后 | 发送验证码，输入验证码，验证登录成功 | [ ] |
 | 打包后 | 验证码过期/错误时显示正确提示 | [ ] |
+
+**[已修复/已验收] 手机验证码登录链路 - 2026-03-14**
+- 修复内容：验证码登录 → 自动注册 → 设置密码 → 免费试用 完整链路
+- 修复文件：
+  - `src/components/auth/PhoneAuthDialog.tsx` - 改用主进程代理登录
+  - `electron/main/services/cloudAuthClient.ts` - 新增 `cloudSmsLogin`
+  - `electron/main/ipc/auth.ts` - 新增 `auth:loginWithSms` handler
+  - `electron/preload/auth.ts` - 暴露 `loginWithSms` API
+- 验收状态：✅ 已通过真人验收
+- 关键修复点：
+  - Token 降级逻辑已移除（`apiClient.ts` 不再 fallback 到 renderer 内存 token）
+  - 公共认证层已迁移到 `getTokenInternal` 内部可信读取接口
+  - `set-password` / `trial-start` 的 401 token_invalid 问题已修复
 
 ### 1.3 登录状态持久化
 

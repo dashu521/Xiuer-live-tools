@@ -230,29 +230,29 @@ export const useAuthStore = create<AuthStore>()(
             useAccounts.getState().loadUserAccounts(userId)
             usePlatformPreferenceStore.getState().loadUserPreferences(userId)
 
-            // 获取用户状态并同步
-            getUserStatus()
-              .then(status => {
-                if (status) {
-                  get().setUserStatus(status)
-                  // 同步更新 user.plan - 使用 getEffectivePlan 确保正式套餐优先于试用
-                  const currentUser = get().user
-                  if (currentUser && status.plan) {
-                    const effectivePlan = getEffectivePlan(status.plan, status.trial)
-                    set({
-                      user: {
-                        ...currentUser,
-                        plan: effectivePlan,
-                        expire_at: status.expire_at ?? null,
-                      },
-                    })
-                  }
-                  console.log('[USER-STATUS]', status)
+            // 【修复】同步获取用户状态，确保登录后状态完整
+            try {
+              const status = await getUserStatus()
+              if (status) {
+                get().setUserStatus(status)
+                // 同步更新 user.plan - 使用 getEffectivePlan 确保正式套餐优先于试用
+                const currentUser = get().user
+                if (currentUser && status.plan) {
+                  const effectivePlan = getEffectivePlan(status.plan, status.trial)
+                  set({
+                    user: {
+                      ...currentUser,
+                      plan: effectivePlan,
+                      expire_at: status.expire_at ?? null,
+                    },
+                  })
                 }
-              })
-              .catch(error => {
-                console.error('[AuthStore] Failed to fetch user status after login:', error)
-              })
+                console.log('[USER-STATUS] 登录后同步完成:', status)
+              }
+            } catch (error) {
+              console.error('[AuthStore] Failed to fetch user status after login:', error)
+              // 用户状态获取失败不影响登录成功，但会在控制台记录
+            }
             return { success: true }
           }
           const status = (response as { status?: number }).status
@@ -646,25 +646,26 @@ export const useAuthStore = create<AuthStore>()(
             (
               window as {
                 authAPI?: {
-                  getTokens?: () => Promise<{ token: string | null; refreshToken: string | null }>
+                  getTokenInternal?: () => Promise<{ token: string | null; refreshToken: string | null }>
                 }
               }
-            ).authAPI?.getTokens
+            ).authAPI?.getTokenInternal
           ) {
             try {
               const tokens = await (
                 window as {
                   authAPI: {
-                    getTokens: () => Promise<{ token: string | null; refreshToken: string | null }>
+                    getTokenInternal: () => Promise<{ token: string | null; refreshToken: string | null }>
                   }
                 }
-              ).authAPI.getTokens()
+              ).authAPI.getTokenInternal()
               mainToken = tokens.token
               mainRefreshToken = tokens.refreshToken
               // 同步到内存
               if (mainToken) {
                 set({ token: mainToken, refreshToken: mainRefreshToken })
               }
+              console.log('[AuthStore] checkAuth: got token from main process:', mainToken ? 'exists' : 'null')
             } catch (err) {
               console.error('[AuthStore] Failed to get tokens from main process:', err)
             }

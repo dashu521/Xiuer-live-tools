@@ -5,6 +5,15 @@ description: "Implements online update feature implementation tasks. Invoke afte
 
 # 在线更新功能实现任务清单
 
+> **版本**: v1.0
+> **最后更新**: 2026-03-14
+> **状态**: 进行中
+> **负责人**: TEAM
+> **当前适用性**: 当前有效
+> **关联主文档**: docs/ONLINE_UPDATE_SPEC.md
+
+---
+
 ## 任务总览
 
 | 阶段 | 任务数 | 优先级 |

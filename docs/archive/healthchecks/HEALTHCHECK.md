@@ -1,5 +1,17 @@
 # 项目健康体检报告（Architecture + Build + Security + Stability）
 
+> **版本**: v1.0  
+> **最后更新**: 2025-01-31  
+> **状态**: 已过期  
+> **当前适用性**: 仅供历史参考  
+> **问题状态**: 部分已修复待验证  
+
+---
+
+⚠️ **重要提示**：本报告检查日期为 2025-01-31，距今已超过一个月。部分问题可能已修复，建议重新执行健康检查以获取最新状态。
+
+---
+
 **检查日期**: 2025-01-31  
 **范围**: 架构边界、构建与打包、Electron 安全基线、稳定性与可观测性、代码质量守门员
 
@@ -23,7 +35,7 @@
 
 | 问题 | 证据 | 修复建议 |
 |------|------|----------|
-| **open-win 子窗口启用 nodeIntegration + contextIsolation: false** | `electron/main/app.ts` 第 374–388 行：`ipcMain.handle('open-win', ...)` 创建的 BrowserWindow 使用 `nodeIntegration: true`, `contextIsolation: false`。且该 channel 未被渲染进程调用（死代码），但一旦被使用会带来严重安全风险。 | **最小改动**：删除 `open-win` 的 IPC 处理及对应的 `ipcMain.handle('open-win', ...)` 整段（约 374–388 行）；若需保留“新窗口”能力，改为与主窗口相同的 webPreferences（nodeIntegration: false, contextIsolation: true）并走白名单 preload。 |
+| **open-win 子窗口启用 nodeIntegration + contextIsolation: false** | `electron/main/app.ts` 第 374–388 行：`ipcMain.handle('open-win', ...)` 创建的 BrowserWindow 使用 `nodeIntegration: true`, `contextIsolation: false`。且该 channel 未被渲染进程调用（死代码），但一旦被使用会带来严重安全风险。 | **最小改动**：删除 `open-win` 的 IPC 处理及对应的 `ipcMain.handle('open-win', ...)` 整段（约 374–388 行）；若需保留"新窗口"能力，改为与主窗口相同的 webPreferences（nodeIntegration: false, contextIsolation: true）并走白名单 preload。 |
 
 ### P1（建议尽快修复）
 

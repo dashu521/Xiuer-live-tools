@@ -1,5 +1,22 @@
 # 打包失败根因诊断报告
 
+> **版本**: v1.0  
+> **最后更新**: 2025-01  
+> **状态**: 已过期  
+> **当前适用性**: 仅供历史参考  
+> **问题状态**: 已修复归档  
+
+---
+
+⚠️ **重要提示**：本文档描述的问题已修复。当前打包流程已包含 `load-playwright.cjs` 复制步骤，该文件仅作为历史诊断记录保留。
+
+**修复说明**：
+- 问题根因：`dist-electron/main/runtime/load-playwright.cjs` 未被打包进 asar
+- 修复方案：已在 `package.json` build 脚本中添加复制步骤，并在 `electron-builder.json` 中显式声明 `dist-electron/main/runtime/**`
+- 验证状态：已验证修复有效
+
+---
+
 **目标问题**：Windows 打包后 exe 双击无反应 / 启动即退出。  
 **约束**：系统性根因定位，不修改源码；结论可验证。
 
@@ -149,13 +166,13 @@
   - `dist-electron/main/app-D4wLAQoM.js` 第 21595 行：`const { chromium } = require(path$1.join(__dirname, "runtime", "load-playwright.cjs"));`（顶层同步 require）。  
   - 当前仓库 `dist-electron/main/` 下列表**无** `runtime/` 目录，即**无** `runtime/load-playwright.cjs`。  
   - package.json 的 build 脚本包含复制步骤：`node -e "const fs=require('fs'); const p='dist-electron/main/runtime'; fs.mkdirSync(p,{recursive:true}); fs.copyFileSync('electron/main/runtime/load-playwright.cjs', p+'/load-playwright.cjs')"`。若该步骤未执行或失败，则打包时 `dist-electron/**/*` 中不包含此文件，asar 内缺失。  
-- **结论**：主进程在加载 app  chunk 时立即 require 该文件，文件缺失导致 MODULE_NOT_FOUND，进程在未创建窗口、未写业务日志前退出，符合“exe 双击无反应/启动即退出”。
+- **结论**：主进程在加载 app  chunk 时立即 require 该文件，文件缺失导致 MODULE_NOT_FOUND，进程在未创建窗口、未写业务日志前退出，符合"exe 双击无反应/启动即退出"。
 
 **2. 【中】单实例锁导致第二次启动直接退出**
 
 - **证据链**：  
   - `electron/main/app.ts` 第 88–91 行：`if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }`  
-- **结论**：仅影响“第二次及以后双击”；若第一次就无反应，则以根因 1 为主。
+- **结论**：仅影响"第二次及以后双击"；若第一次就无反应，则以根因 1 为主。
 
 **3. 【低】生产环境误设 VITE_DEV_SERVER_URL**
 

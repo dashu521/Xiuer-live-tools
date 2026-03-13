@@ -2,7 +2,7 @@ import { ipcMain } from 'electron'
 import type { LoginCredentials, RegisterData, User } from '../../../src/types/auth'
 import { AuthService } from '../services/AuthService'
 import { clearStoredTokens, getStoredTokens, setStoredTokens } from '../services/CloudAuthStorage'
-import { cloudLogin, cloudMe, cloudRefresh, cloudRegister } from '../services/cloudAuthClient'
+import { cloudLogin, cloudMe, cloudRefresh, cloudRegister, cloudSmsLogin } from '../services/cloudAuthClient'
 import { cloudUserToSafeUser } from '../services/cloudAuthMappers'
 import { getAuthApiBaseUrl } from '../config/buildTimeConfig'
 
@@ -155,6 +155,51 @@ export function setupAuthHandlers() {
     return await AuthService.login(credentials)
   })
 
+  // SMS Login - 手机验证码登录（内部处理 token 存储）
+  ipcMain.handle('auth:loginWithSms', async (_, phone: string, code: string) => {
+    console.log('[auth:loginWithSms] 收到登录请求, phone末4位:', phone.slice(-4))
+    if (!USE_CLOUD_AUTH) {
+      console.error('[auth:loginWithSms] 云鉴权未启用')
+      return { success: false, error: '云鉴权未启用' }
+    }
+    const res = await cloudSmsLogin(phone, code)
+    console.log('[auth:loginWithSms] cloudSmsLogin 结果:', { success: res.success, hasToken: !!res.access_token, hasUser: !!res.user })
+    if (!res.success) {
+      return {
+        success: false,
+        error: res.error,
+        status: res.status,
+        responseDetail: res.responseDetail,
+      }
+    }
+    // [CRITICAL] 登录成功，将 token 写入主进程安全存储
+    if (res.access_token) {
+      console.log('[auth:loginWithSms] 开始写入主进程存储...')
+      try {
+        await setStoredTokens({
+          access_token: res.access_token,
+          refresh_token: res.refresh_token ?? res.access_token,
+        })
+        // [VERIFY] 写入后立即读取验证
+        const verify = getStoredTokens()
+        console.log('[auth:loginWithSms] 存储写入完成, 验证读取:', { hasAccessToken: !!verify.access_token, hasRefreshToken: !!verify.refresh_token })
+      } catch (err) {
+        console.error('[auth:loginWithSms] 存储写入失败:', err)
+        return { success: false, error: 'Token存储失败' }
+      }
+    } else {
+      console.error('[auth:loginWithSms] 登录成功但无 access_token')
+      return { success: false, error: '登录响应缺少token' }
+    }
+    return {
+      success: true,
+      user: res.user ? cloudUserToSafeUser(res.user) : undefined,
+      token: res.access_token,
+      refresh_token: res.refresh_token,
+      needs_password: res.needs_password,
+    }
+  })
+
   // Logout
   ipcMain.handle('auth:logout', async (_, token: string) => {
     if (USE_CLOUD_AUTH) {
@@ -300,13 +345,17 @@ export function setupAuthHandlers() {
   )
 
   /**
-   * [DEPRECATED-SECURITY] auth:getTokens 已移除
-   * 原因：直接暴露完整 token 给 renderer 违反最小权限原则
-   * 迁移方案：
-   * - 如需检查登录状态：使用 auth:getAuthSummary
-   * - 如需发起鉴权请求：使用 auth:proxyRequest（由 main 代发）
+   * [INTERNAL-SECURITY] 获取 token 用于 apiClient 请求
+   * 仅限内部使用，不直接暴露给业务代码
    */
-  // ipcMain.handle('auth:getTokens', ... ) // REMOVED for security
+  ipcMain.handle('auth:getTokenInternal', async () => {
+    const tokens = await getStoredTokens()
+    console.log('[auth:getTokenInternal] 读取存储:', { hasAccessToken: !!tokens.access_token, hasRefreshToken: !!tokens.refresh_token })
+    return {
+      token: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+    }
+  })
 
   /**
    * [DEPRECATED-SECURITY] auth:setTokens 已收紧

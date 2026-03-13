@@ -1,5 +1,13 @@
 # 秀儿直播助手
 
+> **版本**: v1.2.1
+> **最后更新**: 2026-03-14
+> **状态**: 当前有效
+> **负责人**: TEAM
+> **当前适用性**: 项目总入口文档
+
+---
+
 专业的直播带货助手工具，支持多平台直播间管理与自动化运营。
 
 ## 产品简介
@@ -102,6 +110,48 @@ npm test
 | `npm run dist` | 完整构建并打包（用于发布） |
 | `npm run dist:clean` | 清理发布目录 |
 | `npm test` | 运行测试 |
+
+---
+
+## 文档索引（唯一可信来源）
+
+> **重要说明**：以下文档为当前有效的唯一可信来源。审计报告不是最终规范，最终行为以主规范和当前代码为准。
+
+### 核心规范文档
+
+| 文档 | 职责 | 状态 |
+|------|------|------|
+| [README.md](README.md) | 项目总入口 | 当前有效 |
+| [docs/live-control-lifecycle-spec.md](docs/live-control-lifecycle-spec.md) | 中控台/直播状态规范 | 已固化 |
+| [docs/access-control-architecture.md](docs/access-control-architecture.md) | 权限与套餐架构 | 已固化 |
+| [docs/HIGH_RISK_FILES.md](docs/HIGH_RISK_FILES.md) | 高风险文件准入清单 | 当前有效 |
+| [docs/ENVIRONMENT_DIFFERENCES.md](docs/ENVIRONMENT_DIFFERENCES.md) | 环境差异说明 | 已固化 |
+| [docs/REGRESSION_CHECKLIST.md](docs/REGRESSION_CHECKLIST.md) | 回归验证清单 | 当前有效 |
+
+### 敏感主题唯一规范源
+
+| 主题 | 唯一规范源 |
+|------|-----------|
+| Windows 关闭行为 | [docs/live-control-lifecycle-spec.md](docs/live-control-lifecycle-spec.md) §2.5 |
+| second-instance 处理 | [docs/live-control-lifecycle-spec.md](docs/live-control-lifecycle-spec.md) |
+| 直播生命周期 | [docs/live-control-lifecycle-spec.md](docs/live-control-lifecycle-spec.md) |
+| 套餐/权限上下文 | [docs/access-control-architecture.md](docs/access-control-architecture.md) |
+| 环境差异 | [docs/ENVIRONMENT_DIFFERENCES.md](docs/ENVIRONMENT_DIFFERENCES.md) |
+
+### 历史归档文档
+
+> ⚠️ **注意**：`docs/archive/` 中的文档**仅供历史参考，不作为当前实现依据**。
+
+- `docs/archive/package-diagnosis/` - 打包问题诊断历史
+- `docs/archive/regression-fix/` - 回归修复历史
+- `docs/archive/healthchecks/` - 健康检查历史
+- `docs/archive/implementation-reports/` - 实现报告历史
+
+### 文档治理规则
+
+详见 [docs/DOC_GOVERNANCE.md](docs/DOC_GOVERNANCE.md)
+
+---
 
 ## 首发版本
 

@@ -1,5 +1,22 @@
 # Electron 打包诊断报告：exe 打不开/无反应/启动即退出
 
+> **版本**: v1.0  
+> **最后更新**: 2025-01  
+> **状态**: 已过期  
+> **当前适用性**: 仅供历史参考  
+> **问题状态**: 已修复归档  
+
+---
+
+⚠️ **重要提示**：本文档描述的问题已修复。当前打包流程已包含 `load-playwright.cjs` 复制步骤，该文件仅作为历史诊断记录保留。
+
+**修复说明**：
+- 问题根因：`dist-electron/main/runtime/load-playwright.cjs` 未被打包进 asar
+- 修复方案：已在 `package.json` build 脚本中添加复制步骤，并在 `electron-builder.json` 中显式声明 `dist-electron/main/runtime/**`
+- 验证状态：已验证修复有效
+
+---
+
 **目标问题**：打包生成的 Windows 可执行程序（exe）双击打不开/无反应（或启动即退出）。  
 **约束**：只诊断不乱改；结论需有证据（文件路径、配置、产物树、日志片段）。
 
@@ -11,9 +28,9 @@
 |------|------|------|
 | 1 | `npm run build` | 复现生产构建（含 tsc、vite build、复制 runtime） |
 | 2 | `npm run dist` | 复现完整打包（dist:clean + build + electron-builder --win） |
-| 3 | `Get-ChildItem -Path ".\release\1.0.0\win-unpacked\resources" -Recurse -Name \| Select-Object -First 50` | 查看 win-unpacked 下 resources 结构 |
+| 3 | `Get-ChildItem -Path ".\release\1.0.0\win-unpacked\resources" -Recurse -Name | Select-Object -First 50` | 查看 win-unpacked 下 resources 结构 |
 | 4 | `npx @electron/asar extract .\release\1.0.0\win-unpacked\resources\app.asar .\release\app.asar.out` | 解压 app.asar 校验内部文件 |
-| 5 | `.\release\1.0.0\win-unpacked\TASI-live-Supertool.exe 2>&1 \| Tee-Object -FilePath .\exe-stdout-stderr.txt` | 命令行启动 exe 并捕获控制台输出 |
+| 5 | `.\release\1.0.0\win-unpacked\TASI-live-Supertool.exe 2>&1 | Tee-Object -FilePath .\exe-stdout-stderr.txt` | 命令行启动 exe 并捕获控制台输出 |
 | 6 | 查看 `%APPDATA%\TASI-live-Supertool\logs\`（若存在） | electron-log 文件日志 |
 
 ---
@@ -107,7 +124,7 @@
 - 该行为 **模块顶层同步 require**：一旦 `app-D4wLAQoM.js` 被加载（即 `index.js` 的 `require("./app-D4wLAQoM.js")` 执行），立即执行；若 `dist-electron/main/runtime/load-playwright.cjs` 在打包后的 app.asar 中不存在，Node 会抛出 `Cannot find module '.../runtime/load-playwright.cjs'`，主进程在创建窗口或写日志前即崩溃。
 
 **结论**：  
-- 若打包时未执行 build 中的 “复制 runtime” 步骤，或 electron-builder 未把 `dist-electron/main/runtime/` 打进 asar，则 **app.asar 内缺少 `dist-electron/main/runtime/load-playwright.cjs`**，会导致主进程在加载 app  chunk 时立即崩溃，表现为 exe 无反应/启动即退出。
+- 若打包时未执行 build 中的 "复制 runtime" 步骤，或 electron-builder 未把 `dist-electron/main/runtime/` 打进 asar，则 **app.asar 内缺少 `dist-electron/main/runtime/load-playwright.cjs`**，会导致主进程在加载 app  chunk 时立即崩溃，表现为 exe 无反应/启动即退出。
 
 ---
 
@@ -133,7 +150,7 @@
 ### 4.3 其他可能原因（次要）
 
 - **单实例锁**（`electron/main/app.ts` 88–91 行）：`if (!app.requestSingleInstanceLock()) { app.quit(); process.exit(0); }`  
-  - 若已有一实例在运行（或僵尸进程未释放锁），再次双击 exe 会直接退出，表现为“无反应”。可通过任务管理器确认是否已有 `TASI-live-Supertool.exe` 或残留进程。
+  - 若已有一实例在运行（或僵尸进程未释放锁），再次双击 exe 会直接退出，表现为"无反应"。可通过任务管理器确认是否已有 `TASI-live-Supertool.exe` 或残留进程。
 
 ---
 
@@ -147,11 +164,11 @@
      - `dist-electron/main/app-D4wLAQoM.js` 第 21595 行存在顶层：  
        `const { chromium } = require(path$1.join(__dirname, "runtime", "load-playwright.cjs"));`  
      - 主进程加载顺序：`index.js` → `require("./app-D4wLAQoM.js")` → 执行到该 require 时若文件不存在则抛错退出。  
-   - **结论**：主进程在未打开窗口、未写业务日志前即因 MODULE_NOT_FOUND 崩溃，符合“exe 打不开/无反应/启动即退出”。
+   - **结论**：主进程在未打开窗口、未写业务日志前即因 MODULE_NOT_FOUND 崩溃，符合"exe 打不开/无反应/启动即退出"。
 
 2. **【中】单实例锁导致第二次启动直接退出**  
    - **证据**：`electron/main/app.ts` 88–91 行，`!app.requestSingleInstanceLock()` 时 `process.exit(0)`。  
-   - **结论**：仅影响“第二次双击”；若第一次就无反应，则以此条为辅。
+   - **结论**：仅影响"第二次双击"；若第一次就无反应，则以此条为辅。
 
 3. **【低】生产环境误设 VITE_DEV_SERVER_URL**  
    - **证据**：代码与构建产物中均以 `process.env.VITE_DEV_SERVER_URL` 分支；electron-builder 默认不注入该变量。  
@@ -205,19 +222,6 @@
 
 4. **日志（可选）**  
    - 查看 `%APPDATA%\TASI-live-Supertool\logs\` 是否有最新 main 进程日志，确认启动流程已执行到 logger。
-
----
-
-## 附录：TEMP DIAGNOSTIC PATCH（可选，可回滚）
-
-若需进一步确认“主进程是否执行到 app 逻辑”，可在 **不改变业务逻辑** 的前提下增加最小写文件诊断：
-
-- **文件**：`electron/main/index.ts`  
-- **在** `void import('./app')` **之前** 增加（仅用于诊断）：  
-  - 使用 `require('fs').writeFileSync(require('path').join(require('electron').app.getPath('userData'), 'main-started.txt'), new Date().toISOString())`  
-  - 注意：此时 `app` 可能尚未 ready，若报错可改为写固定路径（如 `process.env.TEMP` 下文件）。  
-- **验证**：打包运行 exe 后，检查 userData 或 TEMP 下是否生成该文件；有则说明主进程至少执行到该行。  
-- **回滚**：删除上述几行即可。
 
 ---
 

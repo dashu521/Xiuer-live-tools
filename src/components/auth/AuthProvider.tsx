@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { AuthDialog } from '@/components/auth/AuthDialog'
 import { SubscribeDialog } from '@/components/auth/SubscribeDialog'
 import { UserCenter } from '@/components/auth/UserCenter'
+import { useAccessContext } from '@/domain/access'
 import { useAccounts } from '@/hooks/useAccounts'
 import { useAuthInit } from '@/hooks/useAuth'
 import { useLiveControlStore } from '@/hooks/useLiveControl'
@@ -25,7 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const authCheckDone = useAuthCheckDone()
   const _isAuthenticated = useIsAuthenticated()
   const isOffline = useIsOffline()
-  const userStatus = useAuthStore(s => s.userStatus)
+  const accessContext = useAccessContext()
   const { runPendingActionAndClear } = useGateStore()
   const { toast } = useToast()
   const trialExpiredModalShownRef = useRef(false)
@@ -100,11 +101,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // 试用已结束：进入主界面后自动弹一次试用弹窗
   useEffect(() => {
-    if (!authCheckDone || !userStatus || trialExpiredModalShownRef.current) return
-    if (userStatus.trial?.is_expired !== true) return
+    if (!authCheckDone || !accessContext.userStatus || trialExpiredModalShownRef.current) return
+    if (accessContext.trialExpired !== true) return
     trialExpiredModalShownRef.current = true
     setShowSubscribeDialog(true)
-  }, [authCheckDone, userStatus])
+  }, [authCheckDone, accessContext])
 
   if (!authCheckDone) {
     return (
@@ -145,7 +146,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isOpen={showSubscribeDialog}
         onClose={() => setShowSubscribeDialog(false)}
         actionName={useGateStore.getState().pendingActionName || undefined}
-        trialExpired={userStatus?.trial?.is_expired === true}
+        trialExpired={accessContext.trialExpired}
       />
       <UserCenter isOpen={showUserCenter} onClose={() => setShowUserCenter(false)} />
     </>

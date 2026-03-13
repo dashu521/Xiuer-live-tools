@@ -47,6 +47,10 @@ export interface AccessContext {
   /** 试用结束时间戳 */
   trialEndsAt: number | null
 
+  // ===== 到期时间 =====
+  /** 正式套餐到期时间戳（来自 userStatus.expire_at 或 user.expire_at） */
+  expiresAt: number | null
+
   // ===== 功能权限 =====
   /** 是否可以使用全部功能 */
   canUseAllFeatures: boolean
@@ -96,6 +100,7 @@ export function createEmptyAccessContext(): AccessContext {
     trialActive: false,
     trialExpired: false,
     trialEndsAt: null,
+    expiresAt: null,
     canUseAllFeatures: false,
     isPaidUser: false,
     maxLiveAccounts: 1,

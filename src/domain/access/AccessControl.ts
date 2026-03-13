@@ -62,12 +62,28 @@ export function buildAccessContext(): AccessContext {
     ? new Date(userStatus.trial.end_at).getTime()
     : null
 
+  // 计算正式套餐到期时间（优先使用 userStatus，其次 user.expire_at）
+  const expiresAt = userStatus?.expire_at
+    ? new Date(userStatus.expire_at).getTime()
+    : user?.expire_at
+      ? new Date(user.expire_at).getTime()
+      : null
+
   // 计算功能权限
   const paidUser = isPaidPlan(effectivePlan)
   const allFeatures = canUseAllFeatures(effectivePlan)
 
   // 获取账号上限（优先使用服务端返回的值）
   const maxAccounts = userStatus?.max_accounts ?? getMaxLiveAccounts(effectivePlan)
+
+  // 【日志】关键刷新点打印，方便验证
+  console.log('[AccessContext] effectivePlan=%s, trialActive=%s, trialExpired=%s, maxLiveAccounts=%s, source=%s',
+    effectivePlan,
+    trialActive,
+    trialExpired,
+    maxAccounts,
+    userStatus ? 'userStatus' : 'default'
+  )
 
   return {
     isAuthenticated: authState.isAuthenticated,
@@ -78,6 +94,7 @@ export function buildAccessContext(): AccessContext {
     trialActive,
     trialExpired,
     trialEndsAt,
+    expiresAt,
     canUseAllFeatures: allFeatures,
     isPaidUser: paidUser,
     maxLiveAccounts: maxAccounts,
@@ -291,6 +308,7 @@ export function useAccessContext(): AccessContext {
     user?.expire_at,
     userStatus?.plan,
     userStatus?.max_accounts,
+    userStatus?.expire_at,
     userStatus?.trial?.is_active,
     userStatus?.trial?.is_expired,
     userStatus?.trial?.end_at,
