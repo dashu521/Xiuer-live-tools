@@ -72,7 +72,15 @@ export const useGateStore = create<GateStore>()(
       guardAction: async (actionName: string, options: GuardActionOptions) => {
         const { requireSubscription = false } = options
         const pendingFn = options.action != null ? options.action : null
-        const { isAuthenticated, refreshUserStatus } = useAuthStore.getState()
+        const { isAuthenticated, refreshUserStatus, user } = useAuthStore.getState()
+
+        // 【日志】记录 guardAction 执行时的状态
+        console.log('[GateStore] guardAction called:', {
+          actionName,
+          isAuthenticated,
+          userPlan: user?.plan,
+          requireSubscription,
+        })
 
         if (!isAuthenticated) {
           get().setPendingAction(pendingFn, actionName)
@@ -94,6 +102,20 @@ export const useGateStore = create<GateStore>()(
           return
         }
 
+        // 【修复】检查是否为付费用户（pro / pro_max / ultra），若是则直接放行
+        const paidPlans = ['pro', 'pro_max', 'ultra']
+        if (user?.plan && paidPlans.includes(user.plan)) {
+          console.log('[GateStore] Paid user detected, executing action:', actionName, { userPlan: user.plan })
+          if (pendingFn) {
+            try {
+              await Promise.resolve(pendingFn())
+            } catch (e) {
+              console.error('[GateStore] guardAction error:', e)
+            }
+          }
+          return
+        }
+
         // 需要订阅检查：优先使用本地 trialStore（方案三变体）
         const trialStore = useTrialStore.getState()
 
@@ -103,6 +125,7 @@ export const useGateStore = create<GateStore>()(
         console.log('[GateStore] guardAction check:', {
           actionName,
           requireSubscription,
+          userPlan: user?.plan,
           localTrialResult,
           trialInfo: trialStore.getTrialInfo(),
         })
