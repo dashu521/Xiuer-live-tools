@@ -313,20 +313,37 @@ writeStartupLog('========== 路径诊断结束 ==========')
 // 持久化配置文件路径
 const getConfigPath = () => path.join(app.getPath('userData'), 'app-config.json')
 
-function getConfig(): { hideToTrayTipDismissed: boolean } {
+// 【长期方案】应用配置接口，预留 closeBehavior 设置项
+interface AppConfig {
+  hideToTrayTipDismissed: boolean
+  // 关闭窗口行为: 'tray' = 最小化到托盘, 'quit' = 直接退出
+  // 默认值: 'tray'（符合产品规则：关闭窗口时最小化到托盘）
+  closeBehavior?: 'tray' | 'quit'
+}
+
+function getConfig(): AppConfig {
   const configPath = getConfigPath()
   if (existsSync(configPath)) {
     try {
       const content = readFileSync(configPath, 'utf-8')
-      return JSON.parse(content)
+      const parsed = JSON.parse(content) as AppConfig
+      // 确保 closeBehavior 有默认值
+      if (!parsed.closeBehavior) {
+        parsed.closeBehavior = 'tray'
+      }
+      return parsed
     } catch (error) {
       createLogger('config').error('Failed to read config file:', error)
     }
   }
-  return { hideToTrayTipDismissed: false }
+  // 默认配置
+  return {
+    hideToTrayTipDismissed: false,
+    closeBehavior: 'tray',
+  }
 }
 
-function setConfig(config: { hideToTrayTipDismissed: boolean }) {
+function setConfig(config: AppConfig) {
   const configPath = getConfigPath()
   try {
     writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8')
@@ -647,22 +664,17 @@ async function createWindow() {
         return
       }
 
+      // 【长期方案】如果正在退出，允许窗口关闭
       if (isQuitting) {
         writeStartupLog('应用正在退出，允许关闭窗口')
         return
       }
 
-      // 【修复】Windows 平台：默认关闭窗口时真正退出应用，不隐藏到托盘
-      // 避免用户误以为已退出，实际后台残留导致二次启动无响应
-      if (process.platform === 'win32') {
-        writeStartupLog('Windows: 用户点击关闭，准备真正退出应用')
-        // 不拦截 close 事件，允许窗口关闭
-        // window-all-closed 事件会处理应用退出
-        return
-      }
+      // 【长期方案】根据配置决定关闭行为
+      const config = getConfig()
+      const closeBehavior = config.closeBehavior || 'tray'
 
-      // macOS/Linux: 保持原有托盘行为
-      // 首次启动时，不允许隐藏到托盘
+      // 注意：首次启动时不隐藏，避免用户找不到窗口
       if (isFirstLaunch) {
         writeStartupLog('首次启动，不允许隐藏到托盘，强制保持窗口显示')
         e.preventDefault()
@@ -671,7 +683,13 @@ async function createWindow() {
         return
       }
 
-      // 非首次启动：拦截关闭，改为隐藏到托盘
+      // 如果配置为直接退出，不拦截关闭事件
+      if (closeBehavior === 'quit') {
+        writeStartupLog('配置为直接退出，允许关闭窗口')
+        return
+      }
+
+      // 拦截关闭事件，改为隐藏到托盘（默认行为）
       e.preventDefault()
       writeStartupLog('拦截关闭事件，改为隐藏到托盘')
 
@@ -791,17 +809,9 @@ app
 app.on('window-all-closed', async () => {
   writeStartupLog(`事件: window-all-closed 触发 - platform=${process.platform}, isQuitting=${isQuitting}`)
 
-  if (process.platform === 'darwin') {
-    // macOS 保持默认行为：窗口关闭但应用继续运行
-    writeStartupLog('macOS: 窗口全部关闭，应用保持运行')
-  } else {
-    // 【修复】Windows/Linux: 用户关闭所有窗口时真正退出应用
-    // 避免后台残留导致二次启动无响应
-    if (!isQuitting) {
-      writeStartupLog('Windows/Linux: 窗口全部关闭，准备退出应用')
-      quitApp()
-    }
-  }
+  // 【长期方案】所有平台：窗口关闭时应用保持运行（托盘模式）
+  // 用户通过托盘菜单的"退出应用"才能彻底退出
+  writeStartupLog('窗口全部关闭，应用保持运行（托盘模式）')
 })
 
 app.on('before-quit', (event) => {
@@ -1054,4 +1064,18 @@ ipcMain.handle('app:getHideToTrayTipDismissed', () => {
   const config = getConfig()
   writeStartupLog(`IPC: getHideToTrayTipDismissed=${config.hideToTrayTipDismissed}`)
   return config.hideToTrayTipDismissed
+})
+
+// 【长期方案】IPC: 获取/设置关闭窗口行为（预留设置项）
+ipcMain.handle('app:getCloseBehavior', () => {
+  const config = getConfig()
+  writeStartupLog(`IPC: getCloseBehavior=${config.closeBehavior}`)
+  return config.closeBehavior || 'tray'
+})
+
+ipcMain.handle('app:setCloseBehavior', (_, behavior: 'tray' | 'quit') => {
+  writeStartupLog(`IPC: setCloseBehavior=${behavior}`)
+  const config = getConfig()
+  config.closeBehavior = behavior
+  setConfig(config)
 })
