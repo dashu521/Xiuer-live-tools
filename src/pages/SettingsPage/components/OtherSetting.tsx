@@ -50,7 +50,9 @@ function GiftCardDialog({ open, onOpenChange }: GiftCardDialogProps) {
         setResult(apiResult.data)
         if (apiResult.data.success) {
           toast.success('兑换成功！')
-          useAuthStore.getState().refreshUserStatus()
+          // 【修复】添加 await 确保状态刷新完成
+          await useAuthStore.getState().refreshUserStatus()
+          console.log('[GiftCard] User status refreshed after redeem')
         }
       } else {
         setResult({

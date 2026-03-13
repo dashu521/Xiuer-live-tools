@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
+import { buildAccessContext, checkAccess } from '@/domain/access'
 import { useAuthStore } from '@/stores/authStore'
 import { EVENTS, eventEmitter } from '@/utils/events'
 import { storageManager } from '@/utils/storage/StorageManager'
@@ -72,44 +73,46 @@ export const useAccounts = create<AccountsStore>()(
 
     canAddAccount: () => {
       const state = get()
-      const userStatus = useAuthStore.getState().userStatus
-      const maxAccounts = userStatus?.max_accounts ?? 1
-      const currentCount = state.accounts.length
 
-      if (maxAccounts === -1) {
+      // 【重构】使用 AccessControl 权限层检查
+      const context = buildAccessContext()
+      const decision = checkAccess(context, 'addLiveAccount')
+
+      const currentCount = state.accounts.length
+      const maxAccounts = context.maxLiveAccounts
+
+      // 如果权限检查通过，允许添加
+      if (decision.allowed) {
         return { allowed: true, current: currentCount, max: maxAccounts }
       }
 
-      if (currentCount >= maxAccounts) {
-        // 根据套餐类型生成友好的提示信息
-        const userPlan = useAuthStore.getState().userStatus?.plan || 'free'
-        let reason: string
+      // 权限检查失败，返回详细原因
+      // 根据套餐类型生成友好的提示信息
+      const userPlan = context.plan
+      let reason: string
 
-        if (userPlan === 'free') {
-          reason =
-            '亲爱哒，免费版只可以添加1个直播账号哦～如果需要添加更多账号，还请您升级会员等级，解锁更多功能吧！'
-        } else if (userPlan === 'trial') {
-          reason =
-            '亲爱哒，试用版只可以添加1个直播账号哦～如果觉得好用，可以升级专业版添加更多账号！'
-        } else if (userPlan === 'pro') {
-          reason =
-            '亲爱哒，专业版只可以添加1个直播账号哦～如果需要管理更多直播间，可以升级专业增强版（支持3个账号）或旗舰版（无限制）！'
-        } else if (userPlan === 'pro_max') {
-          reason =
-            '亲爱哒，专业增强版只可以添加3个直播账号哦～如果需要无限制添加账号，可以升级旗舰版！'
-        } else {
-          reason = `已达到账号数量上限 (${currentCount}/${maxAccounts})，如需添加更多账号，请联系客服升级套餐。`
-        }
-
-        return {
-          allowed: false,
-          current: currentCount,
-          max: maxAccounts,
-          reason,
-        }
+      if (userPlan === 'free') {
+        reason =
+          '亲爱哒，免费版只可以添加1个直播账号哦～如果需要添加更多账号，还请您升级会员等级，解锁更多功能吧！'
+      } else if (userPlan === 'trial') {
+        reason =
+          '亲爱哒，试用版只可以添加1个直播账号哦～如果觉得好用，可以升级专业版添加更多账号！'
+      } else if (userPlan === 'pro') {
+        reason =
+          '亲爱哒，专业版只可以添加1个直播账号哦～如果需要管理更多直播间，可以升级专业增强版（支持3个账号）或旗舰版（无限制）！'
+      } else if (userPlan === 'pro_max') {
+        reason =
+          '亲爱哒，专业增强版只可以添加3个直播账号哦～如果需要无限制添加账号，可以升级旗舰版！'
+      } else {
+        reason = decision.reason || `已达到账号数量上限 (${currentCount}/${maxAccounts})，如需添加更多账号，请联系客服升级套餐。`
       }
 
-      return { allowed: true, current: currentCount, max: maxAccounts }
+      return {
+        allowed: false,
+        current: currentCount,
+        max: maxAccounts,
+        reason,
+      }
     },
 
     addAccount: (name: string) => {

@@ -146,18 +146,37 @@ app.on('second-instance', (_event, commandLine, workingDirectory) => {
   writeStartupLog(`second-instance 触发，命令行: ${commandLine.join(' ')}`)
   writeMainLog('INFO', 'second-instance: 检测到第二个实例启动，唤醒主窗口')
 
-  if (win) {
+  // 【修复】增强二次启动唤醒逻辑，确保窗口可见并记录结果
+  if (win && !win.isDestroyed()) {
     writeStartupLog('second-instance: 主窗口存在，准备显示')
+    
+    // 如果窗口被最小化，恢复它
     if (win.isMinimized()) {
       win.restore()
+      writeStartupLog('second-instance: 窗口已从最小化恢复')
     }
+    
+    // 如果窗口不可见，显示它
     if (!win.isVisible()) {
       win.show()
+      writeStartupLog('second-instance: 窗口已从隐藏状态显示')
     }
+    
+    // 确保任务栏显示
     win.setSkipTaskbar(false)
+    
+    // 聚焦并置顶
     win.focus()
     win.moveTop()
-    writeStartupLog('second-instance: 主窗口已显示并聚焦')
+    
+    // 【修复】记录唤醒结果
+    const result = {
+      visible: win.isVisible(),
+      minimized: win.isMinimized(),
+      focused: win.isFocused(),
+    }
+    writeStartupLog(`second-instance: 主窗口唤醒结果: ${JSON.stringify(result)}`)
+    writeMainLog('INFO', `second-instance: 窗口唤醒成功 - visible=${result.visible}, minimized=${result.minimized}`)
   } else {
     writeStartupLog('second-instance: 主窗口不存在，创建新窗口')
     writeMainLog('WARN', 'second-instance: mainWindow not created yet, creating new window')
@@ -622,7 +641,7 @@ async function createWindow() {
 
     // 关闭窗口事件处理
     win.on('close', e => {
-      writeStartupLog(`事件: close 触发 - isQuitting=${isQuitting}, isFirstLaunch=${isFirstLaunch}`)
+      writeStartupLog(`事件: close 触发 - isQuitting=${isQuitting}, isFirstLaunch=${isFirstLaunch}, platform=${process.platform}`)
 
       if (win && win.isDestroyed()) {
         return
@@ -633,6 +652,16 @@ async function createWindow() {
         return
       }
 
+      // 【修复】Windows 平台：默认关闭窗口时真正退出应用，不隐藏到托盘
+      // 避免用户误以为已退出，实际后台残留导致二次启动无响应
+      if (process.platform === 'win32') {
+        writeStartupLog('Windows: 用户点击关闭，准备真正退出应用')
+        // 不拦截 close 事件，允许窗口关闭
+        // window-all-closed 事件会处理应用退出
+        return
+      }
+
+      // macOS/Linux: 保持原有托盘行为
       // 首次启动时，不允许隐藏到托盘
       if (isFirstLaunch) {
         writeStartupLog('首次启动，不允许隐藏到托盘，强制保持窗口显示')
@@ -760,13 +789,18 @@ app
   })
 
 app.on('window-all-closed', async () => {
-  writeStartupLog(`事件: window-all-closed 触发 - platform=${process.platform}`)
+  writeStartupLog(`事件: window-all-closed 触发 - platform=${process.platform}, isQuitting=${isQuitting}`)
 
   if (process.platform === 'darwin') {
-    // macOS 保持默认行为
+    // macOS 保持默认行为：窗口关闭但应用继续运行
+    writeStartupLog('macOS: 窗口全部关闭，应用保持运行')
   } else {
-    // Windows/Linux: 不退出，应用继续在后台运行（托盘）
-    writeStartupLog('Windows/Linux: 保持后台运行')
+    // 【修复】Windows/Linux: 用户关闭所有窗口时真正退出应用
+    // 避免后台残留导致二次启动无响应
+    if (!isQuitting) {
+      writeStartupLog('Windows/Linux: 窗口全部关闭，准备退出应用')
+      quitApp()
+    }
   }
 })
 

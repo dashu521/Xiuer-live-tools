@@ -5,12 +5,16 @@
  * - 已登录且在试用期内 → 直接执行 action
  *
  * 方案三变体：使用本地缓存 + 服务端时间验证
+ * 
+ * 【重构】已迁移到 AccessControl 权限层
+ * 所有权限判断通过 buildAccessContext + checkAccess 完成
  */
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
 import { getServerTime } from '@/services/apiClient'
 import { useAuthStore } from '@/stores/authStore'
 import { useTrialStore } from '@/stores/trialStore'
+import { buildAccessContext, checkAccess, type FeatureType } from '@/domain/access'
 
 export type GuardActionOptions = {
   /** 通过门控后要执行的回调（可选，登录/试用后会自动执行或用户再次点击） */
@@ -72,17 +76,28 @@ export const useGateStore = create<GateStore>()(
       guardAction: async (actionName: string, options: GuardActionOptions) => {
         const { requireSubscription = false } = options
         const pendingFn = options.action != null ? options.action : null
-        const { isAuthenticated, refreshUserStatus, user } = useAuthStore.getState()
+
+        // 【重构】使用 AccessControl 权限层构建上下文
+        const context = buildAccessContext()
 
         // 【日志】记录 guardAction 执行时的状态
         console.log('[GateStore] guardAction called:', {
           actionName,
-          isAuthenticated,
-          userPlan: user?.plan,
+          isAuthenticated: context.isAuthenticated,
+          userPlan: context.plan,
+          isPaidUser: context.isPaidUser,
+          trialActive: context.trialActive,
+          trialExpired: context.trialExpired,
           requireSubscription,
         })
 
-        if (!isAuthenticated) {
+        // DEV 模式额外日志
+        if (context.isDevEnvironment) {
+          console.log('[AccessControl] Context:', context)
+        }
+
+        // 1. 未登录检查
+        if (!context.isAuthenticated) {
           get().setPendingAction(pendingFn, actionName)
           window.dispatchEvent(
             new CustomEvent('auth:required', { detail: { feature: actionName } }),
@@ -90,7 +105,7 @@ export const useGateStore = create<GateStore>()(
           return
         }
 
-        // 不需要订阅检查，直接执行
+        // 2. 不需要订阅检查，直接执行
         if (!requireSubscription) {
           if (pendingFn) {
             try {
@@ -102,10 +117,31 @@ export const useGateStore = create<GateStore>()(
           return
         }
 
-        // 【修复】检查是否为付费用户（pro / pro_max / ultra），若是则直接放行
-        const paidPlans = ['pro', 'pro_max', 'ultra']
-        if (user?.plan && paidPlans.includes(user.plan)) {
-          console.log('[GateStore] Paid user detected, executing action:', actionName, { userPlan: user.plan })
+        // 3. 【重构】使用 AccessControl 进行权限检查
+        // 将 actionName 映射到 FeatureType
+        const featureMap: Record<string, FeatureType> = {
+          'connect-live-control': 'connectLiveControl',
+          'ai-assistant': 'aiAssistant',
+          'auto-reply': 'autoReply',
+          'auto-message': 'autoMessage',
+          'auto-popup': 'autoPopUp',
+          'add-live-account': 'addLiveAccount',
+        }
+        
+        const feature = featureMap[actionName] || 'connectLiveControl'
+        const decision = checkAccess(context, feature)
+
+        // DEV 模式权限检查日志
+        if (context.isDevEnvironment) {
+          console.log('[AccessControl]', feature, decision)
+        }
+
+        // 4. 权限检查通过，执行操作
+        if (decision.allowed) {
+          console.log('[GateStore] Access granted, executing action:', actionName, {
+            plan: context.plan,
+            isPaidUser: context.isPaidUser,
+          })
           if (pendingFn) {
             try {
               await Promise.resolve(pendingFn())
@@ -116,111 +152,39 @@ export const useGateStore = create<GateStore>()(
           return
         }
 
-        // 需要订阅检查：优先使用本地 trialStore（方案三变体）
-        const trialStore = useTrialStore.getState()
-
-        // 1. 检查本地试用状态
-        const localTrialResult = trialStore.isInTrial()
-
-        console.log('[GateStore] guardAction check:', {
-          actionName,
-          requireSubscription,
-          userPlan: user?.plan,
-          localTrialResult,
-          trialInfo: trialStore.getTrialInfo(),
+        // 5. 权限检查失败，根据原因处理
+        console.log('[GateStore] Access denied:', actionName, {
+          reason: decision.reason,
+          action: decision.action,
+          requiredPlan: decision.requiredPlan,
         })
 
-        // 本地试用有效且缓存未过期，直接通过
-        if (localTrialResult === true) {
-          console.log('[GateStore] Local trial valid, executing action:', actionName)
-          if (pendingFn) {
-            try {
-              await Promise.resolve(pendingFn())
-            } catch (e) {
-              console.error('[GateStore] guardAction error:', e)
-            }
-          }
-          return
+        if (decision.action === 'login') {
+          // 需要登录（理论上不会走到这里，因为前面已检查）
+          get().setPendingAction(pendingFn, actionName)
+          window.dispatchEvent(
+            new CustomEvent('auth:required', { detail: { feature: actionName } }),
+          )
+        } else if (decision.action === 'subscribe') {
+          // 需要开通试用
+          get().setPendingAction(pendingFn, actionName)
+          window.dispatchEvent(new CustomEvent('gate:subscribe-required', { detail: { actionName } }))
+        } else if (decision.action === 'upgrade') {
+          // 需要升级套餐
+          get().setPendingAction(pendingFn, actionName)
+          window.dispatchEvent(
+            new CustomEvent('gate:subscribe-required', { 
+              detail: { 
+                actionName,
+                requiredPlan: decision.requiredPlan,
+              } 
+            })
+          )
+        } else {
+          // 其他原因，默认显示试用弹窗
+          get().setPendingAction(pendingFn, actionName)
+          window.dispatchEvent(new CustomEvent('gate:subscribe-required', { detail: { actionName } }))
         }
-
-        // 2. 本地无试用或缓存过期，尝试从服务端验证
-        try {
-          // 同时获取服务端时间和用户状态
-          const [serverTime, userStatus] = await Promise.all([getServerTime(), refreshUserStatus()])
-
-          console.log('[GateStore] Server validation:', {
-            serverTime,
-            userStatus: userStatus?.trial,
-          })
-
-          // 使用服务端时间验证试用状态
-          if (serverTime && trialStore.trialActivated && trialStore.trialEndsAt) {
-            const serverTrialValid = serverTime < trialStore.trialEndsAt
-            if (serverTrialValid) {
-              console.log('[GateStore] Server trial valid, executing action:', actionName)
-              // 更新验证时间
-              trialStore.syncFromServer({
-                trialStartedAt: trialStore.trialStartedAt!,
-                trialEndsAt: trialStore.trialEndsAt!,
-                serverTime,
-              })
-              if (pendingFn) {
-                try {
-                  await Promise.resolve(pendingFn())
-                } catch (e) {
-                  console.error('[GateStore] guardAction error:', e)
-                }
-              }
-              return
-            }
-          }
-
-          // 3. 检查后端返回的试用状态
-          const backendTrialActive = userStatus?.trial?.is_active === true
-          if (backendTrialActive && userStatus?.trial?.end_at) {
-            const endTime = new Date(userStatus.trial.end_at).getTime()
-            const currentTime = serverTime ?? Date.now()
-
-            if (currentTime < endTime) {
-              console.log('[GateStore] Backend trial valid, syncing and executing:', actionName)
-              // 同步到本地 store
-              trialStore.syncFromServer({
-                trialStartedAt: userStatus.trial.start_at
-                  ? new Date(userStatus.trial.start_at).getTime()
-                  : currentTime,
-                trialEndsAt: endTime,
-                serverTime: currentTime,
-              })
-              if (pendingFn) {
-                try {
-                  await Promise.resolve(pendingFn())
-                } catch (e) {
-                  console.error('[GateStore] guardAction error:', e)
-                }
-              }
-              return
-            }
-          }
-        } catch (error) {
-          console.error('[GateStore] Server validation failed:', error)
-          // 服务端不可用，使用本地状态（降级）
-          if (localTrialResult === null && trialStore.trialActivated) {
-            console.log('[GateStore] Server unavailable, using local trial (degraded):', actionName)
-            if (pendingFn) {
-              try {
-                await Promise.resolve(pendingFn())
-              } catch (e) {
-                console.error('[GateStore] guardAction error:', e)
-              }
-            }
-            return
-          }
-        }
-
-        // 4. 无试用权限，显示试用弹窗
-        console.log('[GateStore] No trial access, showing subscribe dialog:', actionName)
-        get().setPendingAction(pendingFn, actionName)
-        window.dispatchEvent(new CustomEvent('gate:subscribe-required', { detail: { actionName } }))
       },
     }),
     {

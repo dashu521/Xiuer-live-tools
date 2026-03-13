@@ -7,13 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  getEffectivePlan,
-  getMaxLiveAccounts,
-  PLAN_TEXT_MAP,
-  type PlanType,
-} from '@/constants/subscription'
-import { useAuthStore } from '@/stores/authStore'
+import { useAccessContext, PLAN_TEXT_MAP, type PlanType } from '@/domain/access'
 
 interface AccountLimitDialogProps {
   isOpen: boolean
@@ -59,14 +53,14 @@ const UPGRADE_SUGGESTIONS: Record<
 }
 
 export function AccountLimitDialog({ isOpen, onClose, onContinue }: AccountLimitDialogProps) {
-  const { user, userStatus } = useAuthStore()
+  // 【重构】使用 AccessControl 权限层获取上下文
+  const context = useAccessContext()
 
-  // 优先使用后端返回的 userStatus，确保与服务器一致
-  const plan = userStatus?.plan || getEffectivePlan(user?.plan, userStatus?.trial)
+  // 从权限上下文获取数据
+  const plan = context.plan
   const planName = PLAN_TEXT_MAP[plan]
-  // 优先使用后端返回的 max_accounts，如果不存在则从 plan 计算
-  const maxAccounts = userStatus?.max_accounts ?? getMaxLiveAccounts(plan)
-  const currentCount = userStatus?.max_accounts ?? 1
+  const maxAccounts = context.maxLiveAccounts
+  const currentCount = context.currentAccountCount
 
   const suggestion = UPGRADE_SUGGESTIONS[plan]
 

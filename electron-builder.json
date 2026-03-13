@@ -18,6 +18,7 @@
     "dist-electron/**/*",
     "dist-electron/build-config.json",
     "electron/platformConfig.js",
+    "electron/main/runtime/**/*",
     "public/**/*",
     "package.json",
     "!**/*.map",

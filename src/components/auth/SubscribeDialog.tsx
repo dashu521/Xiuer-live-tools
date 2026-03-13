@@ -71,6 +71,16 @@ export function SubscribeDialog({
           console.log('[SubscribeDialog] Trial started locally with server time:', serverTime)
         }
 
+        // 【修复】强制刷新用户状态，确保账户中心等 UI 立即显示正确的到期时间
+        // 虽然 startTrialAndRefresh 已更新 userStatus，但某些场景下需要显式刷新
+        try {
+          await useAuthStore.getState().refreshUserStatus()
+          console.log('[SubscribeDialog] User status refreshed after trial activation')
+        } catch (error) {
+          console.warn('[SubscribeDialog] Failed to refresh user status:', error)
+          // 刷新失败不影响主流程，继续执行
+        }
+
         // 先执行 pendingAction，再关闭弹窗（避免组件卸载导致 action 无法执行）
         runPendingActionAndClear()
         onClose()

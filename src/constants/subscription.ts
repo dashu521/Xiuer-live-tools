@@ -1,5 +1,17 @@
 /**
  * 订阅系统规则中心
+ * 
+ * 【重构说明】
+ * 本文件的权限判断函数已迁移至 src/domain/access
+ * 新代码请使用：
+ * - buildAccessContext() - 构建权限上下文
+ * - checkAccess(context, feature) - 检查功能权限
+ * - useAccessCheck(feature) - React Hook
+ * 
+ * 本文件保留用于：
+ * - 类型定义 (PlanType, PlanRule)
+ * - 常量定义 (PLAN_RULES, PLAN_TEXT_MAP)
+ * - 向后兼容（已标记废弃的函数）
  */
 
 import type { UserStatus } from '@/types/auth'
@@ -39,7 +51,7 @@ export interface PlanRule {
   iconType: PlanType
 }
 
-/** 套餐规则表 */
+/** 套餐规则表 - 单一事实来源 */
 export const PLAN_RULES: Record<PlanType, PlanRule> = {
   free: {
     name: '免费版',
@@ -90,6 +102,10 @@ export const PLAN_RULES: Record<PlanType, PlanRule> = {
 
 /**
  * 归一化套餐值
+ * 
+ * @deprecated
+ * 使用 AccessControl.buildAccessContext() 获取已归一化的 plan
+ * 或直接使用 context.plan
  */
 export function normalizePlan(plan: string | null | undefined): PlanType {
   if (!plan) return 'free'
@@ -105,6 +121,10 @@ export function normalizePlan(plan: string | null | undefined): PlanType {
 
 /**
  * 判断是否为付费套餐
+ * 
+ * @deprecated
+ * 使用 AccessControl.buildAccessContext() + context.isPaidUser
+ * 或 checkAccess(context, feature).allowed
  */
 export function isPaidPlan(plan: string | null | undefined): boolean {
   const normalized = normalizePlan(plan)
@@ -113,6 +133,10 @@ export function isPaidPlan(plan: string | null | undefined): boolean {
 
 /**
  * 判断是否可以使用全部功能
+ * 
+ * @deprecated
+ * 使用 AccessControl.buildAccessContext() + context.canUseAllFeatures
+ * 或 checkAccess(context, 'useAllFeatures').allowed
  */
 export function canUseAllFeatures(plan: string | null | undefined): boolean {
   const normalized = normalizePlan(plan)
@@ -121,6 +145,9 @@ export function canUseAllFeatures(plan: string | null | undefined): boolean {
 
 /**
  * 获取最大直播账号数
+ * 
+ * @deprecated
+ * 使用 AccessControl.buildAccessContext() + context.maxLiveAccounts
  */
 export function getMaxLiveAccounts(plan: string | null | undefined): number {
   const normalized = normalizePlan(plan)
@@ -129,6 +156,9 @@ export function getMaxLiveAccounts(plan: string | null | undefined): number {
 
 /**
  * 判断是否还可以添加更多直播账号
+ * 
+ * @deprecated
+ * 使用 AccessControl.checkAccess(context, 'addLiveAccount')
  */
 export function canAddMoreLiveAccounts(
   plan: string | null | undefined,
@@ -141,6 +171,9 @@ export function canAddMoreLiveAccounts(
 
 /**
  * 获取添加账号的限制提示文案
+ * 
+ * @deprecated
+ * 使用 AccessControl.Policy.getAccountLimitMessage(context)
  */
 export function getAccountLimitMessage(plan: string | null | undefined): string {
   const normalized = normalizePlan(plan)
@@ -156,6 +189,9 @@ export function getAccountLimitMessage(plan: string | null | undefined): string 
 
 /**
  * 比较两个套餐的等级
+ * 
+ * @deprecated
+ * 使用 AccessControl.Policy.comparePlanLevel(planA, planB)
  */
 export function comparePlanLevel(planA: string, planB: string): number {
   const levelA = PLAN_LEVEL[normalizePlan(planA)]
@@ -165,6 +201,9 @@ export function comparePlanLevel(planA: string, planB: string): number {
 
 /**
  * 判断是否满足最低套餐要求
+ * 
+ * @deprecated
+ * 使用 AccessControl.Policy.meetsMinimumPlan(currentPlan, requiredPlan)
  */
 export function meetsMinimumPlan(
   currentPlan: string | null | undefined,
@@ -175,6 +214,10 @@ export function meetsMinimumPlan(
 
 /**
  * 获取有效套餐
+ * 
+ * @deprecated
+ * 使用 AccessControl.buildAccessContext() + context.plan
+ * context.plan 已经通过 getEffectivePlan 处理
  */
 export function getEffectivePlan(
   plan: string | null | undefined,
@@ -195,6 +238,9 @@ export function getEffectivePlan(
 
 /**
  * 从 UserStatus 获取统一订阅信息
+ * 
+ * @deprecated
+ * 使用 AccessControl.buildAccessContext() 获取完整的权限上下文
  */
 export function getSubscriptionFromUserStatus(userStatus: UserStatus | null) {
   if (!userStatus) {
@@ -226,6 +272,9 @@ export function getSubscriptionFromUserStatus(userStatus: UserStatus | null) {
 
 /**
  * 获取套餐升级建议
+ * 
+ * @deprecated
+ * 使用 AccessControl.Policy.getUpgradeSuggestion(currentPlan)
  */
 export function getUpgradeSuggestion(currentPlan: string): string {
   const normalized = normalizePlan(currentPlan)

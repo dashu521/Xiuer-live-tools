@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatGiftCardCode, isValidGiftCardCode, PLAN_DESCRIPTION_MAP } from '@/config/userCenter'
-import { getEffectivePlan, getMaxLiveAccounts, PLAN_TEXT_MAP } from '@/constants/subscription'
+import { useAccessContext, PLAN_TEXT_MAP } from '@/domain/access'
 import { useToast } from '@/hooks/useToast'
 import { type RedeemGiftCardResponse, redeemGiftCard } from '@/services/apiClient'
 import { useAuthStore } from '@/stores/authStore'
@@ -30,11 +30,15 @@ export function UserCenter({ isOpen, onClose }: UserCenterProps) {
   const [redeemResult, setRedeemResult] = useState<RedeemGiftCardResponse | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
 
+  // 【重构】使用 AccessControl 权限层获取上下文
+  const accessContext = useAccessContext()
+
   // 合并计算，优化性能
   const userInfo = useMemo(() => {
     if (!user) return null
 
-    const plan = getEffectivePlan(user?.plan, userStatus?.trial)
+    // 从权限上下文获取套餐信息
+    const plan = accessContext.plan
 
     // 计算到期信息
     let expiry: ExpiryInfo = {
@@ -71,8 +75,8 @@ export function UserCenter({ isOpen, onClose }: UserCenterProps) {
         ? Math.max(0, Math.ceil((expiry.date.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
         : null
 
-    // 获取账号上限显示
-    const maxAccounts = getMaxLiveAccounts(plan)
+    // 【重构】从权限上下文获取账号上限显示
+    const maxAccounts = accessContext.maxLiveAccounts
     const accountLimitDisplay = maxAccounts < 0 ? '无限制' : `${maxAccounts} 个`
 
     return {
@@ -81,7 +85,7 @@ export function UserCenter({ isOpen, onClose }: UserCenterProps) {
       accountLimitDisplay,
       remainingDays,
     }
-  }, [user, userStatus])
+  }, [user, userStatus, accessContext])
 
   const handleLogout = useCallback(async () => {
     setShowLogoutConfirm(true)
