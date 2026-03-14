@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>秀儿直播助手 - 官方主站</title>
+  <meta name="description" content="秀儿直播助手 - 面向直播场景的效率工具，支持中控台连接、自动发言、自动弹窗、自动回复等功能">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎥%3C/text%3E%3C/svg%3E">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --primary: #667eea;
+      --primary-dark: #5a67d8;
+      --secondary: #764ba2;
+      --bg-dark: #0f0f1a;
+      --bg-card: rgba(255, 255, 255, 0.03);
+      --text-primary: #ffffff;
+      --text-secondary: #8892b0;
+      --text-muted: #64748b;
+      --border: rgba(255, 255, 255, 0.08);
+      --gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+      background: var(--bg-dark);
+      color: var(--text-primary);
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* Navigation */
+    .nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+      background: rgba(15, 15, 26, 0.8);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+      text-decoration: none;
+    }
+
+    .nav-logo-icon {
+      width: 40px;
+      height: 40px;
+      background: var(--gradient);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 32px;
+      align-items: center;
+    }
+
+    .nav-link {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .nav-link:hover {
+      color: var(--text-primary);
+    }
+
+    .nav-cta {
+      background: var(--gradient);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .nav-cta:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(102, 126, 234, 0.4);
+    }
+
+    /* Hero Section */
+    .hero {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 120px 24px 80px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: 
+        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(102, 126, 234, 0.15), transparent),
+        radial-gradient(ellipse 60% 40% at 80% 80%, rgba(118, 75, 162, 0.1), transparent);
+      pointer-events: none;
+    }
+
+    .hero-container {
+      max-width: 900px;
+      text-align: center;
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(102, 126, 234, 0.1);
+      border: 1px solid rgba(102, 126, 234, 0.2);
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      color: var(--primary);
+      margin-bottom: 32px;
+    }
+
+    .hero-badge::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      background: #4ade80;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .hero-title {
+      font-size: clamp(36px, 8vw, 64px);
+      font-weight: 800;
+      line-height: 1.1;
+      margin-bottom: 24px;
+      background: linear-gradient(135deg, #fff 0%, #a8b2d1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .hero-subtitle {
+      font-size: clamp(16px, 3vw, 20px);
+      color: var(--text-secondary);
+      max-width: 640px;
+      margin: 0 auto 40px;
+      line-height: 1.7;
+    }
+
+    .hero-buttons {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 16px 32px;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.3s;
+      cursor: pointer;
+      border: none;
+    }
+
+    .btn-primary {
+      background: var(--gradient);
+      color: white;
+      box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 28px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-secondary {
+      background: var(--bg-card);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .hero-note {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* Section Common */
+    .section {
+      padding: 100px 24px;
+    }
+
+    .section-container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .section-header {
+      text-align: center;
+      margin-bottom: 64px;
+    }
+
+    .section-label {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--primary);
+      margin-bottom: 16px;
+    }
+
+    .section-title {
+      font-size: clamp(28px, 5vw, 40px);
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .section-desc {
+      font-size: 18px;
+      color: var(--text-secondary);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* Features Section */
+    .features {
+      background: linear-gradient(180deg, var(--bg-dark) 0%, rgba(102, 126, 234, 0.03) 50%, var(--bg-dark) 100%);
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 24px;
+    }
+
+    .feature-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 32px;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--gradient);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(102, 126, 234, 0.2);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .feature-card:hover::before {
+      opacity: 1;
+    }
+
+    .feature-icon {
+      width: 48px;
+      height: 48px;
+      background: rgba(102, 126, 234, 0.1);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      margin-bottom: 20px;
+    }
+
+    .feature-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    .feature-desc {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    /* Use Cases Section */
+    .usecases {
+      background: var(--bg-dark);
+    }
+
+    .usecases-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 24px;
+    }
+
+    .usecase-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px;
+      text-align: center;
+      transition: all 0.3s;
+    }
+
+    .usecase-card:hover {
+      border-color: rgba(102, 126, 234, 0.2);
+    }
+
+    .usecase-icon {
+      font-size: 40px;
+      margin-bottom: 16px;
+    }
+
+    .usecase-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .usecase-desc {
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    /* Advantages Section */
+    .advantages {
+      background: linear-gradient(180deg, var(--bg-dark) 0%, rgba(118, 75, 162, 0.03) 50%, var(--bg-dark) 100%);
+    }
+
+    .advantages-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 32px;
+    }
+
+    .advantage-item {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+    }
+
+    .advantage-check {
+      width: 24px;
+      height: 24px;
+      background: rgba(74, 222, 128, 0.1);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #4ade80;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .advantage-content h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .advantage-content p {
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    /* FAQ Section */
+    .faq {
+      background: var(--bg-dark);
+    }
+
+    .faq-list {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .faq-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+
+    .faq-question {
+      padding: 20px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+
+    .faq-question:hover {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .faq-toggle {
+      font-size: 20px;
+      color: var(--text-muted);
+      transition: transform 0.3s;
+    }
+
+    .faq-item.active .faq-toggle {
+      transform: rotate(45deg);
+    }
+
+    .faq-answer {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease-out;
+    }
+
+    .faq-item.active .faq-answer {
+      max-height: 200px;
+    }
+
+    .faq-answer-content {
+      padding: 0 24px 20px;
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.7;
+    }
+
+    .faq-answer-content a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+
+    .faq-answer-content a:hover {
+      text-decoration: underline;
+    }
+
+    /* CTA Section */
+    .cta {
+      padding: 120px 24px;
+      text-align: center;
+      background: linear-gradient(180deg, var(--bg-dark) 0%, rgba(102, 126, 234, 0.05) 100%);
+    }
+
+    .cta-container {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .cta-title {
+      font-size: clamp(28px, 5vw, 40px);
+      font-weight: 700;
+      margin-bottom: 16px;
+    }
+
+    .cta-desc {
+      font-size: 18px;
+      color: var(--text-secondary);
+      margin-bottom: 32px;
+    }
+
+    /* Footer */
+    .footer {
+      padding: 40px 24px;
+      border-top: 1px solid var(--border);
+    }
+
+    .footer-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .footer-copyright {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 24px;
+    }
+
+    .footer-link {
+      font-size: 14px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .footer-link:hover {
+      color: var(--primary);
+    }
+
+    /* Mobile Menu */
+    .mobile-menu-btn {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--text-primary);
+      font-size: 24px;
+      cursor: pointer;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .nav-links {
+        display: none;
+      }
+
+      .mobile-menu-btn {
+        display: block;
+      }
+
+      .hero {
+        padding: 100px 20px 60px;
+      }
+
+      .section {
+        padding: 60px 20px;
+      }
+
+      .features-grid,
+      .usecases-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .advantages-list {
+        grid-template-columns: 1fr;
+      }
+
+      .footer-container {
+        flex-direction: column;
+        text-align: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Navigation -->
+  <nav class="nav">
+    <div class="nav-container">
+      <a href="#" class="nav-logo">
+        <div class="nav-logo-icon">🎥</div>
+        <span>秀儿直播助手</span>
+      </a>
+      <div class="nav-links">
+        <a href="#features" class="nav-link">功能</a>
+        <a href="#usecases" class="nav-link">场景</a>
+        <a href="#faq" class="nav-link">FAQ</a>
+        <a href="https://download.xiuer.work/" class="nav-cta" target="_blank">立即下载</a>
+      </div>
+      <button class="mobile-menu-btn">☰</button>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-container">
+      <div class="hero-badge">v1.3.2 现已发布</div>
+      <h1 class="hero-title">秀儿直播助手</h1>
+      <p class="hero-subtitle">
+        面向直播场景的效率工具，帮助你更高效地完成中控台连接、自动发言、自动弹窗、自动回复与直播辅助工作。
+      </p>
+      <div class="hero-buttons">
+        <a href="https://download.xiuer.work/" class="btn btn-primary" target="_blank">
+          <span>⬇</span> 立即下载
+        </a>
+        <a href="#features" class="btn btn-secondary">查看功能</a>
+      </div>
+      <p class="hero-note">支持 Windows / macOS</p>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section class="section features" id="features">
+    <div class="section-container">
+      <div class="section-header">
+        <span class="section-label">核心功能</span>
+        <h2 class="section-title">为直播效率而生</h2>
+        <p class="section-desc">六大核心功能，覆盖直播前中后的全流程需求</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">🔗</div>
+          <h3 class="feature-title">中控台连接</h3>
+          <p class="feature-desc">一键连接抖音小店、巨量百应、小红书、视频号、快手、淘宝等多平台中控台，统一管理多个直播间。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">💬</div>
+          <h3 class="feature-title">自动发言</h3>
+          <p class="feature-desc">预设消息模板，支持变量随机组合，按设定间隔自动发送，告别重复机械喊话，保持直播间活跃度。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🛒</div>
+          <h3 class="feature-title">自动弹窗</h3>
+          <p class="feature-desc">智能商品弹窗，支持快捷键触发和自动讲解，随心所欲展示商品，提升商品曝光与转化率。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🤖</div>
+          <h3 class="feature-title">自动回复</h3>
+          <p class="feature-desc">实时监听直播间评论，支持关键词规则和 AI 智能回复，精准响应用户问题，提升互动体验。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📊</div>
+          <h3 class="feature-title">数据监控</h3>
+          <p class="feature-desc">实时监控直播间数据变化，弹幕监听、粉丝团变动、事件时间线，帮助你掌握直播动态。</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">✨</div>
+          <h3 class="feature-title">AI 助手</h3>
+          <p class="feature-desc">接入 DeepSeek、OpenRouter、硅基流动等主流 AI 服务，智能生成回复内容，成为你的直播智能助理。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Use Cases Section -->
+  <section class="section usecases" id="usecases">
+    <div class="section-container">
+      <div class="section-header">
+        <span class="section-label">适用人群</span>
+        <h2 class="section-title">谁适合使用秀儿直播助手</h2>
+        <p class="section-desc">无论你是个人主播还是专业团队，都能从中受益</p>
+      </div>
+      <div class="usecases-grid">
+        <div class="usecase-card">
+          <div class="usecase-icon">👤</div>
+          <h3 class="usecase-title">直播运营</h3>
+          <p class="usecase-desc">负责多直播间管理、需要同时监控多个平台数据的运营人员</p>
+        </div>
+        <div class="usecase-card">
+          <div class="usecase-icon">🏢</div>
+          <h3 class="usecase-title">电商直播团队</h3>
+          <p class="usecase-desc">拥有多个账号、需要统一管理和自动化运营的专业直播团队</p>
+        </div>
+        <div class="usecase-card">
+          <div class="usecase-icon">🚀</div>
+          <h3 class="usecase-title">效率追求者</h3>
+          <p class="usecase-desc">希望减少重复性工作、提高场控效率的个人主播或小团队</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Advantages Section -->
+  <section class="section advantages">
+    <div class="section-container">
+      <div class="section-header">
+        <span class="section-label">产品优势</span>
+        <h2 class="section-title">为什么选择秀儿直播助手</h2>
+        <p class="section-desc">简洁、高效、持续进化</p>
+      </div>
+      <div class="advantages-list">
+        <div class="advantage-item">
+          <div class="advantage-check">✓</div>
+          <div class="advantage-content">
+            <h3>下载使用简单</h3>
+            <p>无需复杂配置，下载安装即可使用，界面直观易上手</p>
+          </div>
+        </div>
+        <div class="advantage-item">
+          <div class="advantage-check">✓</div>
+          <div class="advantage-content">
+            <h3>多平台支持</h3>
+            <p>支持 Windows 和 macOS，覆盖主流直播平台中控台</p>
+          </div>
+        </div>
+        <div class="advantage-item">
+          <div class="advantage-check">✓</div>
+          <div class="advantage-content">
+            <h3>聚焦直播效率</h3>
+            <p>专为直播场景设计，功能精简实用，不做冗余功能</p>
+          </div>
+        </div>
+        <div class="advantage-item">
+          <div class="advantage-check">✓</div>
+          <div class="advantage-content">
+            <h3>持续优化更新</h3>
+            <p>根据用户反馈持续迭代，保持与平台兼容性</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ Section -->
+  <section class="section faq" id="faq">
+    <div class="section-container">
+      <div class="section-header">
+        <span class="section-label">常见问题</span>
+        <h2 class="section-title">FAQ</h2>
+        <p class="section-desc">解答你的疑问</p>
+      </div>
+      <div class="faq-list">
+        <div class="faq-item">
+          <div class="faq-question">
+            <span>支持哪些操作系统？</span>
+            <span class="faq-toggle">+</span>
+          </div>
+          <div class="faq-answer">
+            <div class="faq-answer-content">
+              秀儿直播助手支持 Windows 10/11 64位系统和 macOS 11 及以上版本。macOS 版本同时支持 Apple 芯片（M1/M2/M3/M4）和 Intel 处理器。
+            </div>
+          </div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-question">
+            <span>Windows 安装遇到安全提示怎么办？</span>
+            <span class="faq-toggle">+</span>
+          </div>
+          <div class="faq-answer">
+            <div class="faq-answer-content">
+              由于软件未经过 Windows 应用商店签名，部分浏览器或系统可能会提示安全警告。请点击"保留"或"更多信息"→"仍要运行"后继续安装。这是正常现象，请放心使用。
+            </div>
+          </div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-question">
+            <span>macOS 提示"无法打开"怎么办？</span>
+            <span class="faq-toggle">+</span>
+          </div>
+          <div class="faq-answer">
+            <div class="faq-answer-content">
+              请前往 系统设置 → 隐私与安全性 → 安全性 → 点击"仍要打开"。这是由于 macOS Gatekeeper 对未签名应用的安全拦截，按此步骤操作即可正常打开。
+            </div>
+          </div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-question">
+            <span>去哪里下载最新版？</span>
+            <span class="faq-toggle">+</span>
+          </div>
+          <div class="faq-answer">
+            <div class="faq-answer-content">
+              请访问我们的官方下载站 <a href="https://download.xiuer.work/" target="_blank">download.xiuer.work</a> 获取最新版本。软件支持自动更新，安装后会在有新版本时提醒你。
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section class="cta">
+    <div class="cta-container">
+      <h2 class="cta-title">准备好提升直播效率了吗？</h2>
+      <p class="cta-desc">立即下载秀儿直播助手，开始更高效的直播运营</p>
+      <a href="https://download.xiuer.work/" class="btn btn-primary" target="_blank">
+        <span>⬇</span> 前往下载页
+      </a>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-container">
+      <p class="footer-copyright">© 2025-2026 秀儿直播助手. 保留所有权利.</p>
+      <div class="footer-links">
+        <a href="https://download.xiuer.work/" class="footer-link" target="_blank">下载</a>
+        <a href="#features" class="footer-link">功能</a>
+        <a href="#faq" class="footer-link">FAQ</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    // FAQ Accordion
+    document.querySelectorAll('.faq-question').forEach(question => {
+      question.addEventListener('click', () => {
+        const item = question.parentElement;
+        const isActive = item.classList.contains('active');
+        
+        // Close all items
+        document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('active'));
+        
+        // Open clicked item if it wasn't active
+        if (!isActive) {
+          item.classList.add('active');
+        }
+      });
+    });
+
+    // Smooth scroll for anchor links
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          target.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
+          });
+        }
+      });
+    });
+
+    // Mobile menu toggle (basic)
+    const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
+    const navLinks = document.querySelector('.nav-links');
+    
+    if (mobileMenuBtn) {
+      mobileMenuBtn.addEventListener('click', () => {
+        navLinks.style.display = navLinks.style.display === 'flex' ? 'none' : 'flex';
+      });
+    }
+  </script>
+</body>
+</html>
