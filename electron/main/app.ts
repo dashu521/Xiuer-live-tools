@@ -23,50 +23,80 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { createLogger, setAppQuitting } from './logger'
 
 // ==================== 启动期日志系统 ====================
-const STARTUP_LOG_DIR = path.join(app.getPath('userData'), 'logs')
-const STARTUP_LOG_PATH = path.join(STARTUP_LOG_DIR, 'startup.log')
-const MAIN_LOG_PATH = path.join(STARTUP_LOG_DIR, 'main.log')
+// 【修复】日志路径必须在最早期确定，确保打包后也能正常落地
+// 优先使用临时目录，因为 app.getPath('userData') 在某些情况下可能不可用
+const TEMP_LOG_DIR = process.env.TEMP || process.env.TMP || os.tmpdir()
+const FALLBACK_LOG_PATH = path.join(TEMP_LOG_DIR, 'xiuer-live-assistant')
+
+let STARTUP_LOG_DIR = ''
+let STARTUP_LOG_PATH = ''
+let MAIN_LOG_PATH = ''
+
+function initLogPaths() {
+  try {
+    STARTUP_LOG_DIR = path.join(app.getPath('userData'), 'logs')
+    STARTUP_LOG_PATH = path.join(STARTUP_LOG_DIR, 'startup.log')
+    MAIN_LOG_PATH = path.join(STARTUP_LOG_DIR, 'main.log')
+  } catch (e) {
+    STARTUP_LOG_DIR = FALLBACK_LOG_PATH
+    STARTUP_LOG_PATH = path.join(FALLBACK_LOG_PATH, 'startup.log')
+    MAIN_LOG_PATH = path.join(FALLBACK_LOG_PATH, 'main.log')
+  }
+}
 
 function ensureLogDir() {
-  try {
-    if (!existsSync(STARTUP_LOG_DIR)) {
-      mkdirSync(STARTUP_LOG_DIR, { recursive: true })
+  const dirs = [STARTUP_LOG_DIR, FALLBACK_LOG_PATH]
+  for (const dir of dirs) {
+    try {
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true })
+      }
+    } catch (e) {
+      // 继续尝试下一个目录
     }
-  } catch (e) {
-    // 忽略错误
   }
 }
 
 function writeStartupLog(message: string) {
   ensureLogDir()
   const timestamp = new Date().toISOString()
-  const logLine = `[${timestamp}] [STARTUP] ${message}\n`
-  try {
-    appendFileSync(STARTUP_LOG_PATH, logLine)
-    appendFileSync(MAIN_LOG_PATH, logLine)
-  } catch (e) {
+  const logLine = `[${timestamp}] [STARTUP] [PID:${process.pid}] ${message}\n`
+  
+  // 尝试写入多个位置，确保至少有一个成功
+  const logPaths = [STARTUP_LOG_PATH, MAIN_LOG_PATH, path.join(FALLBACK_LOG_PATH, 'startup.log')]
+  
+  for (const logPath of logPaths) {
     try {
-      const tempLog = path.join(process.env.TEMP || os.tmpdir(), 'xiuer-startup.log')
-      appendFileSync(tempLog, logLine)
-    } catch {
-      // 忽略
+      appendFileSync(logPath, logLine)
+    } catch (e) {
+      // 继续尝试下一个路径
     }
   }
+  
   console.log(`[STARTUP] ${message}`)
 }
 
 function writeMainLog(level: string, message: string) {
   ensureLogDir()
   const timestamp = new Date().toISOString()
-  const logLine = `[${timestamp}] [${level}] ${message}\n`
-  try {
-    appendFileSync(MAIN_LOG_PATH, logLine)
-  } catch (e) {
-    // 忽略
+  const logLine = `[${timestamp}] [${level}] [PID:${process.pid}] ${message}\n`
+  
+  const logPaths = [MAIN_LOG_PATH, path.join(FALLBACK_LOG_PATH, 'main.log')]
+  
+  for (const logPath of logPaths) {
+    try {
+      appendFileSync(logPath, logLine)
+    } catch (e) {
+      // 继续尝试下一个路径
+    }
   }
 }
 
+// 【修复】初始化日志路径
+initLogPaths()
+
 writeStartupLog('========== 应用启动 ==========')
+writeStartupLog(`PID: ${process.pid}`)
 writeStartupLog(`Node.js 版本: ${process.versions.node}`)
 writeStartupLog(`Electron 版本: ${process.versions.electron}`)
 writeStartupLog(`平台: ${process.platform} ${process.arch}`)
@@ -76,6 +106,8 @@ writeStartupLog(`用户数据目录: ${app.getPath('userData')}`)
 writeStartupLog(`资源目录: ${process.resourcesPath || 'N/A'}`)
 writeStartupLog(`当前工作目录: ${process.cwd()}`)
 writeStartupLog(`命令行参数: ${process.argv.join(' ')}`)
+writeStartupLog(`日志目录: ${STARTUP_LOG_DIR}`)
+writeStartupLog(`临时日志目录: ${FALLBACK_LOG_PATH}`)
 
 function createBoxedString(lines: string[]) {
   const maxLength = Math.max(...lines.map(line => line.length))
@@ -246,7 +278,6 @@ function waitForDevServer(
 let win: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuitting = false
-let isFirstLaunch = true
 
 // ==================== Preload 路径解析 ====================
 const possiblePreloadPaths = [
@@ -278,7 +309,7 @@ writeStartupLog(`index.html 存在: ${existsSync(indexHtml)}`)
 writeStartupLog(`RENDERER_DIST: ${RENDERER_DIST}`)
 writeStartupLog(`MAIN_DIST: ${MAIN_DIST}`)
 
-// ========== 调试模式：详细路径诊断 ==========
+// 路径诊断日志
 writeStartupLog('========== 路径诊断开始 ==========')
 writeStartupLog(`__dirname: ${__dirname}`)
 writeStartupLog(`process.env.APP_ROOT: ${process.env.APP_ROOT}`)
@@ -359,13 +390,18 @@ async function createWindow() {
   const isDev = !!VITE_DEV_SERVER_URL
   writeStartupLog(`VITE_DEV_SERVER_URL: ${VITE_DEV_SERVER_URL || 'N/A'}`)
   writeStartupLog(`isDev: ${isDev}`)
-
-  // 首次启动强制显示窗口
-  const forceShow = isFirstLaunch || !app.isPackaged || process.platform === 'win32'
-  writeStartupLog(`isFirstLaunch: ${isFirstLaunch}`)
-  writeStartupLog(`forceShow: ${forceShow}`)
   writeStartupLog(`preload 路径: ${preload}`)
   writeStartupLog(`preload 存在: ${existsSync(preload)}`)
+
+  // 【修复】Windows 打包版首屏显示规则
+  // 规则：Windows 打包版首次启动必须显示主窗口，不依赖任何复杂状态
+  // 参考：基线提交 fe6f675f 中的 forceShowOnWindows 逻辑
+  const isWindowsPackaged = app.isPackaged && process.platform === 'win32'
+  const isDevMode = isDev || !app.isPackaged
+  // Windows 打包版强制显示，开发模式强制显示，其他平台按正常流程
+  const showOnStart = isDevMode || isWindowsPackaged
+  
+  writeStartupLog(`[窗口显示规则] isWindowsPackaged=${isWindowsPackaged}, isDevMode=${isDevMode}, showOnStart=${showOnStart}`)
 
   try {
     const iconPath = path.join(process.env.VITE_PUBLIC ?? '', 'favicon.png')
@@ -374,18 +410,13 @@ async function createWindow() {
 
     writeStartupLog('正在创建 BrowserWindow...')
 
-    // ========== 调试模式：强制显示窗口 ==========
-    const DEBUG_FORCE_SHOW = true
-    const shouldShow = DEBUG_FORCE_SHOW || forceShow
-    writeStartupLog(`DEBUG: DEBUG_FORCE_SHOW=${DEBUG_FORCE_SHOW}, shouldShow=${shouldShow}`)
-
     win = new BrowserWindow({
       title: `秀儿直播助手 - v${app.getVersion()}`,
       width: 1280,
       height: 800,
-      x: 80,
-      y: 60,
-      show: shouldShow,
+      x: showOnStart ? 80 : undefined,
+      y: showOnStart ? 60 : undefined,
+      show: showOnStart,
       autoHideMenuBar: app.isPackaged,
       icon: existsSync(iconPath) ? iconPath : undefined,
       webPreferences: {
@@ -406,17 +437,14 @@ async function createWindow() {
       logWindowDebug('ready-to-show')
 
       if (win && !win.isDestroyed()) {
+        // 【修复】ready-to-show 时再次确保窗口显示
         win.show()
         writeStartupLog('窗口已显示 (ready-to-show)')
-
-        if (isDev || isFirstLaunch) {
+        
+        // 开发模式或 Windows 打包版时聚焦窗口
+        if (showOnStart) {
           win.focus()
           writeStartupLog('窗口已聚焦')
-        }
-
-        if (isFirstLaunch) {
-          isFirstLaunch = false
-          writeStartupLog('首次启动标记已清除')
         }
       }
     })
@@ -582,11 +610,10 @@ async function createWindow() {
       writeStartupLog('事件: did-finish-load 触发（页面加载完成）')
       writeMainLog('INFO', 'Page finished loading')
 
-      // ========== 调试模式：禁用启动时自动更新检查 ==========
-      writeStartupLog('DEBUG: 跳过启动时自动更新检查')
-      // if (!isQuitting) {
-      //   await updateManager.silentCheckForUpdate()
-      // }
+      // 启动时静默检查更新
+      if (!isQuitting) {
+        await updateManager.silentCheckForUpdate()
+      }
     })
 
     win.webContents.on('did-fail-load', (_, errorCode, errorDescription, validatedURL, isMainFrame) => {
@@ -594,9 +621,9 @@ async function createWindow() {
       writeStartupLog(`事件: did-fail-load - validatedURL=${validatedURL}`)
       writeMainLog('ERROR', `Page failed to load: ${errorDescription} (${errorCode}) at ${validatedURL}`)
 
-      // ========== 调试模式：加载失败时显示错误窗口 ==========
+      // 打包版加载失败时显示错误信息
       if (app.isPackaged && win && !win.isDestroyed()) {
-        writeStartupLog('DEBUG: 加载失败，尝试显示错误信息')
+        writeStartupLog('加载失败，尝试显示错误信息')
         win.webContents.executeJavaScript(`
           document.body.innerHTML = '<div style="padding:20px;font-family:sans-serif;">' +
             '<h1>页面加载失败</h1>' +
@@ -617,9 +644,9 @@ async function createWindow() {
       writeMainLog('ERROR', `render-process-gone: ${JSON.stringify(details)}`)
       logWindowDebug(`render-process-gone: ${details.reason}`)
 
-      // ========== 调试模式：渲染进程崩溃时显示错误 ==========
+      // 打包版渲染进程崩溃时显示错误信息
       if (app.isPackaged && win && !win.isDestroyed()) {
-        writeStartupLog('DEBUG: 渲染进程崩溃，尝试显示错误信息')
+        writeStartupLog('渲染进程崩溃，尝试显示错误信息')
         try {
           win.webContents.executeJavaScript(`
             document.body.innerHTML = '<div style="padding:20px;font-family:sans-serif;">' +
@@ -631,7 +658,7 @@ async function createWindow() {
           `).catch(() => {})
           win.show()
         } catch (e) {
-          writeStartupLog(`DEBUG: 显示错误信息失败: ${e}`)
+          writeStartupLog(`显示错误信息失败: ${e}`)
         }
       }
 
@@ -658,30 +685,21 @@ async function createWindow() {
 
     // 关闭窗口事件处理
     win.on('close', e => {
-      writeStartupLog(`事件: close 触发 - isQuitting=${isQuitting}, isFirstLaunch=${isFirstLaunch}, platform=${process.platform}`)
+      writeStartupLog(`事件: close 触发 - isQuitting=${isQuitting}, platform=${process.platform}`)
 
       if (win && win.isDestroyed()) {
         return
       }
 
-      // 【长期方案】如果正在退出，允许窗口关闭
+      // 如果正在退出，允许窗口关闭
       if (isQuitting) {
         writeStartupLog('应用正在退出，允许关闭窗口')
         return
       }
 
-      // 【长期方案】根据配置决定关闭行为
+      // 根据配置决定关闭行为
       const config = getConfig()
       const closeBehavior = config.closeBehavior || 'tray'
-
-      // 注意：首次启动时不隐藏，避免用户找不到窗口
-      if (isFirstLaunch) {
-        writeStartupLog('首次启动，不允许隐藏到托盘，强制保持窗口显示')
-        e.preventDefault()
-        win?.show()
-        win?.focus()
-        return
-      }
 
       // 如果配置为直接退出，不拦截关闭事件
       if (closeBehavior === 'quit') {
@@ -693,7 +711,6 @@ async function createWindow() {
       e.preventDefault()
       writeStartupLog('拦截关闭事件，改为隐藏到托盘')
 
-      // 复用已获取的 config，避免重复声明
       const shouldShowTip = !config.hideToTrayTipDismissed
 
       if (win && !win.isDestroyed()) {
@@ -720,11 +737,6 @@ async function createWindow() {
 
         notification.show()
       }
-    })
-
-    // ========== 调试模式：监听 browser-window-created ==========
-    app.on('browser-window-created', (_, window) => {
-      writeStartupLog(`事件: browser-window-created 触发 - id=${window.id}`)
     })
 
     writeStartupLog('========== createWindow 完成 ==========')

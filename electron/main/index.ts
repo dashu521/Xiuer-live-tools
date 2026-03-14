@@ -30,5 +30,7 @@ if (typeof process.setSourceMapsEnabled === 'function') {
   process.setSourceMapsEnabled(true)
 }
 
-// 崩溃处理在 app.ts 中统一处理，避免重复注册
-void import('./app')
+// 【修复】同步导入 app.ts，确保主进程入口不会提前退出
+// 原写法 `void import('./app')` 丢弃 Promise，导致打包后主进程过早退出
+// 同步导入确保 app.ts 的顶层代码立即执行，包括 startup.log 写入和 app.whenReady() 注册
+import './app'
