@@ -59,7 +59,7 @@ function setupIpcHandlers() {
         createLogger(TASK_NAME).info(`${logPrefix}[connect:launching] headless 参数：${headless}`)
         try {
           console.log(`[BrowserPopup] ${logPrefix} Calling accountSession.connect() with headless=${headless}`)
-          
+
           const connectResult = await accountSession.connect({
             headless,
             storageState,
@@ -82,7 +82,7 @@ function setupIpcHandlers() {
 
           // 检查错误类型：如果是浏览器启动失败，不应该返回 browserLaunched=true
           const errorMessage = error instanceof Error ? error.message : ''
-          const isBrowserLaunchError = 
+          const isBrowserLaunchError =
             errorMessage.includes('playwright') ||
             errorMessage.includes('无法启动浏览器') ||
             errorMessage.includes('chromium') ||
@@ -120,7 +120,7 @@ function setupIpcHandlers() {
             windowManager.send(
               IPC_CHANNELS.tasks.liveControl.disconnectedEvent,
               account.id,
-              error instanceof Error ? error.message : '浏览器已关闭，连接已取消',
+              error instanceof Error ? error.message : 'browser has been closed',
             )
 
             // 返回 browserLaunched=true，前端会显示"请扫码登录"而不是"连接失败"

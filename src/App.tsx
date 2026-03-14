@@ -78,7 +78,7 @@ function useGlobalIpcListener() {
 
     const reasonStr = (reason || '') as string
     const isFatalDisconnect =
-      reasonStr.includes('浏览器已被关闭') ||
+      reasonStr.includes('browser has been closed') ||
       reasonStr.includes('连接已取消') ||
       reasonStr.includes('连接超时') ||
       reasonStr.includes('网络连接失败')
@@ -100,8 +100,7 @@ function useGlobalIpcListener() {
     })
     console.log(`[renderer][${id}] >>> Step 1 done, new status:`, useLiveControlStore.getState().contexts[id]?.connectState)
     
-    if (reason) {
-      // 使用用户友好的错误提示替代原始技术错误
+    if (reason && !reasonStr.includes('用户主动断开')) {
       const friendlyMessage = getFriendlyErrorMessage(reason)
       toast.error(friendlyMessage)
     }

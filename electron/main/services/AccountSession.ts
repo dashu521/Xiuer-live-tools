@@ -130,24 +130,19 @@ export class AccountSession {
       // 【修复】浏览器被外部主动关闭时的处理
       // 添加验证机制，确保只有当前会话有效时才触发断开
       this.browserSession.page.on('close', () => {
-        // 如果已经在断开中或已断开，不重复触发
         if (this.isDisconnecting || this.isDisconnected) {
           this.logger.info(
             `[page-close] 账号 ${this.account.id} 已经在断开中或已断开，忽略重复事件`,
           )
           return
         }
-        // 验证 browserSession 仍然存在且匹配
         if (this.browserSession?.page) {
           this.logger.info(`[page-close] 账号 ${this.account.id} 页面关闭，触发断开连接`)
-          emitter.emit('page-closed', { accountId: this.account.id, reason: '页面已关闭' })
+          emitter.emit('page-closed', { accountId: this.account.id, reason: 'browser has been closed' })
         }
       })
 
-      // 【修复】监听浏览器进程断开事件（兜底机制）
-      // 当浏览器被强制关闭或崩溃时，page.on('close') 可能无法触发
       this.browserSession.browser.on('disconnected', () => {
-        // 如果已经在断开中或已断开，不重复触发
         if (this.isDisconnecting || this.isDisconnected) {
           this.logger.info(
             `[browser-disconnected] 账号 ${this.account.id} 已经在断开中或已断开，忽略重复事件`,
@@ -155,7 +150,7 @@ export class AccountSession {
           return
         }
         this.logger.warn(`[browser-disconnected] 账号 ${this.account.id} 浏览器进程已断开`)
-        emitter.emit('page-closed', { accountId: this.account.id, reason: '浏览器已被关闭' })
+        emitter.emit('page-closed', { accountId: this.account.id, reason: 'browser has been closed' })
       })
       // 【修复】连接成功后进行健康检查，确保直播状态检测可以正常工作
       this.logger.info('[健康检查] 验证直播状态检测功能...')
@@ -319,8 +314,7 @@ export class AccountSession {
 
     // 在等待登录阶段，非致命断开不发送 disconnectedEvent
     const isFatalDisconnect = 
-      reason?.includes('浏览器已被关闭') ||
-      reason?.includes('浏览器已关闭') ||
+      reason?.includes('browser has been closed') ||
       reason?.includes('应用退出') ||
       shouldCloseBrowser
     
@@ -386,22 +380,18 @@ export class AccountSession {
   }
 
   private formatConnectError(error: unknown) {
-    // 处理浏览器被关闭的情况
     if (error instanceof Error) {
       const errorMessage = error.message || error.name || ''
-      // 浏览器被用户关闭
       if (
         errorMessage.includes('Target page, context or browser has been closed') ||
         errorMessage.includes('browser has been closed') ||
         errorMessage.includes('page has been closed')
       ) {
-        return '浏览器已被关闭，连接已取消'
+        return 'browser has been closed'
       }
-      // 连接超时
       if (errorMessage.includes('timeout') || errorMessage.includes('Timeout')) {
         return '连接超时，请检查网络后重试'
       }
-      // 导航失败
       if (errorMessage.includes('net::') || errorMessage.includes('Navigation failed')) {
         return '网络连接失败，请检查网络后重试'
       }

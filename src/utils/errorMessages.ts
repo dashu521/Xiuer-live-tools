@@ -29,16 +29,16 @@ export interface ErrorMessageConfig {
 export const CONNECTION_ERROR_MAP: Record<string, ErrorMessageConfig> = {
   'browser has been closed': {
     title: '浏览器已关闭',
-    message: '检测到浏览器窗口被关闭了',
-    solution: '点击「连接直播中控台」，系统会重新打开浏览器',
-    level: 'warning',
+    message: '中控台连接已断开，相关自动任务已停止',
+    solution: '如需继续使用，请重新连接直播中控台',
+    level: 'info',
     showRetry: true,
   },
   'Target page, context or browser has been closed': {
-    title: '连接已中断',
-    message: '与直播平台的连接意外断开了',
-    solution: '检查一下网络，然后重新连接。如果还是不行，试试重启软件',
-    level: 'warning',
+    title: '浏览器已关闭',
+    message: '中控台连接已断开，相关自动任务已停止',
+    solution: '如需继续使用，请重新连接直播中控台',
+    level: 'info',
     showRetry: true,
   },
   'Browser is not connected': {
@@ -133,6 +133,13 @@ export const CONNECTION_ERROR_MAP: Record<string, ErrorMessageConfig> = {
     title: '连接已取消',
     message: '已取消连接操作',
     solution: '如需连接，请重新点击「连接直播中控台」按钮',
+    level: 'info',
+    showRetry: false,
+  },
+  用户主动断开: {
+    title: '已断开连接',
+    message: '已成功断开中控台连接',
+    solution: '如需重新连接，请点击「连接直播中控台」按钮',
     level: 'info',
     showRetry: false,
   },
@@ -242,9 +249,9 @@ export const BROWSER_ERROR_MAP: Record<string, ErrorMessageConfig> = {
   },
   'browser disconnected': {
     title: '浏览器已断开',
-    message: '与浏览器的通信连接已断开',
-    solution: '重新连接直播中控台',
-    level: 'warning',
+    message: '中控台连接已断开',
+    solution: '如需继续使用，请重新连接直播中控台',
+    level: 'info',
     showRetry: true,
   },
 }
