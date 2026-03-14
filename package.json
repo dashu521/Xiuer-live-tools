@@ -41,6 +41,7 @@
     "upload:mac": "node scripts/upload-mac-release.js",
     "upload:mac:oss": "node scripts/upload-mac-oss.js",
     "verify:mac:cdn": "node scripts/verify-mac-cdn.js",
+    "deploy:download-page": "node scripts/deploy-download-page.js",
     "publish:mac:full": "node scripts/publish-mac-full.js",
     "publish": "node scripts/publish.js",
     "publish:confirm": "node scripts/publish-confirm.js",

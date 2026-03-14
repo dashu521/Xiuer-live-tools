@@ -313,14 +313,87 @@ ls -la release/*/mac*/
 
 ---
 
+## 下载页部署规范
+
+### 架构约定
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    download.xiuer.work 目录结构                          │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  /                           ← 正式下载页（静态网站首页）                 │
+│  └── index.html              ← 用户下载入口，面向推广期用户               │
+│                                                                         │
+│  /releases/latest/           ← 自动更新目录（禁止覆盖）                   │
+│  ├── latest.yml              ← Windows 自动更新配置                      │
+│  ├── latest-mac.yml          ← macOS 自动更新配置                        │
+│  ├── Xiuer-Live-Assistant_*.exe      ← Windows 安装包                    │
+│  ├── Xiuer-Live-Assistant_*_arm64.dmg ← macOS Apple 芯片安装包           │
+│  └── Xiuer-Live-Assistant_*_x64.dmg   ← macOS Intel 安装包               │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 路径独立原则
+
+**重要**：以下两个路径完全独立，禁止互相覆盖
+
+| 路径 | 用途 | 部署方式 |
+|------|------|----------|
+| `/` (根目录) | 正式下载页 | 手动部署 `index.html` |
+| `/releases/latest/` | 自动更新源 | CI 自动上传构建产物 |
+
+### 部署命令
+
+```bash
+# 部署下载页到 OSS 根目录
+npm run deploy:download-page
+
+# 或直接使用脚本
+node scripts/deploy-download-page.js
+```
+
+### 发布后必验地址
+
+每次发布后必须验证以下地址可正常访问：
+
+| 地址 | 期望状态 | 说明 |
+|------|----------|------|
+| `https://download.xiuer.work/` | HTTP 200 | 正式下载页 |
+| `https://download.xiuer.work/releases/latest/latest.yml` | HTTP 200 | Windows 自动更新配置 |
+| `https://download.xiuer.work/releases/latest/latest-mac.yml` | HTTP 200 | macOS 自动更新配置 |
+| `https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_*_win-x64.exe` | HTTP 200 | Windows 安装包 |
+| `https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_*_macos_arm64.dmg` | HTTP 200 | macOS Apple 芯片安装包 |
+| `https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_*_macos_x64.dmg` | HTTP 200 | macOS Intel 安装包 |
+
+### 验证命令
+
+```bash
+# 验证下载页
+curl -I https://download.xiuer.work/
+
+# 验证自动更新配置
+curl -I https://download.xiuer.work/releases/latest/latest.yml
+curl -I https://download.xiuer.work/releases/latest/latest-mac.yml
+
+# 验证安装包（示例版本号，实际根据发布版本调整）
+curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.2_win-x64.exe
+curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.2_macos_arm64.dmg
+curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.2_macos_x64.dmg
+```
+
+---
+
 ## 修改记录
 
 | 日期 | 版本 | 修改内容 |
 |------|------|----------|
 | 2025-03-12 | v2.0 | 建立三层发布结构，明确区分测试构建和正式发布构建 |
 | 2025-03-12 | v2.1 | 更新 macOS 构建说明：删除 M3 Ultra 特定表述，明确任何 Mac 均可构建，当前使用无签名方式，未来可升级至 Apple Developer 签名 |
+| 2025-03-14 | v2.2 | 添加下载页部署规范：明确 download.xiuer.work/ 为正式下载页，/releases/latest/ 为自动更新目录，两者路径独立；添加发布后必验地址清单 |
 
 ---
 
-**最后更新**：2025-03-12
-**规范版本**：v2.1
+**最后更新**：2025-03-14
+**规范版本**：v2.2

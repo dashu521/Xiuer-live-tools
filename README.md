@@ -42,6 +42,22 @@
 - **WebSocket 服务**：实时数据广播，支持第三方集成
 - **开发者模式**：开放开发者工具，便于定制调试
 
+## 下载安装
+
+### 正式下载入口
+
+**对外统一入口**：https://download.xiuer.work/
+
+| 平台 | 下载地址 | 适用系统 |
+|------|----------|----------|
+| Windows | [下载 Windows 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.2_win-x64.exe) | Windows 10/11 64位 |
+| macOS Apple 芯片 | [下载 Apple 芯片版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.2_macos_arm64.dmg) | M1/M2/M3/M4 Mac |
+| macOS Intel | [下载 Intel 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.2_macos_x64.dmg) | Intel 处理器 Mac |
+
+> **安装提示**：
+> - Windows：如果浏览器提示风险，请点击"保留"或"更多信息"→"仍要运行"
+> - macOS：如果提示"无法打开"，请前往 系统设置 → 隐私与安全性 → 点击"仍要打开"
+
 ## 系统要求
 
 - **操作系统**：Windows 10 及以上（推荐 Windows 11）/ macOS 11 及以上
