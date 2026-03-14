@@ -60,7 +60,7 @@ class VersionManager {
 
   private initializeChannels() {
     this.channels = [
-      { name: 'stable', priority: 1, checkUrl: 'https://xiuer.work/releases/latest' },
+      { name: 'stable', priority: 1, checkUrl: 'https://download.xiuer.work/releases/latest' },
       { name: 'beta', priority: 2, checkUrl: '' },
       { name: 'nightly', priority: 3, checkUrl: '' },
     ]

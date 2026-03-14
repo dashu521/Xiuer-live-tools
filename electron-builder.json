@@ -144,7 +144,7 @@
   },
   "publish": {
     "provider": "generic",
-    "url": "https://xiuer.work/releases/latest",
+    "url": "https://download.xiuer.work/releases/latest",
     "channel": "latest"
   }
 }
