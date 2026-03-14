@@ -653,7 +653,7 @@ export const useAuthStore = create<AuthStore>()(
           ) {
             try {
               const tokens = await (
-                window as {
+                window as unknown as {
                   authAPI: {
                     getTokenInternal: () => Promise<{ token: string | null; refreshToken: string | null }>
                   }
