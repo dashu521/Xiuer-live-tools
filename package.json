@@ -38,6 +38,7 @@
     "release:guard": "node scripts/release-guard.js",
     "release:audit": "node scripts/release-audit.js",
     "release:notes": "node scripts/generate-release-notes.js",
+    "upload:mac": "node scripts/upload-mac-release.js",
     "publish": "node scripts/publish.js",
     "publish:confirm": "node scripts/publish-confirm.js",
     "publish:check": "node scripts/publish-check.js"
