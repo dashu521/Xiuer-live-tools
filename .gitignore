@@ -81,9 +81,6 @@ __pycache__/
 .cache/
 *.tsbuildinfo
 
-# Auto-generated files
-electron/preload/ipcWhitelist.gen.ts
-
 # Misc
 TROUBLE.md
 

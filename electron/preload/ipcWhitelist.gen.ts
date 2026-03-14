@@ -1,0 +1,131 @@
+// =====================================================
+// Auto-generated IPC Channel Whitelist
+// DO NOT EDIT MANUALLY - This file is auto-generated from shared/ipcChannels.ts
+// Run 'npx tsx scripts/generateIpcWhitelist.ts' to regenerate
+// =====================================================
+
+// 静态通道白名单
+const ALLOWED_STATIC_CHANNELS: string[] = [
+  'account:switch',
+  'app:clearLocalLoginData',
+  'app:getHideToTrayTipDismissed',
+  'app:hideToTrayTip',
+  'app:notifyUpdate',
+  'app:openExternal',
+  'app:openLogFolder',
+  'app:setHideToTrayTipDismissed',
+  'chrome:getPath',
+  'chrome:saveState',
+  'chrome:selectPath',
+  'chrome:setPath',
+  'chrome:toggleDevTools',
+  'config:load',
+  'config:save',
+  'diagnostics:getAccountTasks',
+  'diagnostics:getRuntimeStats',
+  'diagnostics:getTimeline',
+  'diagnostics:printSummary',
+  'diagnostics:reset',
+  'liveStats:exportData',
+  'liveStats:openExportFolder',
+  'tasks:aiChat:chat',
+  'tasks:aiChat:error',
+  'tasks:aiChat:normalChat',
+  'tasks:aiChat:stream',
+  'tasks:aiChat:testApiKey',
+  'tasks:autoMessage:sendBatchMessages',
+  'tasks:autoMessage:start',
+  'tasks:autoMessage:stop',
+  'tasks:autoMessage:stoppedEvent',
+  'tasks:autoMessage:updateConfig',
+  'tasks:autoPopUp:start',
+  'tasks:autoPopUp:stop',
+  'tasks:autoPopUp:stoppedEvent',
+  'tasks:autoPopUp:updateConfig',
+  'tasks:autoPopup:registerShortcut',
+  'tasks:autoPopup:unregisterShortcut',
+  'tasks:autoReply:listenerStopped',
+  'tasks:autoReply:replyGenerated',
+  'tasks:autoReply:sendReply',
+  'tasks:autoReply:showComment',
+  'tasks:autoReply:startAutoReply',
+  'tasks:autoReply:startCommentListener',
+  'tasks:autoReply:stopAutoReply',
+  'tasks:autoReply:stopCommentListener',
+  'tasks:liveControl:connect',
+  'tasks:liveControl:disconnect',
+  'tasks:liveControl:disconnectedEvent',
+  'tasks:liveControl:getLiveRoomUrl',
+  'tasks:liveControl:notifyAccountName',
+  'tasks:liveControl:streamStateChanged',
+  'tasks:pinComment',
+  'tasks:subAccount:accountStatusChanged',
+  'tasks:subAccount:addAccount',
+  'tasks:subAccount:batchProgress',
+  'tasks:subAccount:checkHealth',
+  'tasks:subAccount:clearStorageState',
+  'tasks:subAccount:disconnectAccount',
+  'tasks:subAccount:enterLiveRoom',
+  'tasks:subAccount:exportAccounts',
+  'tasks:subAccount:getAllAccounts',
+  'tasks:subAccount:importAccounts',
+  'tasks:subAccount:loginAccount',
+  'tasks:subAccount:removeAccount',
+  'tasks:subAccount:sendBatch',
+  'tasks:subAccount:start',
+  'tasks:subAccount:stop',
+  'tasks:subAccount:stoppedEvent',
+  'tasks:subAccount:syncAccounts',
+  'tasks:subAccount:updateConfig',
+  'updater:checkUpdate',
+  'updater:downloadProgress',
+  'updater:quitAndInstall',
+  'updater:startDownload',
+  'updater:updateAvailable',
+  'updater:updateDownloaded',
+  'updater:updateError',
+]
+
+// 动态通道前缀（用于账号隔离事件，如 tasks:autoMessage:stopped:{accountId}）
+const ALLOWED_DYNAMIC_PREFIXES: string[] = [
+  'tasks:autoMessage:stopped:',
+  'tasks:autoPopUp:stopped:',
+  'tasks:autoReply:listenerStopped:',
+  'tasks:subAccount:stopped:',
+]
+
+/**
+ * 检查通道是否允许
+ * 支持静态通道精确匹配和动态通道前缀匹配
+ */
+export function isChannelAllowed(channel: string): boolean {
+  // 先检查静态通道
+  if (ALLOWED_STATIC_CHANNELS.includes(channel)) {
+    return true
+  }
+  
+  // 再检查动态通道前缀
+  for (const prefix of ALLOWED_DYNAMIC_PREFIXES) {
+    if (channel.startsWith(prefix)) {
+      return true
+    }
+  }
+  
+  return false
+}
+
+/**
+ * 获取所有允许的通道（用于调试和校验）
+ */
+export function getAllAllowedChannels(): string[] {
+  return [...ALLOWED_STATIC_CHANNELS]
+}
+
+/**
+ * 开发环境警告：未允许的通道
+ */
+export function warnIfNotAllowed(channel: string): void {
+  if (!isChannelAllowed(channel)) {
+    console.warn(`[Preload] Channel not in whitelist: ${channel}`)
+  }
+}
