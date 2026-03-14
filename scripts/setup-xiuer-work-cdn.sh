@@ -1,0 +1,98 @@
+#!/bin/bash
+#
+# xiuer.work CDN 配置脚本
+# 需要在阿里云控制台完成的操作清单
+#
+
+echo "================================================"
+echo "  xiuer.work 官方主站 CDN 配置指南"
+echo "================================================"
+echo ""
+
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+echo -e "${BLUE}步骤 1: 配置阿里云 CDN${NC}"
+echo "------------------------------"
+echo "1. 登录 https://cdn.console.aliyun.com/"
+echo "2. 点击「域名管理」→「添加域名」"
+echo ""
+echo "填写以下信息："
+echo "  加速域名: xiuer.work"
+echo "  业务类型: 静态加速"
+echo "  源站信息: OSS 域名"
+echo "  源站地址: xiuer-work-website.oss-cn-hangzhou.aliyuncs.com"
+echo "  端口: 443"
+echo ""
+echo "3. 点击「确定」"
+echo "4. 记录分配的 CNAME 地址（如: xiuer.work.w.kunlunsl.com）"
+echo ""
+read -p "按 Enter 继续..."
+
+echo ""
+echo -e "${BLUE}步骤 2: 配置域名解析${NC}"
+echo "------------------------------"
+echo "1. 登录 https://dc.console.aliyun.com/"
+echo "2. 找到 xiuer.work 域名，点击「解析」"
+echo "3. 添加/修改 CNAME 记录："
+echo ""
+echo "  记录类型: CNAME"
+echo "  主机记录: @"
+echo "  记录值: [步骤1获取的CNAME地址]"
+echo "  TTL: 默认"
+echo ""
+echo "4. 如果有 www 记录，也添加一条："
+echo "  主机记录: www"
+echo "  记录值: [同上]"
+echo ""
+read -p "按 Enter 继续..."
+
+echo ""
+echo -e "${BLUE}步骤 3: 配置 HTTPS 证书${NC}"
+echo "------------------------------"
+echo "1. 在 CDN 控制台找到 xiuer.work 域名"
+echo "2. 点击「HTTPS 配置」"
+echo "3. 开启「HTTPS 安全加速」"
+echo "4. 选择证书："
+echo "   - 推荐：申请免费证书（阿里云自动申请）"
+echo "   - 或：上传已有证书"
+echo "5. 开启「强制跳转 HTTPS」"
+echo ""
+read -p "按 Enter 继续..."
+
+echo ""
+echo -e "${BLUE}步骤 4: 验证配置${NC}"
+echo "------------------------------"
+echo "等待 5-10 分钟后执行以下验证命令："
+echo ""
+echo "# 验证 DNS 解析"
+echo "nslookup xiuer.work"
+echo ""
+echo "# 验证 HTTPS 访问"
+echo "curl -I https://xiuer.work/"
+echo ""
+echo "# 验证页面内容"
+echo "curl -s https://xiuer.work/ | head -20"
+echo ""
+echo "# 验证下载按钮跳转"
+echo "curl -s https://xiuer.work/ | grep 'download.xiuer.work'"
+echo ""
+echo "# 验证下载站不受影响"
+echo "curl -I https://download.xiuer.work/"
+echo "curl -I https://download.xiuer.work/releases/latest/latest.yml"
+echo ""
+
+echo -e "${GREEN}================================================${NC}"
+echo -e "${GREEN}  配置完成！${NC}"
+echo -e "${GREEN}================================================${NC}"
+echo ""
+echo "预期结果："
+echo "  - https://xiuer.work/ 返回 HTTP 200"
+echo "  - 页面显示官方主站"
+echo "  - 下载按钮指向 https://download.xiuer.work/"
+echo "  - download.xiuer.work 不受影响"
+echo ""
