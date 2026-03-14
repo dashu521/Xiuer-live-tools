@@ -183,7 +183,7 @@ export function PhoneAuthDialog({
     console.log('[PhoneAuthDialog] 开始短信登录流程, phone末4位:', phone.slice(-4), 'code长度:', code.length)
     try {
       // [SECURITY-FIX] 使用主进程代理登录，内部处理 token 存储
-      const authAPI = (window as { authAPI?: { loginWithSms?: (phone: string, code: string) => Promise<unknown> } }).authAPI
+      const authAPI = (window as unknown as { authAPI?: { loginWithSms?: (phone: string, code: string) => Promise<unknown> } }).authAPI
       console.log('[PhoneAuthDialog] authAPI 存在:', !!authAPI, 'loginWithSms 存在:', !!authAPI?.loginWithSms)
       if (!authAPI?.loginWithSms) {
         toast.error('登录功能暂时不可用，请重启软件')

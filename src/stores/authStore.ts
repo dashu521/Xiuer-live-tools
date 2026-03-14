@@ -161,9 +161,8 @@ export const useAuthStore = create<AuthStore>()(
         })
 
         try {
-          // 首发版：仅通过主进程进行认证
           const response = (await (
-            window as {
+            window as unknown as {
               authAPI: { login: (c: LoginCredentials) => Promise<unknown> }
             }
           ).authAPI.login(credentials)) as LoginResponseExtended
@@ -187,15 +186,15 @@ export const useAuthStore = create<AuthStore>()(
             console.log('[AuthStore] Saving tokens to main process...')
             if (typeof window !== 'undefined') {
               const authAPI = (
-                window as {
-                  authAPI?: {
-                    setTokens?: (tokens: {
-                      token: string | null
-                      refreshToken: string | null
-                    }) => Promise<void>
-                  }
+              window as unknown as {
+                authAPI?: {
+                  setTokens?: (tokens: {
+                    token: string | null
+                    refreshToken: string | null
+                  }) => Promise<void>
                 }
-              ).authAPI
+              }
+            ).authAPI
               console.log('[AuthStore] authAPI exists:', !!authAPI)
               console.log('[AuthStore] setTokens exists:', !!authAPI?.setTokens)
               if (authAPI?.setTokens) {
@@ -342,9 +341,8 @@ export const useAuthStore = create<AuthStore>()(
           }
           console.log(`[AuthStore] Register request [${requestId}]:`, payloadForLog)
 
-          // 首发版：仅通过主进程进行注册
           const response = (await (
-            window as { authAPI: { register: (d: RegisterData) => Promise<unknown> } }
+            window as unknown as { authAPI: { register: (d: RegisterData) => Promise<unknown> } }
           ).authAPI.register(data)) as RegisterResponseExtended
 
           // 【步骤B】记录响应信息（证据链：与后端一致，不看 hasUser/hasToken）
@@ -366,7 +364,7 @@ export const useAuthStore = create<AuthStore>()(
               if (
                 typeof window !== 'undefined' &&
                 (
-                  window as {
+                  window as unknown as {
                     authAPI?: {
                       setTokens?: (tokens: {
                         token: string | null
@@ -378,7 +376,7 @@ export const useAuthStore = create<AuthStore>()(
               ) {
                 try {
                   await (
-                    window as {
+                    window as unknown as {
                       authAPI: {
                         setTokens: (tokens: {
                           token: string | null
@@ -644,7 +642,7 @@ export const useAuthStore = create<AuthStore>()(
           if (
             typeof window !== 'undefined' &&
             (
-              window as {
+              window as unknown as {
                 authAPI?: {
                   getTokenInternal?: () => Promise<{ token: string | null; refreshToken: string | null }>
                 }
