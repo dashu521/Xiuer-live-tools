@@ -342,12 +342,12 @@ jobs:
           Write-Host "========================================"
           Write-Host "Build completed successfully!"
           Write-Host "========================================"
-          if (startsWith($env:GITHUB_REF, 'refs/tags/v')) {
+          if ($env:GITHUB_REF -like 'refs/tags/v*') {
             Write-Host "GitHub Release: https://github.com/${{ github.repository }}/releases/tag/$version"
             Write-Host ""
           }
           Write-Host "Download URLs:"
-          if (startsWith($env:GITHUB_REF, 'refs/tags/v')) {
+          if ($env:GITHUB_REF -like 'refs/tags/v*') {
             Write-Host "  GitHub:  https://github.com/${{ github.repository }}/releases/tag/$version"
           }
           Write-Host "  Version: https://xiuer.work/releases/$version/"
