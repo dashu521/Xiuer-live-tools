@@ -120,7 +120,7 @@ export const AccountSwitcher = React.memo(() => {
         value={normalizedAccountId}
         onValueChange={handleAccountSwitch}
       >
-        <SelectTrigger className="w-[11.25rem]">
+        <SelectTrigger className="w-[11.25rem]" aria-label="选择直播账号">
           <SelectValue
             placeholder={!isAuthenticated ? '请先登录' : hasAccounts ? '选择账号' : '暂无账号'}
           />
