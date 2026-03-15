@@ -19,17 +19,15 @@ export function getBuildTimeConfig(): BuildTimeConfig {
     return defaultConfig
   }
 
-  const authApiBaseUrl =
-    process.env.AUTH_API_BASE_URL ??
-    process.env.VITE_AUTH_API_BASE_URL
+  const authApiBaseUrl = process.env.AUTH_API_BASE_URL ?? process.env.VITE_AUTH_API_BASE_URL
 
   if (authApiBaseUrl) {
     cachedConfig = { authApiBaseUrl }
     return cachedConfig
   }
 
-  const fs = require('fs') as typeof import('fs')
-  const path = require('path') as typeof import('path')
+  const fs = require('node:fs') as typeof import('fs')
+  const path = require('node:path') as typeof import('path')
 
   if (app?.isPackaged && process.resourcesPath) {
     const asarPath = path.join(process.resourcesPath, 'app.asar')

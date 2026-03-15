@@ -166,10 +166,7 @@ export function OtherSetting() {
   }
 
   const handleOpenSupport = async () => {
-    await window.ipcRenderer.invoke(
-      IPC_CHANNELS.app.openExternal,
-      'mailto:support@xiuer.live',
-    )
+    await window.ipcRenderer.invoke(IPC_CHANNELS.app.openExternal, 'mailto:support@xiuer.live')
   }
 
   const handleClearLocalLoginData = async () => {

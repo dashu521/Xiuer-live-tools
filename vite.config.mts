@@ -1,12 +1,11 @@
 import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
+// @ts-expect-error - Tailwind CSS Vite plugin is ESM only
+import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import electron from 'vite-plugin-electron/simple'
-
-// @ts-ignore - Tailwind CSS Vite plugin is ESM only
-import tailwindcss from '@tailwindcss/vite'
 
 /** 主进程构建完成后复制 runtime（含 load-playwright.cjs），dev 时也会执行，避免主进程 require 报错 */
 function copyMainRuntime() {
@@ -99,7 +98,7 @@ export default defineConfig(({ command }) => {
             'form-vendor': ['class-variance-authority'],
           },
           // chunk 文件命名优化
-          chunkFileNames: (chunkInfo) => {
+          chunkFileNames: chunkInfo => {
             const name = chunkInfo.name
             if (name?.includes('vendor')) {
               return 'assets/vendor/[name]-[hash].js'
@@ -107,7 +106,7 @@ export default defineConfig(({ command }) => {
             return 'assets/js/[name]-[hash].js'
           },
           entryFileNames: 'assets/js/[name]-[hash].js',
-          assetFileNames: (assetInfo) => {
+          assetFileNames: assetInfo => {
             const info = assetInfo.name?.split('.') || []
             const ext = info[info.length - 1] || ''
             if (/\.(png|jpe?g|gif|svg|webp|ico)$/i.test(assetInfo.name || '')) {
@@ -140,12 +139,7 @@ export default defineConfig(({ command }) => {
         'tailwind-merge',
         'class-variance-authority',
       ],
-      exclude: [
-        'playwright',
-        'better-sqlite3',
-        'electron-updater',
-        'electron-log',
-      ],
+      exclude: ['playwright', 'better-sqlite3', 'electron-updater', 'electron-log'],
     },
     resolve: {
       alias: {

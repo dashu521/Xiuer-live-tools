@@ -26,13 +26,12 @@ function tryLoadPlaywrightCore(modulePath, label) {
   try {
     console.log(`[load-playwright] [${label}] Trying: ${modulePath}`)
     const mod = require(modulePath)
-    if (mod && mod.chromium) {
+    if (mod?.chromium) {
       console.log(`[load-playwright] [${label}] SUCCESS: ${modulePath}`)
       return { success: true, module: mod, path: modulePath }
-    } else {
-      console.log(`[load-playwright] [${label}] FAILED: chromium is undefined`)
-      return { success: false, error: 'chromium is undefined' }
     }
+    console.log(`[load-playwright] [${label}] FAILED: chromium is undefined`)
+    return { success: false, error: 'chromium is undefined' }
   } catch (e) {
     console.log(`[load-playwright] [${label}] FAILED: ${e.message}`)
     return { success: false, error: e.message }
@@ -43,11 +42,11 @@ function tryLoadPlaywrightCore(modulePath, label) {
  * 多路径 fallback 加载 playwright-core
  */
 function loadPlaywrightCoreWithFallback() {
-  const isWindows = process.platform === 'win32'
+  const _isWindows = process.platform === 'win32'
   const unpackedPath = getUnpackedNodeModulesPath()
   const isPackaged = !!unpackedPath
 
-  console.log(`[load-playwright] ========== 环境信息 ==========`)
+  console.log('[load-playwright] ========== 环境信息 ==========')
   console.log(`[load-playwright] Environment: ${isPackaged ? 'packaged' : 'development'}`)
   console.log(`[load-playwright] Platform: ${process.platform}`)
   console.log(`[load-playwright] Arch: ${process.arch}`)
@@ -58,7 +57,7 @@ function loadPlaywrightCoreWithFallback() {
     console.log(`[load-playwright] Unpacked path: ${unpackedPath}`)
   }
 
-  console.log(`[load-playwright] ========== 模块加载（多路径 fallback）==========`)
+  console.log('[load-playwright] ========== 模块加载（多路径 fallback）==========')
 
   // 方式 1：默认 require（macOS 正常）
   const defaultResult = tryLoadPlaywrightCore('playwright-core', 'DEFAULT')
@@ -93,7 +92,7 @@ function loadPlaywrightCoreWithFallback() {
   }
 
   // 所有方式都失败
-  console.error(`[load-playwright] ========== 所有加载方式均失败 ==========`)
+  console.error('[load-playwright] ========== 所有加载方式均失败 ==========')
   throw new Error(`Cannot load playwright-core from any path. Tried:
   1. DEFAULT: require('playwright-core')
   2. CWD: ${cwdPath}
@@ -112,9 +111,8 @@ try {
   console.log('[load-playwright] ========== 加载成功 ==========')
   console.log('[load-playwright] playwright-core loaded successfully')
   console.log('[load-playwright] Note: Running without stealth plugin')
-
 } catch (error) {
-  console.error(`[load-playwright] ========== 加载失败 ==========`)
+  console.error('[load-playwright] ========== 加载失败 ==========')
   console.error(`[load-playwright] Error message: ${error.message}`)
   console.error(`[load-playwright] Error name: ${error.name}`)
   console.error(`[load-playwright] Error code: ${error.code}`)

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.4.5/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.4.7/schema.json",
   "vcs": {
     "enabled": false,
     "clientKind": "git",
@@ -15,10 +15,15 @@
       "!**/release",
       "!**/build",
       "!**/.vscode",
+      "!**/.agents",
+      "!**/docs/archive",
       "!**/*.html",
       "!changelog.config.js",
       "!scripts",
-      "!src/index.css"
+      "!src/index.css",
+      "!CODE_QUALITY_AUDIT_REPORT*.md",
+      "!FINAL_SECURITY*.md",
+      "!SECURITY_AUDIT*.md"
     ]
   },
   "formatter": { "enabled": true, "indentStyle": "space", "lineWidth": 100 },

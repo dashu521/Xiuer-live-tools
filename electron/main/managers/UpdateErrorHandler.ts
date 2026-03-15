@@ -182,7 +182,12 @@ class UpdateErrorHandler {
     const mainWindow = BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0]
 
     // 严格检查窗口状态，防止 "Object has been destroyed" 错误
-    if (mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents && !mainWindow.webContents.isDestroyed()) {
+    if (
+      mainWindow &&
+      !mainWindow.isDestroyed() &&
+      mainWindow.webContents &&
+      !mainWindow.webContents.isDestroyed()
+    ) {
       try {
         mainWindow.webContents.send(IPC_CHANNELS.updater.updateError, {
           code: error.code,

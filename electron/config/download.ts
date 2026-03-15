@@ -30,7 +30,9 @@ export const DOWNLOAD_CONFIG = {
 
   // 文件命名规则
   artifactName: {
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: 这些是 electron-builder 的占位符语法，不是模板字符串
     win: 'Xiuer-Live-Assistant_${version}_win-x64.${ext}',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: 这些是 electron-builder 的占位符语法，不是模板字符串
     mac: '秀儿直播助手_${version}_macos_${arch}.${ext}',
   },
 }

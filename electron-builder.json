@@ -122,10 +122,7 @@
     "category": "public.app-category.utilities"
   },
   "win": {
-    "target": [
-      { "target": "nsis", "arch": ["x64"] },
-      { "target": "zip", "arch": ["x64"] }
-    ],
+    "target": [{ "target": "nsis", "arch": ["x64"] }, { "target": "zip", "arch": ["x64"] }],
     "icon": "public/icon-win.ico",
     "artifactName": "Xiuer-Live-Assistant_${version}_win-x64.${ext}"
   },

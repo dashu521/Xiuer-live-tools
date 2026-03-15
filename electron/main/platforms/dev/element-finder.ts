@@ -18,23 +18,24 @@ export const devElementFinder: IElementFinder = {
     return Result.succeed(button)
   },
   async getIdFromGoodsItem(item: ElementHandle<SVGElement | HTMLElement>) {
-    const idWrapper = await item.$(':text("#")')
-    if (!idWrapper) {
+    // 【修复】与真实平台保持一致：从隐藏的 input 元素获取实际 ID
+    const idInput = await item.$('.goods-item-id')
+    if (!idInput) {
       return Result.fail(
-        new ElementNotFoundError({ elementName: '商品ID', selector: ':text("#")' }),
+        new ElementNotFoundError({ elementName: '商品ID', selector: '.goods-item-id' }),
       )
     }
-    const idText = (await idWrapper.textContent())?.match(/\d+/)?.[0] ?? ''
-    const id = Number.parseInt(idText, 10)
-    if (!id) {
+    const idValue = await idInput.inputValue()
+    const id = Number.parseInt(idValue, 10)
+    if (Number.isNaN(id)) {
       return Result.fail(
         new ElementContentMismatchedError({
-          current: idText,
+          current: idValue ?? '',
           target: '数字',
         }),
       )
     }
-    return Result.succeed(Number(id))
+    return Result.succeed(id)
   },
 
   async getCurrentGoodsItemsList(page: Page) {

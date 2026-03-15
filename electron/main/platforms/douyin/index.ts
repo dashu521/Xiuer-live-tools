@@ -68,9 +68,7 @@ export class DouyinPlatform implements IPlatform, IPerformPopup, IPerformComment
         return false
       }
       // 检测评论输入框是否存在且可用（开播时会有评论输入框）
-      const commentTextarea = await page
-        .$(SELECTORS.commentInput.TEXTAREA)
-        .catch(() => null)
+      const commentTextarea = await page.$(SELECTORS.commentInput.TEXTAREA).catch(() => null)
       if (commentTextarea) {
         const isDisabled = await commentTextarea.isDisabled().catch(() => true)
         // 如果评论框存在且未禁用，说明正在直播

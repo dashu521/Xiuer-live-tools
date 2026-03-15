@@ -102,17 +102,20 @@ const latestVersion: string | null = null
 // Get latest version from GitHub Releases
 async function _getLatestVersion(): Promise<string | null> {
   try {
-    const response = await net.fetch('https://api.github.com/repos/Xiuer-Chinese/Xiuer-live-tools/releases/latest', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        'Accept': 'application/vnd.github.v3+json',
+    const response = await net.fetch(
+      'https://api.github.com/repos/Xiuer-Chinese/Xiuer-live-tools/releases/latest',
+      {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          Accept: 'application/vnd.github.v3+json',
+        },
       },
-    })
+    )
     if (!response.ok) {
       logger.error(`Failed to fetch latest version: ${response.status}`)
       return null
     }
-    const data = await response.json() as { tag_name: string }
+    const data = (await response.json()) as { tag_name: string }
     return data.tag_name.replace(/^v/, '')
   } catch (error) {
     logger.error('Failed to get latest version:', error)
@@ -123,14 +126,17 @@ async function _getLatestVersion(): Promise<string | null> {
 // Fetch changelog from GitHub Releases
 async function fetchChangelog(): Promise<string | undefined> {
   try {
-    const response = await net.fetch('https://api.github.com/repos/Xiuer-Chinese/Xiuer-live-tools/releases/latest', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-        'Accept': 'application/vnd.github.v3+json',
+    const response = await net.fetch(
+      'https://api.github.com/repos/Xiuer-Chinese/Xiuer-live-tools/releases/latest',
+      {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          Accept: 'application/vnd.github.v3+json',
+        },
       },
-    })
+    )
     if (!response.ok) return undefined
-    const data = await response.json() as { body: string }
+    const data = (await response.json()) as { body: string }
     return data.body
   } catch {
     return undefined
