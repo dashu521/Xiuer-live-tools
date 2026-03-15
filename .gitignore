@@ -83,6 +83,12 @@ __pycache__/
 
 # Misc
 TROUBLE.md
+.agents/
+.trae/
+skills-lock.json
+*_AUDIT_REPORT*.md
+CODE_QUALITY_AUDIT_REPORT_*.md
+UI_UX_AUDIT_REPORT.md
 
 # Database files - should not be tracked or packaged
 auth-api/data/*.db
