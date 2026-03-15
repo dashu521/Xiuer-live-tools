@@ -138,6 +138,8 @@ npm test
 | 文档 | 职责 | 状态 |
 |------|------|------|
 | [README.md](README.md) | 项目总入口 | 当前有效 |
+| [docs/project-architecture-foundation.md](docs/project-architecture-foundation.md) | 全仓库架构总规范 | 已固化 |
+| [docs/architecture-change-checklist.md](docs/architecture-change-checklist.md) | 架构变更提交前检查清单 | 已固化 |
 | [docs/live-control-lifecycle-spec.md](docs/live-control-lifecycle-spec.md) | 中控台/直播状态规范 | 已固化 |
 | [docs/access-control-architecture.md](docs/access-control-architecture.md) | 权限与套餐架构 | 已固化 |
 | [docs/HIGH_RISK_FILES.md](docs/HIGH_RISK_FILES.md) | 高风险文件准入清单 | 当前有效 |
@@ -148,6 +150,8 @@ npm test
 
 | 主题 | 唯一规范源 |
 |------|-----------|
+| 全仓库架构边界 | [docs/project-architecture-foundation.md](docs/project-architecture-foundation.md) |
+| 架构变更提交流程 | [docs/architecture-change-checklist.md](docs/architecture-change-checklist.md) |
 | Windows 关闭行为 | [docs/live-control-lifecycle-spec.md](docs/live-control-lifecycle-spec.md) §2.5 |
 | second-instance 处理 | [docs/live-control-lifecycle-spec.md](docs/live-control-lifecycle-spec.md) |
 | 直播生命周期 | [docs/live-control-lifecycle-spec.md](docs/live-control-lifecycle-spec.md) |
