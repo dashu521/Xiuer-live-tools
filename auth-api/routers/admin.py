@@ -101,7 +101,100 @@ def _is_user_online(u: User) -> bool:
     return (now - u.last_active_at).total_seconds() < ONLINE_THRESHOLD_SECONDS
 
 
+def _get_membership_status(u: User, db: Session) -> dict:
+    """
+    计算用户会员状态
+    返回: {
+        membership_status: free | trial | pro | pro_max | ultra | expired
+        membership_label: 免费版 | 试用中 | Pro | ProMax | Ultra | 已过期
+        membership_expire_at: ISO格式到期时间或None
+        membership_type: none | trial | subscription
+    }
+    """
+    now = datetime.utcnow()
+    now_ts = int(now.timestamp())
+    
+    # 1. 优先检查正式订阅 (subscriptions 表)
+    try:
+        sub = db.query(Subscription).filter(Subscription.user_id == u.id).first()
+        if sub and sub.plan and sub.current_period_end:
+            # 检查订阅是否过期
+            if sub.current_period_end > now:
+                plan = sub.plan.lower()
+                if plan in ["pro", "pro_max", "ultra"]:
+                    label_map = {
+                        "pro": "Pro",
+                        "pro_max": "ProMax", 
+                        "ultra": "Ultra"
+                    }
+                    return {
+                        "membership_status": plan,
+                        "membership_label": label_map.get(plan, plan.upper()),
+                        "membership_expire_at": sub.current_period_end.isoformat(),
+                        "membership_type": "subscription"
+                    }
+    except Exception:
+        pass
+    
+    # 2. 检查试用状态 (trials 表)
+    try:
+        trial_end = _trial_end_ts(db, u.id)
+        if trial_end:
+            trial_end_dt = datetime.utcfromtimestamp(trial_end)
+            if trial_end > now_ts:
+                return {
+                    "membership_status": "trial",
+                    "membership_label": "试用中",
+                    "membership_expire_at": trial_end_dt.isoformat(),
+                    "membership_type": "trial"
+                }
+            else:
+                # 试用已过期
+                return {
+                    "membership_status": "expired",
+                    "membership_label": "已过期",
+                    "membership_expire_at": trial_end_dt.isoformat(),
+                    "membership_type": "trial"
+                }
+    except Exception:
+        pass
+    
+    # 3. 检查是否有历史订阅/试用记录但已过期
+    has_history = False
+    try:
+        if db.query(Subscription).filter(Subscription.user_id == u.id).first():
+            has_history = True
+    except Exception:
+        pass
+    
+    if not has_history:
+        try:
+            if _trial_end_ts(db, u.id):
+                has_history = True
+        except Exception:
+            pass
+    
+    if has_history:
+        return {
+            "membership_status": "expired",
+            "membership_label": "已过期",
+            "membership_expire_at": None,
+            "membership_type": "none"
+        }
+    
+    # 4. 免费版（无任何记录）
+    return {
+        "membership_status": "free",
+        "membership_label": "免费版",
+        "membership_expire_at": None,
+        "membership_type": "none"
+    }
+
+
 def _build_user_item(u: User, db: Session) -> AdminUserListItem:
+    # 计算会员状态
+    membership = _get_membership_status(u, db)
+    
     return AdminUserListItem(
         username=_username_of(u),
         user_id=u.id,
@@ -113,6 +206,11 @@ def _build_user_item(u: User, db: Session) -> AdminUserListItem:
         last_active_at=u.last_active_at.isoformat() if u.last_active_at else None,
         trial_end=_trial_end_ts(db, u.id),
         plan=getattr(u, "plan", None) or "free",
+        # 【新增】会员状态字段
+        membership_status=membership["membership_status"],
+        membership_label=membership["membership_label"],
+        membership_expire_at=membership["membership_expire_at"],
+        membership_type=membership["membership_type"],
     )
 
 
@@ -144,6 +242,10 @@ def admin_list_users(
     query: Optional[str] = None,
     page: int = 1,
     size: int = 20,
+    membership: Optional[str] = None,  # 【新增】会员状态筛选
+    reg_type: Optional[str] = None,    # 【新增】注册方式筛选
+    status: Optional[str] = None,      # 【新增】账号状态筛选
+    online: Optional[str] = None,      # 【新增】在线状态筛选
     admin: str = Depends(get_current_admin),
     db: Session = Depends(get_db),
 ):
@@ -154,6 +256,8 @@ def admin_list_users(
         size = 20
     offset = (page - 1) * size
     q = db.query(User)
+    
+    # 搜索条件
     if query and query.strip():
         pattern = f"%{query.strip()}%"
         q = q.filter(
@@ -164,9 +268,40 @@ def admin_list_users(
                 User.id.ilike(pattern),
             )
         )
-    total = q.count()
-    users = q.order_by(User.created_at.desc()).offset(offset).limit(size).all()
+    
+    # 【新增】注册方式筛选
+    if reg_type:
+        if reg_type == "phone":
+            q = q.filter(User.phone.isnot(None))
+        elif reg_type == "email":
+            q = q.filter(User.email.isnot(None))
+    
+    # 【新增】账号状态筛选
+    if status:
+        if status == "active":
+            q = q.filter((User.status == "active") | (User.status.is_(None)))
+        elif status == "disabled":
+            q = q.filter(User.status == "disabled")
+    
+    # 先获取用户列表，再应用需要计算会员状态的筛选
+    users = q.order_by(User.created_at.desc()).offset(offset).limit(size * 3).all()  # 多取一些用于筛选
     items = [_build_user_item(u, db) for u in users]
+    
+    # 【新增】会员状态筛选（后端计算后过滤）
+    if membership:
+        items = [item for item in items if item.membership_status == membership]
+    
+    # 【新增】在线状态筛选
+    if online:
+        if online == "online":
+            items = [item for item in items if item.is_online]
+        elif online == "offline":
+            items = [item for item in items if not item.is_online]
+    
+    # 分页处理
+    total = len(items)
+    items = items[offset:offset + size]
+    
     auth_audit_log(req_id, str(request.url), "list_users", None, "success", {"count": len(items), "page": page})
     return PaginatedUserList(items=items, total=total, page=page, size=size)
 

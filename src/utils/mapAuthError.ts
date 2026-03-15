@@ -9,6 +9,7 @@ export type AuthErrorInput =
       requestUrl?: string
       error?: string
       responseDetail?: string
+      errorCode?: string
       errorType?:
         | 'USER_NOT_FOUND'
         | 'INVALID_PASSWORD'
@@ -85,6 +86,41 @@ export function mapAuthError(raw: AuthErrorInput): MapAuthErrorResult {
     return { userMessage: SMS_ERROR_MAP[detailStr], rawForDev }
   }
 
+  // 获取 errorCode（从参数或解析 detail）
+  let detailCode: string | undefined = (raw as { errorCode?: string }).errorCode
+
+  // 如果没有 errorCode，尝试从 detail 中解析
+  if (!detailCode) {
+    try {
+      const detailObj = typeof detail === 'string' ? JSON.parse(detail) : detail
+      detailCode = detailObj?.code
+    } catch {
+      // detail 不是 JSON 格式，忽略
+    }
+  }
+
+  // 根据后端返回的 code 字段识别错误
+  if (detailCode) {
+    const rawForDev = requestUrl
+      ? `[${detailCode}] ${status} ${detailStr} (${requestUrl})`
+      : `[${detailCode}] ${status} ${detailStr}`
+
+    switch (detailCode) {
+      case 'wrong_password':
+        return {
+          userMessage: '手机号或密码不对，请再检查一下',
+          rawForDev,
+          showRegisterHint: true,
+        }
+      case 'account_disabled':
+        return { userMessage: '账号已被停用，请联系客服处理', rawForDev }
+      case 'invalid_params':
+        return { userMessage: '请输入正确的信息', rawForDev }
+      default:
+        break
+    }
+  }
+
   // 根据 errorType 优先显示具体错误信息
   if (errorType) {
     const rawForDev = requestUrl
@@ -140,7 +176,9 @@ export function mapAuthError(raw: AuthErrorInput): MapAuthErrorResult {
       ? `${status} ${detailStr} (${requestUrl})`
       : `${status} ${detailStr}`
     const userMessage =
-      status === 502 || status === 503 ? '服务器正在维护，稍后再试一下' : '服务器有点忙，稍后再试一下'
+      status === 502 || status === 503
+        ? '服务器正在维护，稍后再试一下'
+        : '服务器有点忙，稍后再试一下'
     return { userMessage, rawForDev }
   }
 

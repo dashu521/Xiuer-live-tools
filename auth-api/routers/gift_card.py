@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db, is_mysql
 from deps import auth_audit_log, get_current_admin, get_current_user
-from models import GiftCard, GiftCardRedemption, User
+from models import GiftCard, GiftCardRedemption, Subscription, User
 from schemas import (
     CreateGiftCardBody,
     CreateGiftCardResponse,
@@ -186,7 +186,7 @@ def redeem_gift_card(
         new_expiry_ts = None
 
     try:
-        # 更新 trials 表（如果有有效期）
+        # 【P0-1】更新 trials 表（保持向后兼容）
         if new_expiry_ts:
             if row:
                 start_ts = int(row[0]) if row[0] else now_ts
@@ -208,6 +208,38 @@ def redeem_gift_card(
                         text("INSERT OR REPLACE INTO trials(username, start_ts, end_ts) VALUES (:u, :s, :e)"),
                         {"u": user_id_str, "s": now_ts, "e": new_expiry_ts},
                     )
+
+        # 【P0-1】同步更新 subscriptions 表，确保与 /auth/status 查询链路一致
+        # 策略：UPSERT - 如果存在则更新，不存在则插入
+        # 使用 user_id 作为关联键，与 /auth/status 查询条件一致
+        current_period_end = datetime.utcfromtimestamp(new_expiry_ts) if new_expiry_ts else None
+        
+        # 先尝试更新现有记录
+        update_result = db.execute(
+            text("""
+                UPDATE subscriptions 
+                SET plan = :plan, 
+                    current_period_end = :end_date,
+                    status = 'active'
+                WHERE user_id = :user_id
+            """),
+            {
+                "plan": new_plan,
+                "end_date": current_period_end,
+                "user_id": user_id_str,
+            },
+        )
+        
+        # 如果没有更新到记录，则插入新记录
+        if update_result.rowcount == 0:
+            new_subscription = Subscription(
+                id=str(uuid.uuid4()),
+                user_id=user_id_str,
+                plan=new_plan,
+                status="active",
+                current_period_end=current_period_end,
+            )
+            db.add(new_subscription)
 
         # 更新用户 plan 和账号数量限制
         user.plan = new_plan

@@ -7,15 +7,15 @@
 
 import { useMemo } from 'react'
 import type { PlanType } from '@/constants/subscription'
+import {
+  canUseAllFeatures,
+  getEffectivePlan,
+  getMaxLiveAccounts,
+  isPaidPlan,
+} from '@/constants/subscription'
+import { useAccounts } from '@/hooks/useAccounts'
 import { useAuthStore } from '@/stores/authStore'
 import { useTrialStore } from '@/stores/trialStore'
-import { useAccounts } from '@/hooks/useAccounts'
-import {
-  getEffectivePlan,
-  isPaidPlan,
-  canUseAllFeatures,
-  getMaxLiveAccounts,
-} from '@/constants/subscription'
 import type { AccessContext, AccessDecision } from './AccessContext'
 import { createEmptyAccessContext } from './AccessContext'
 import * as Policy from './AccessPolicy'
@@ -46,7 +46,7 @@ export type FeatureType =
  */
 export function buildAccessContext(): AccessContext {
   const authState = useAuthStore.getState()
-  const trialState = useTrialStore.getState()
+  const _trialState = useTrialStore.getState()
   const accountsState = useAccounts.getState()
 
   const userStatus = authState.userStatus
@@ -58,9 +58,7 @@ export function buildAccessContext(): AccessContext {
   // 判断试用状态（优先使用服务端状态）
   const trialActive = userStatus?.trial?.is_active ?? false
   const trialExpired = userStatus?.trial?.is_expired ?? false
-  const trialEndsAt = userStatus?.trial?.end_at
-    ? new Date(userStatus.trial.end_at).getTime()
-    : null
+  const trialEndsAt = userStatus?.trial?.end_at ? new Date(userStatus.trial.end_at).getTime() : null
 
   // 计算正式套餐到期时间（优先使用 userStatus，其次 user.expire_at）
   const expiresAt = userStatus?.expire_at
@@ -76,14 +74,17 @@ export function buildAccessContext(): AccessContext {
   // 获取账号上限（优先使用服务端返回的值）
   const maxAccounts = userStatus?.max_accounts ?? getMaxLiveAccounts(effectivePlan)
 
-  // 【日志】关键刷新点打印，方便验证
-  console.log('[AccessContext] effectivePlan=%s, trialActive=%s, trialExpired=%s, maxLiveAccounts=%s, source=%s',
-    effectivePlan,
-    trialActive,
-    trialExpired,
-    maxAccounts,
-    userStatus ? 'userStatus' : 'default'
-  )
+  // 【日志】仅开发环境打印，避免生产环境频繁输出
+  if (import.meta.env.DEV) {
+    console.log(
+      '[AccessContext] effectivePlan=%s, trialActive=%s, trialExpired=%s, maxLiveAccounts=%s, source=%s',
+      effectivePlan,
+      trialActive,
+      trialExpired,
+      maxAccounts,
+      userStatus ? 'userStatus' : 'default',
+    )
+  }
 
   return {
     isAuthenticated: authState.isAuthenticated,
@@ -273,18 +274,18 @@ export function getEffectivePlanFromContext(context: AccessContext): PlanType {
  */
 export function useAccessContext(): AccessContext {
   // 订阅 authStore 的关键状态，确保变化时重新渲染
-  const isAuthenticated = useAuthStore(s => s.isAuthenticated)
-  const user = useAuthStore(s => s.user)
-  const userStatus = useAuthStore(s => s.userStatus)
+  const _isAuthenticated = useAuthStore(s => s.isAuthenticated)
+  const _user = useAuthStore(s => s.user)
+  const _userStatus = useAuthStore(s => s.userStatus)
 
   // 订阅 trialStore 的关键状态
-  const trialActivated = useTrialStore(s => s.trialActivated)
-  const trialEndsAt = useTrialStore(s => s.trialEndsAt)
+  const _trialActivated = useTrialStore(s => s.trialActivated)
+  const _trialEndsAt = useTrialStore(s => s.trialEndsAt)
 
   // 订阅 accounts 状态
-  const accounts = useAccounts(s => s.accounts)
+  const _accounts = useAccounts(s => s.accounts)
 
-  // 使用 useMemo 缓存计算结果，但依赖状态变化时重新计算
+  // 使用 useMemo 缓存计算结果，依赖状态变化时重新计算
   return useMemo(() => {
     const context = buildAccessContext()
 
@@ -301,20 +302,12 @@ export function useAccessContext(): AccessContext {
 
     return context
   }, [
-    // 明确列出所有依赖项，确保任何相关状态变化都触发重新计算
-    isAuthenticated,
-    user?.id,
-    user?.plan,
-    user?.expire_at,
-    userStatus?.plan,
-    userStatus?.max_accounts,
-    userStatus?.expire_at,
-    userStatus?.trial?.is_active,
-    userStatus?.trial?.is_expired,
-    userStatus?.trial?.end_at,
-    trialActivated,
-    trialEndsAt,
-    accounts.length,
+    _isAuthenticated,
+    _user,
+    _userStatus,
+    _trialActivated,
+    _trialEndsAt,
+    _accounts,
   ])
 }
 

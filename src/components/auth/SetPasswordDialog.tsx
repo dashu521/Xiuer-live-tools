@@ -61,7 +61,9 @@ export function SetPasswordDialog({ isOpen, onClose, mode }: SetPasswordDialogPr
           : await changePassword(oldPassword, newPassword)
 
       if (result.ok) {
-        toast.success(mode === 'set' ? '密码设置成功，下次可以直接用手机号和密码登录' : '密码修改成功')
+        toast.success(
+          mode === 'set' ? '密码设置成功，下次可以直接用手机号和密码登录' : '密码修改成功',
+        )
         onClose()
       } else {
         const msg = result.error?.message || '操作没有成功，请稍后再试'

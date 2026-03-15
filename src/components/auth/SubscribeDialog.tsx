@@ -108,7 +108,7 @@ export function SubscribeDialog({
             {trialExpired
               ? '试用已经结束，升级会员后就能继续使用全部功能'
               : actionName
-                ? `开通免费试用或升级会员后，就可以使用这个功能了`
+                ? '开通免费试用或升级会员后，就可以使用这个功能了'
                 : '免费试用已开通，接下来 3 天可以体验全部功能'}
           </DialogDescription>
           {trialError && (

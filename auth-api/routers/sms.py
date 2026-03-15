@@ -158,7 +158,7 @@ def send_sms(
 
     if not is_valid_phone(phone):
         logger.warning(f"[SMS][{request_id}] invalid phone format: {phone}")
-        raise HTTPException(status_code=422, detail="invalid_phone")
+        raise HTTPException(status_code=422, detail="手机号格式不正确")
 
     allowed, error = check_rate_limit(db, phone)
     if not allowed:
@@ -227,7 +227,7 @@ def send_sms(
             }
         raise HTTPException(
             status_code=500,
-            detail=error_msg if error_msg else "sms_send_failed",
+            detail=error_msg if error_msg else "短信发送失败，请稍后重试",
         )
 
     logger.info(f"[SMS][{request_id}] code sent: phone={mask_phone(phone)}")
@@ -268,7 +268,8 @@ def login_with_sms(
         if verify_success:
             verified_ok = True
         if not verified_ok:
-            raise HTTPException(status_code=400, detail=verify_msg or "invalid_code")
+            # 阿里云返回的错误信息太复杂，统一使用友好提示
+            raise HTTPException(status_code=400, detail="验证码错误或已过期")
     elif not verified_ok:
         verify_success, verify_msg = sms_service.verify(phone, code)
         if verify_msg == "not_supported":
@@ -276,10 +277,11 @@ def login_with_sms(
         elif verify_success:
             verified_ok = True
         if not verified_ok:
-            raise HTTPException(status_code=400, detail=verify_msg or "invalid_code")
+            # 阿里云返回的错误信息太复杂，统一使用友好提示
+            raise HTTPException(status_code=400, detail="验证码错误或已过期")
 
     if not verified_ok:
-        raise HTTPException(status_code=400, detail="invalid_code")
+        raise HTTPException(status_code=400, detail="验证码错误或已过期")
 
     user = db.query(User).filter(User.phone == phone).first()
 
@@ -287,7 +289,7 @@ def login_with_sms(
         user = create_user_for_phone(phone, db)
 
     if user.status != "active":
-        raise HTTPException(status_code=403, detail="account_disabled")
+        raise HTTPException(status_code=403, detail="账号已被禁用，请联系客服")
 
     user.last_login_at = datetime.utcnow()
     db.commit()
@@ -348,7 +350,7 @@ def reset_password_sms(
 ):
     """POST /auth/sms/reset-password：通过手机验证码重置密码（忘记密码）"""
     if not is_valid_phone(phone):
-        raise HTTPException(status_code=422, detail="invalid_phone")
+        raise HTTPException(status_code=422, detail="手机号格式不正确")
 
     if len(new_password) < 6:
         raise HTTPException(
@@ -374,7 +376,8 @@ def reset_password_sms(
         if verify_success:
             verified_ok = True
         if not verified_ok:
-            raise HTTPException(status_code=400, detail=verify_msg or "invalid_code")
+            # 阿里云返回的错误信息太复杂，统一使用友好提示
+            raise HTTPException(status_code=400, detail="验证码错误或已过期")
     elif not verified_ok:
         verify_success, verify_msg = sms_service.verify(phone, code)
         if verify_msg == "not_supported":
@@ -382,10 +385,11 @@ def reset_password_sms(
         elif verify_success:
             verified_ok = True
         if not verified_ok:
-            raise HTTPException(status_code=400, detail=verify_msg or "invalid_code")
+            # 阿里云返回的错误信息太复杂，统一使用友好提示
+            raise HTTPException(status_code=400, detail="验证码错误或已过期")
 
     if not verified_ok:
-        raise HTTPException(status_code=400, detail="invalid_code")
+        raise HTTPException(status_code=400, detail="验证码错误或已过期")
 
     user = db.query(User).filter(User.phone == phone).first()
     if not user:

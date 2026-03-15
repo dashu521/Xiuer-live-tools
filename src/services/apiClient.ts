@@ -13,7 +13,7 @@ import type { UserStatus } from '@/types/auth'
 // [SECURITY] Token 策略标记，启动时打印一次
 let tokenStrategyLogged = false
 
-/** 
+/**
  * 从主进程安全存储获取 token
  * [SECURITY] 主进程是唯一可信来源，禁止 fallback 到 renderer 内存
  * 如果主进程获取失败，返回 null，由调用方处理认证失败
@@ -22,20 +22,20 @@ async function getTokenFromMainProcess(): Promise<string | null> {
   if (typeof window === 'undefined') return null
   const authAPI = (
     window as {
-      authAPI?: { 
+      authAPI?: {
         getTokenInternal?: () => Promise<{ token: string | null; refreshToken: string | null }>
       }
     }
   ).authAPI
-  
+
   // [CRITICAL] 强制只使用 getTokenInternal，不再 fallback 到 deprecated getTokens
   const getTokenFn = authAPI?.getTokenInternal
-  
+
   if (!tokenStrategyLogged) {
     console.log('[apiClient] token strategy = getTokenInternal-only, available:', !!getTokenFn)
     tokenStrategyLogged = true
   }
-  
+
   if (!getTokenFn) {
     console.error('[apiClient] authAPI.getTokenInternal not available, treating as unauthenticated')
     return null
@@ -61,16 +61,16 @@ async function getRefreshTokenFromMainProcess(): Promise<string | null> {
   if (typeof window === 'undefined') return null
   const authAPI = (
     window as {
-      authAPI?: { 
+      authAPI?: {
         getTokenInternal?: () => Promise<{ token: string | null; refreshToken: string | null }>
       }
     }
   ).authAPI
-  
+
   // [CRITICAL] 强制只使用 getTokenInternal
   const getTokenFn = authAPI?.getTokenInternal
   if (!getTokenFn) return null
-  
+
   try {
     const tokens = await getTokenFn()
     return tokens.refreshToken

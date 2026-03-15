@@ -5,15 +5,12 @@
  * - 已登录且在试用期内 → 直接执行 action
  *
  * 方案三变体：使用本地缓存 + 服务端时间验证
- * 
+ *
  * 【重构】已迁移到 AccessControl 权限层
  * 所有权限判断通过 buildAccessContext + checkAccess 完成
  */
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
-import { getServerTime } from '@/services/apiClient'
-import { useAuthStore } from '@/stores/authStore'
-import { useTrialStore } from '@/stores/trialStore'
 import { buildAccessContext, checkAccess, type FeatureType } from '@/domain/access'
 
 export type GuardActionOptions = {
@@ -127,7 +124,7 @@ export const useGateStore = create<GateStore>()(
           'auto-popup': 'autoPopUp',
           'add-live-account': 'addLiveAccount',
         }
-        
+
         const feature = featureMap[actionName] || 'connectLiveControl'
         const decision = checkAccess(context, feature)
 
@@ -168,22 +165,26 @@ export const useGateStore = create<GateStore>()(
         } else if (decision.action === 'subscribe') {
           // 需要开通试用
           get().setPendingAction(pendingFn, actionName)
-          window.dispatchEvent(new CustomEvent('gate:subscribe-required', { detail: { actionName } }))
+          window.dispatchEvent(
+            new CustomEvent('gate:subscribe-required', { detail: { actionName } }),
+          )
         } else if (decision.action === 'upgrade') {
           // 需要升级套餐
           get().setPendingAction(pendingFn, actionName)
           window.dispatchEvent(
-            new CustomEvent('gate:subscribe-required', { 
-              detail: { 
+            new CustomEvent('gate:subscribe-required', {
+              detail: {
                 actionName,
                 requiredPlan: decision.requiredPlan,
-              } 
-            })
+              },
+            }),
           )
         } else {
           // 其他原因，默认显示试用弹窗
           get().setPendingAction(pendingFn, actionName)
-          window.dispatchEvent(new CustomEvent('gate:subscribe-required', { detail: { actionName } }))
+          window.dispatchEvent(
+            new CustomEvent('gate:subscribe-required', { detail: { actionName } }),
+          )
         }
       },
     }),

@@ -42,7 +42,10 @@ class DevSMSService(SMSService):
         logger.info("[SMS] Dev mode enabled - will not send real SMS")
 
     async def send(self, phone: str, code: str) -> tuple[bool, Optional[str]]:
-        logger.info(f"[SMS][DEV] phone={mask_phone(phone)} code={code}")
+        # [SECURITY] 验证码仅记录哈希值，不记录明文
+        import hashlib
+        code_hash = hashlib.sha256(code.encode()).hexdigest()[:8]
+        logger.info(f"[SMS][DEV] phone={mask_phone(phone)} code_hash={code_hash} (masked for security)")
         return True, None
 
 

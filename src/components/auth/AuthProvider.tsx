@@ -8,12 +8,7 @@ import { useAccounts } from '@/hooks/useAccounts'
 import { useAuthInit } from '@/hooks/useAuth'
 import { useLiveControlStore } from '@/hooks/useLiveControl'
 import { useToast } from '@/hooks/useToast'
-import {
-  useAuthCheckDone,
-  useAuthStore,
-  useIsAuthenticated,
-  useIsOffline,
-} from '@/stores/authStore'
+import { useAuthCheckDone, useIsAuthenticated, useIsOffline } from '@/stores/authStore'
 import { useGateStore } from '@/stores/gateStore'
 import { usePlatformPreferenceStore } from '@/stores/platformPreferenceStore'
 

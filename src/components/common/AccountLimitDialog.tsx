@@ -7,7 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { useAccessContext, PLAN_TEXT_MAP, type PlanType } from '@/domain/access'
+import { PLAN_TEXT_MAP, type PlanType, useAccessContext } from '@/domain/access'
 
 interface AccountLimitDialogProps {
   isOpen: boolean
@@ -88,8 +88,7 @@ export function AccountLimitDialog({ isOpen, onClose, onContinue }: AccountLimit
             <DialogTitle>账号数量限制</DialogTitle>
           </div>
           <DialogDescription className="pt-2">
-            您当前的会员等级是{' '}
-            <span className="font-semibold text-primary">{planName}</span>
+            您当前的会员等级是 <span className="font-semibold text-primary">{planName}</span>
           </DialogDescription>
         </DialogHeader>
 

@@ -13,11 +13,7 @@ import { useChromeConfigStore } from '@/hooks/useChromeConfig'
 import { useLiveControlStore } from '@/hooks/useLiveControl'
 import { useSubAccountStore } from '@/hooks/useSubAccount'
 import { useToast } from '@/hooks/useToast'
-import {
-  getUserStatus,
-  resetPasswordWithSms,
-  sendSmsCode,
-} from '@/services/apiClient'
+import { getUserStatus, resetPasswordWithSms, sendSmsCode } from '@/services/apiClient'
 import { useAuthStore } from '@/stores/authStore'
 import { usePlatformPreferenceStore } from '@/stores/platformPreferenceStore'
 
@@ -180,11 +176,25 @@ export function PhoneAuthDialog({
     }
 
     setIsSubmitting(true)
-    console.log('[PhoneAuthDialog] 开始短信登录流程, phone末4位:', phone.slice(-4), 'code长度:', code.length)
+    console.log(
+      '[PhoneAuthDialog] 开始短信登录流程, phone末4位:',
+      phone.slice(-4),
+      'code长度:',
+      code.length,
+    )
     try {
       // [SECURITY-FIX] 使用主进程代理登录，内部处理 token 存储
-      const authAPI = (window as unknown as { authAPI?: { loginWithSms?: (phone: string, code: string) => Promise<unknown> } }).authAPI
-      console.log('[PhoneAuthDialog] authAPI 存在:', !!authAPI, 'loginWithSms 存在:', !!authAPI?.loginWithSms)
+      const authAPI = (
+        window as unknown as {
+          authAPI?: { loginWithSms?: (phone: string, code: string) => Promise<unknown> }
+        }
+      ).authAPI
+      console.log(
+        '[PhoneAuthDialog] authAPI 存在:',
+        !!authAPI,
+        'loginWithSms 存在:',
+        !!authAPI?.loginWithSms,
+      )
       if (!authAPI?.loginWithSms) {
         toast.error('登录功能暂时不可用，请重启软件')
         setIsSubmitting(false)
@@ -192,9 +202,17 @@ export function PhoneAuthDialog({
       }
 
       console.log('[PhoneAuthDialog] 调用 authAPI.loginWithSms...')
-      const result = await authAPI.loginWithSms(phone, code) as {
+      const result = (await authAPI.loginWithSms(phone, code)) as {
         success: boolean
-        user?: { id: string; username: string; email?: string; phone?: string; status?: string; created_at?: string; last_login_at?: string }
+        user?: {
+          id: string
+          username: string
+          email?: string
+          phone?: string
+          status?: string
+          created_at?: string
+          last_login_at?: string
+        }
         token?: string
         refresh_token?: string
         needs_password?: boolean

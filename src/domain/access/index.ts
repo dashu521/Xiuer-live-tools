@@ -31,62 +31,60 @@
  * - AccessControl: 权限控制核心，提供统一检查入口
  */
 
+export type { PlanType } from '@/constants/subscription'
 // ===== 类型导出 =====
 export type { AccessContext, AccessDecision } from './AccessContext'
+// ===== 工具函数导出 =====
+export { createEmptyAccessContext } from './AccessContext'
 export type { FeatureType } from './AccessControl'
-export type { PlanRule } from './AccessPolicy'
-export type { PlanType } from '@/constants/subscription'
 
 // ===== 核心函数导出 =====
 export {
   // 上下文构建
   buildAccessContext,
   buildAccessContextForPlan,
-  // 权限检查
-  checkAccess,
+  canAddMoreLiveAccounts,
   // 便捷函数
   canConnectLiveControl,
   canUseAiAssistant,
-  canAddMoreLiveAccounts,
+  // 权限检查
+  checkAccess,
+  getEffectivePlanFromContext,
   getLiveAccountLimit,
   isPaidUser,
-  getEffectivePlanFromContext,
+  useAccessCheck,
   // Hooks
   useAccessContext,
-  useAccessCheck,
 } from './AccessControl'
-
+export type { PlanRule } from './AccessPolicy'
 // ===== 策略函数导出（高级使用） =====
 export {
-  // 套餐规则
-  PLAN_RULES,
-  PLAN_LEVEL,
-  PLAN_TEXT_MAP,
-  VALID_PLANS,
-  // 套餐判断
-  normalizePlan,
-  isPaidPlan as isPaidPlanByType,
-  canUseAllFeatures as canUseAllFeaturesByType,
-  getMaxLiveAccounts,
-  comparePlanLevel,
-  meetsMinimumPlan,
-  getEffectivePlan,
-  getUpgradeSuggestion,
-  // 用户类型判断
-  isPaidUser as checkPaidUser,
-  isActiveTrialUser,
-  isFreeUser,
+  canAddMoreLiveAccounts as checkAddMoreLiveAccounts,
   // 功能权限
   canConnectLiveControl as checkConnectLiveControl,
   canUseAiAssistant as checkAiAssistant,
-  canUseAutoReply,
+  canUseAllFeatures as canUseAllFeaturesByType,
   canUseAutoMessage,
   canUseAutoPopUp,
+  canUseAutoReply,
+  comparePlanLevel,
+  getAccountLimitMessage,
+  getEffectivePlan,
   // 资源限制
   getLiveAccountLimit as checkLiveAccountLimit,
-  canAddMoreLiveAccounts as checkAddMoreLiveAccounts,
-  getAccountLimitMessage,
+  getMaxLiveAccounts,
+  getUpgradeSuggestion,
+  isActiveTrialUser,
+  isFreeUser,
+  isPaidPlan as isPaidPlanByType,
+  // 用户类型判断
+  isPaidUser as checkPaidUser,
+  meetsMinimumPlan,
+  // 套餐判断
+  normalizePlan,
+  PLAN_LEVEL,
+  // 套餐规则
+  PLAN_RULES,
+  PLAN_TEXT_MAP,
+  VALID_PLANS,
 } from './AccessPolicy'
-
-// ===== 工具函数导出 =====
-export { createEmptyAccessContext } from './AccessContext'

@@ -51,6 +51,14 @@
     .badge.trial-active { background: #dbeafe; color: #1d4ed8; }
     .badge.trial-expired { background: #fef3c7; color: #92400e; }
     .badge.trial-none { background: var(--gray-100); color: var(--gray-500); }
+    /* 会员状态标签 */
+    .badge.membership-free { background: var(--gray-100); color: var(--gray-500); }
+    .badge.membership-trial { background: #dbeafe; color: #1d4ed8; }
+    .badge.membership-pro { background: #dcfce7; color: #15803d; }
+    .badge.membership-pro_max { background: #ede9fe; color: #6d28d9; }
+    .badge.membership-ultra { background: #ffedd5; color: #c2410c; }
+    .badge.membership-expired { background: #fecaca; color: #991b1b; }
+    .membership-expire { font-size: 11px; color: var(--gray-500); margin-top: 2px; }
     .badge.phone { background: #ede9fe; color: #6d28d9; }
     .badge.email { background: #e0f2fe; color: #0369a1; }
     .badge.online { background: #dcfce7; color: #15803d; }
@@ -167,6 +175,50 @@
 
   <!-- Users Tab -->
   <div id="tabUsers">
+    <!-- 筛选区域 -->
+    <div class="card" style="margin-bottom: 12px; padding: 12px 16px;">
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <label style="font-size: 12px; color: var(--gray-500);">会员状态</label>
+          <select id="filterMembership" style="min-width: 100px;">
+            <option value="">全部</option>
+            <option value="free">免费版</option>
+            <option value="trial">试用中</option>
+            <option value="pro">Pro</option>
+            <option value="pro_max">ProMax</option>
+            <option value="ultra">Ultra</option>
+            <option value="expired">已过期</option>
+          </select>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <label style="font-size: 12px; color: var(--gray-500);">注册方式</label>
+          <select id="filterRegType" style="min-width: 90px;">
+            <option value="">全部</option>
+            <option value="phone">手机</option>
+            <option value="email">邮箱</option>
+          </select>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <label style="font-size: 12px; color: var(--gray-500);">账号状态</label>
+          <select id="filterStatus" style="min-width: 90px;">
+            <option value="">全部</option>
+            <option value="active">正常</option>
+            <option value="disabled">禁用</option>
+          </select>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <label style="font-size: 12px; color: var(--gray-500);">在线状态</label>
+          <select id="filterOnline" style="min-width: 90px;">
+            <option value="">全部</option>
+            <option value="online">在线</option>
+            <option value="offline">离线</option>
+          </select>
+        </div>
+        <button class="sm" onclick="applyFilters()">应用筛选</button>
+        <button class="sm" onclick="resetFilters()" style="color: var(--gray-500);">重置筛选</button>
+      </div>
+    </div>
+
     <div class="toolbar">
       <input type="text" class="search-input" id="searchInput" placeholder="搜索邮箱/手机/ID..." />
       <button onclick="doSearch()">搜索</button>
@@ -193,7 +245,7 @@
               <th>在线</th>
               <th>注册方式</th>
               <th>状态</th>
-              <th>试用状态</th>
+              <th>会员状态</th>
               <th>创建时间</th>
               <th>操作</th>
             </tr>
@@ -416,6 +468,14 @@ let currentSize = 20;
 let currentQuery = '';
 let logsPage = 1;
 
+// 【新增】筛选条件
+let currentFilters = {
+  membership: '',    // 会员状态
+  regType: '',       // 注册方式
+  status: '',        // 账号状态
+  online: ''         // 在线状态
+};
+
 const $ = id => document.getElementById(id);
 
 function hdrs() { return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }; }
@@ -513,6 +573,26 @@ $('searchInput').onkeydown = e => { if (e.key === 'Enter') doSearch(); };
 function doSearch() { currentQuery = $('searchInput').value.trim(); currentPage = 1; loadUsers(); }
 function clearSearch() { $('searchInput').value = ''; currentQuery = ''; currentPage = 1; loadUsers(); }
 
+/* 【新增】筛选功能 */
+function applyFilters() {
+  currentFilters.membership = $('filterMembership').value;
+  currentFilters.regType = $('filterRegType').value;
+  currentFilters.status = $('filterStatus').value;
+  currentFilters.online = $('filterOnline').value;
+  currentPage = 1;
+  loadUsers();
+}
+
+function resetFilters() {
+  $('filterMembership').value = '';
+  $('filterRegType').value = '';
+  $('filterStatus').value = '';
+  $('filterOnline').value = '';
+  currentFilters = { membership: '', regType: '', status: '', online: '' };
+  currentPage = 1;
+  loadUsers();
+}
+
 /* Load Users */
 async function loadUsers() {
   const tbody = $('usersBody');
@@ -525,6 +605,11 @@ async function loadUsers() {
 
   let url = API + '/admin/users?page=' + currentPage + '&size=' + currentSize;
   if (currentQuery) url += '&query=' + encodeURIComponent(currentQuery);
+  // 【新增】添加筛选参数
+  if (currentFilters.membership) url += '&membership=' + encodeURIComponent(currentFilters.membership);
+  if (currentFilters.regType) url += '&reg_type=' + encodeURIComponent(currentFilters.regType);
+  if (currentFilters.status) url += '&status=' + encodeURIComponent(currentFilters.status);
+  if (currentFilters.online) url += '&online=' + encodeURIComponent(currentFilters.online);
 
   try {
     const r = await fetch(url, { headers: hdrs() });
@@ -548,12 +633,21 @@ async function loadUsers() {
       const statusText = u.disabled ? '已禁用' : '正常';
       const created = u.created_at ? u.created_at.slice(0, 16).replace('T', ' ') : '-';
 
-      let trialBadge = '<span class="badge trial-none">未开通</span>';
-      if (u.trial_end) {
-        trialBadge = u.trial_end > nowTs
-          ? '<span class="badge trial-active">试用中 ' + fmtTs(u.trial_end) + '</span>'
-          : '<span class="badge trial-expired">已过期 ' + fmtTs(u.trial_end) + '</span>';
+      // 【新增】使用后端统一返回的会员状态字段
+      const membershipStatus = u.membership_status || 'free';
+      const membershipLabel = u.membership_label || '免费版';
+      const membershipExpire = u.membership_expire_at || null;
+      
+      // 构建会员状态显示
+      let membershipBadge = '<span class="badge membership-' + membershipStatus + '">' + esc(membershipLabel) + '</span>';
+      let membershipExpireText = '';
+      if (membershipExpire && membershipStatus !== 'free') {
+        const expireDate = membershipExpire.slice(0, 16).replace('T', ' ');
+        membershipExpireText = '<div class="membership-expire">到期: ' + expireDate + '</div>';
+      } else if (membershipStatus === 'free') {
+        membershipExpireText = '<div class="membership-expire">-</div>';
       }
+      const membershipCell = '<div>' + membershipBadge + membershipExpireText + '</div>';
 
       let regType = '<span class="badge" style="background:#eee;color:#666;">未知</span>';
       if (u.phone) regType = '<span class="badge phone">手机</span>';
@@ -569,7 +663,7 @@ async function loadUsers() {
         '<td>' + onlineBadge + '</td>' +
         '<td>' + regType + '</td>' +
         '<td><span class="badge ' + statusCls + '">' + statusText + '</span></td>' +
-        '<td>' + trialBadge + '</td>' +
+        '<td>' + membershipCell + '</td>' +
         '<td>' + esc(created) + '</td>' +
         '<td style="white-space:nowrap;">' +
           '<button class="sm" onclick="openResetModal(\'' + escAttr(u.username) + '\')">重置密码</button>' +
