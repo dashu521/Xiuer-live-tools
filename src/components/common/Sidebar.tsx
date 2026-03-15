@@ -174,7 +174,7 @@ const Sidebar = memo(function Sidebar() {
                   <span className="shrink-0 [&>svg]:size-5">{tab.icon}</span>
                   <span className="truncate">{tab.name}</span>
                   {tab.isRunning && (
-                    <span 
+                    <span
                       className="absolute right-2.5 w-3 h-3 rounded-full bg-emerald-500 animate-pulse shrink-0"
                       aria-label="运行中"
                       role="status"

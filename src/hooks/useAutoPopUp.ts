@@ -20,11 +20,21 @@ export interface ShortcutMapping {
   goodsIds: number[]
 }
 
+/**
+ * 【P1-3】单个商品配置
+ * 支持为每个商品单独设置弹窗间隔
+ */
+export interface GoodsItemConfig {
+  id: number
+  interval?: [number, number]  // 可选：单独设置间隔（毫秒）
+}
+
 interface AutoPopUpConfig {
   scheduler: {
-    interval: [number, number]
+    interval: [number, number]  // 全局默认间隔（毫秒）
   }
-  goodsIds: number[]
+  goods: GoodsItemConfig[]      // 商品配置列表（替代 goodsIds）
+  goodsIds?: number[]           // 【兼容旧配置】
   random: boolean
 }
 
@@ -41,7 +51,7 @@ const defaultContext = (): AutoPopUpContext => ({
     scheduler: {
       interval: [30000, 45000],
     },
-    goodsIds: [],
+    goods: [],  // 【P1-3】使用 goods 替代 goodsIds
     random: false,
   },
   shortcuts: [],
@@ -124,6 +134,18 @@ export const useAutoPopUpStore = create<AutoPopUpStore>()(
             ...config,
           }
           saveToStorage(accountId, context)
+
+          // 【P1-2 运行时配置热更新】如果任务正在运行，同步更新到主进程
+          if (context.isRunning) {
+            // 【P1-3】同步到主进程时，确保使用新的 goods 格式
+            const ipcConfig = {
+              ...config,
+              goods: config.goods || (config.goodsIds ? config.goodsIds.map(id => ({ id })) : undefined),
+            }
+            window.ipcRenderer
+              .invoke(IPC_CHANNELS.tasks.autoPopUp.updateConfig, accountId, ipcConfig)
+              .catch((err: Error) => console.error('[AutoPopUp] 同步配置到主进程失败:', err))
+          }
         }),
 
       setShortcuts: (accountId, shortcuts) =>
@@ -158,6 +180,11 @@ export const useAutoPopUpStore = create<AutoPopUpStore>()(
                 accountId: account.id,
               })
               if (savedContext) {
+                // 【P1-3】数据迁移：旧配置 goodsIds -> 新配置 goods
+                if (savedContext.config.goodsIds && savedContext.config.goodsIds.length > 0 && (!savedContext.config.goods || savedContext.config.goods.length === 0)) {
+                  savedContext.config.goods = savedContext.config.goodsIds.map(id => ({ id }))
+                  console.log(`[AutoPopUp] 数据迁移: account ${account.id} goodsIds -> goods`)
+                }
                 state.contexts[account.id] = {
                   ...savedContext,
                   isRunning: false,
@@ -222,7 +249,10 @@ export const useAutoPopUpActions = () => {
     () => ({
       setIsRunning: (running: boolean) => setIsRunning(currentAccountId, running),
       setScheduler: (scheduler: AutoPopUpConfig['scheduler']) => updateConfig({ scheduler }),
-      setGoodsIds: (goodsIds: AutoPopUpConfig['goodsIds']) => updateConfig({ goodsIds }),
+      // 【P1-3】使用 goods 替代 goodsIds
+      setGoods: (goods: AutoPopUpConfig['goods']) => updateConfig({ goods }),
+      // 【兼容旧配置】保留 setGoodsIds 方法
+      setGoodsIds: (goodsIds: number[]) => updateConfig({ goods: goodsIds.map(id => ({ id })) }),
       setRandom: (random: boolean) => updateConfig({ random }),
       // 添加设置快捷键映射的方法
       setShortcuts: (shortcuts: ShortcutMapping[]) => setShortcuts(currentAccountId, shortcuts),

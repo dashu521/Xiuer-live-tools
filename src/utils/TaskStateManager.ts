@@ -1,14 +1,14 @@
 /**
  * 统一任务状态管理器
- * 
+ *
  * @see docs/live-control-lifecycle-spec.md 中控台与直播状态管理总规范
- * 
+ *
  * 职责：
  * 1. 作为所有直播任务状态的单一真相源
  * 2. 提供统一的 stopAllTasksForAccount 方法
  * 3. 提供状态校验和自愈机制
  * 4. 提供详细的日志记录
- * 
+ *
  * 核心规则：
  * - "停止所有任务"只停止当前账号的所有直播任务
  * - 按钮状态必须与实际任务状态一致
@@ -21,9 +21,8 @@ import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { useAutoMessageStore } from '@/hooks/useAutoMessage'
 import { useAutoPopUpStore } from '@/hooks/useAutoPopUp'
 import { useAutoReplyStore } from '@/hooks/useAutoReply'
-import { useSubAccountStore } from '@/hooks/useSubAccount'
 import { useLiveStatsStore } from '@/hooks/useLiveStats'
-import { useLiveControlStore } from '@/hooks/useLiveControl'
+import { useSubAccountStore } from '@/hooks/useSubAccount'
 
 type TaskType = 'auto-message' | 'auto-popup' | 'auto-reply' | 'sub-account' | 'live-stats'
 
@@ -50,9 +49,9 @@ export interface TaskStopResult {
 class TaskStateManager {
   private static instance: TaskStateManager
   private logPrefix = '[TaskStateManager]'
-  
+
   private constructor() {}
-  
+
   static getInstance(): TaskStateManager {
     if (!TaskStateManager.instance) {
       TaskStateManager.instance = new TaskStateManager()
@@ -113,7 +112,7 @@ class TaskStateManager {
   }
   /**
    * 停止指定账号的所有任务 - 统一入口
-   * 
+   *
    * @param accountId 账号ID
    * @param reason 停止原因
    * @param showToast 是否显示toast
@@ -129,7 +128,7 @@ class TaskStateManager {
     console.log(`${this.logPrefix} ==============================================`)
     console.log(`${this.logPrefix} stopAllTasksForAccount START`)
     console.log(`${this.logPrefix} Account: ${accountId}, Reason: ${reason}`)
-    
+
     const result: TaskStopResult = {
       accountId,
       stoppedTasks: [],
@@ -143,56 +142,74 @@ class TaskStateManager {
         'live-stats': false,
       },
     }
-    
+
     // 记录停止前的状态
     const beforeTasks = this.getTaskStates(accountId)
-    console.log(`${this.logPrefix} Before stop:`, beforeTasks.map(t => `${t.type}=${t.isRunning}`))
-    
+    console.log(
+      `${this.logPrefix} Before stop:`,
+      beforeTasks.map(t => `${t.type}=${t.isRunning}`),
+    )
+
     // 1. 停止自动回复（同时停止评论监听器和数据监控)
     const autoReplyResult = await this._stopAutoReply(accountId)
     if (autoReplyResult.stopped) result.stoppedTasks.push('auto-reply')
     else if (autoReplyResult.alreadyStopped) result.alreadyStopped.push('auto-reply')
-    if (autoReplyResult.error) result.errors.push({ type: 'auto-reply', error: autoReplyResult.error })
-    
+    if (autoReplyResult.error)
+      result.errors.push({ type: 'auto-reply', error: autoReplyResult.error })
+
     // 2. 停止自动发言
     const autoMessageResult = await this._stopAutoMessage(accountId)
     if (autoMessageResult.stopped) result.stoppedTasks.push('auto-message')
     else if (autoMessageResult.alreadyStopped) result.alreadyStopped.push('auto-message')
-    if (autoMessageResult.error) result.errors.push({ type: 'auto-message', error: autoMessageResult.error })
-    
+    if (autoMessageResult.error)
+      result.errors.push({ type: 'auto-message', error: autoMessageResult.error })
+
     // 3. 停止自动弹窗
     const autoPopUpResult = await this._stopAutoPopUp(accountId)
     if (autoPopUpResult.stopped) result.stoppedTasks.push('auto-popup')
     else if (autoPopUpResult.alreadyStopped) result.alreadyStopped.push('auto-popup')
-    if (autoPopUpResult.error) result.errors.push({ type: 'auto-popup', error: autoPopUpResult.error })
-    
+    if (autoPopUpResult.error)
+      result.errors.push({ type: 'auto-popup', error: autoPopUpResult.error })
+
     // 4. 停止小号互动
     const subAccountResult = await this._stopSubAccount(accountId)
     if (subAccountResult.stopped) result.stoppedTasks.push('sub-account')
     else if (subAccountResult.alreadyStopped) result.alreadyStopped.push('sub-account')
-    if (subAccountResult.error) result.errors.push({ type: 'sub-account', error: subAccountResult.error })
-    
+    if (subAccountResult.error)
+      result.errors.push({ type: 'sub-account', error: subAccountResult.error })
+
     // 记录停止后的状态
     const afterTasks = this.getTaskStates(accountId)
-    console.log(`${this.logPrefix} After stop:`, afterTasks.map(t => `${t.type}=${t.isRunning}`))
-    
+    console.log(
+      `${this.logPrefix} After stop:`,
+      afterTasks.map(t => `${t.type}=${t.isRunning}`),
+    )
+
     // 记录最终状态
     for (const task of afterTasks) {
       result.finalStatus[task.type] = task.isRunning
     }
-    
+
     // 校验：确保所有任务都已停止
     const stillRunning = afterTasks.filter(t => t.isRunning)
     if (stillRunning.length > 0) {
-      console.warn(`${this.logPrefix} WARNING: Some tasks still running:`, stillRunning.map(t => t.type))
+      console.warn(
+        `${this.logPrefix} WARNING: Some tasks still running:`,
+        stillRunning.map(t => t.type),
+      )
       // 强制修复状态
-      this._forceFixStates(accountId, stillRunning.map(t => t.type))
+      this._forceFixStates(
+        accountId,
+        stillRunning.map(t => t.type),
+      )
     }
-    
-    console.log(`${this.logPrefix} Result: stopped=${result.stoppedTasks.length}, alreadyStopped=${result.alreadyStopped.length}, errors=${result.errors.length}`)
+
+    console.log(
+      `${this.logPrefix} Result: stopped=${result.stoppedTasks.length}, alreadyStopped=${result.alreadyStopped.length}, errors=${result.errors.length}`,
+    )
     console.log(`${this.logPrefix} stopAllTasksForAccount END`)
     console.log(`${this.logPrefix} ==============================================`)
-    
+
     // 显示toast
     if (showToast && result.stoppedTasks.length > 0) {
       const message = this._getStopMessage(reason, result.stoppedTasks)
@@ -205,7 +222,7 @@ class TaskStateManager {
         toastCallback(message)
       }
     }
-    
+
     return result
   }
   /**
@@ -215,12 +232,12 @@ class TaskStateManager {
     console.log(`${this.logPrefix} reconcileAndFix for account ${accountId}`)
     const tasks = this.getTaskStates(accountId)
     const inconsistentTasks: TaskType[] = []
-    
-    for (const task of tasks) {
+
+    for (const _task of tasks) {
       // 这里可以添加更多的校验逻辑
       // 比如检查后台状态是否与前端一致
     }
-    
+
     if (inconsistentTasks.length > 0) {
       console.warn(`${this.logPrefix} Found inconsistent tasks:`, inconsistentTasks)
       this._forceFixStates(accountId, inconsistentTasks)
@@ -233,7 +250,7 @@ class TaskStateManager {
    */
   private _forceFixStates(accountId: string, taskTypes: TaskType[]): void {
     console.log(`${this.logPrefix} Force fixing states for ${taskTypes.join(', ')}`)
-    
+
     for (const type of taskTypes) {
       switch (type) {
         case 'auto-message':
@@ -242,11 +259,12 @@ class TaskStateManager {
         case 'auto-popup':
           useAutoPopUpStore.getState().setIsRunning(accountId, false)
           break
-        case 'auto-reply':
+        case 'auto-reply': {
           const store = useAutoReplyStore.getState()
           store.setIsListening(accountId, 'stopped')
           store.setIsRunning(accountId, false)
           break
+        }
         case 'sub-account':
           useSubAccountStore.getState().setIsRunning(accountId, false)
           break
@@ -262,35 +280,41 @@ class TaskStateManager {
   private _isAutoReplyRunning(store: any, accountId: string): boolean {
     const context = store.contexts[accountId]
     if (!context) return false
-    return context.isListening === 'listening' || context.isListening === 'waiting' || context.isRunning === true
+    return (
+      context.isListening === 'listening' ||
+      context.isListening === 'waiting' ||
+      context.isRunning === true
+    )
   }
   /**
    * 停止自动回复
    */
-  private async _stopAutoReply(accountId: string): Promise<{ stopped: boolean; alreadyStopped: boolean; error?: unknown }> {
+  private async _stopAutoReply(
+    accountId: string,
+  ): Promise<{ stopped: boolean; alreadyStopped: boolean; error?: unknown }> {
     const store = useAutoReplyStore.getState()
     const context = store.contexts[accountId]
     const isListening = context?.isListening === 'listening' || context?.isListening === 'waiting'
     const isRunning = context?.isRunning === true
-    
+
     // 同时检查数据监控
     const liveStatsStore = useLiveStatsStore.getState()
     const isLiveStatsRunning = liveStatsStore.contexts[accountId]?.isListening === true
-    
+
     if (!isListening && !isRunning && !isLiveStatsRunning) {
       return { alreadyStopped: true, stopped: false }
     }
-    
+
     try {
       // 调用后台IPC停止评论监听器
       await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.autoReply.stopCommentListener, accountId)
       console.log(`${this.logPrefix} auto-reply: IPC stop invoked`)
-      
+
       // 更新前端状态
       store.setIsListening(accountId, 'stopped')
       store.setIsRunning(accountId, false)
       liveStatsStore.setListening(accountId, false)
-      
+
       return { stopped: true, alreadyStopped: false }
     } catch (error) {
       console.error(`${this.logPrefix} auto-reply: stop error:`, error)
@@ -304,14 +328,16 @@ class TaskStateManager {
   /**
    * 停止自动发言
    */
-  private async _stopAutoMessage(accountId: string): Promise<{ stopped: boolean; alreadyStopped: boolean; error?: unknown }> {
+  private async _stopAutoMessage(
+    accountId: string,
+  ): Promise<{ stopped: boolean; alreadyStopped: boolean; error?: unknown }> {
     const store = useAutoMessageStore.getState()
     const isRunning = store.contexts[accountId]?.isRunning === true
-    
+
     if (!isRunning) {
       return { alreadyStopped: true, stopped: false }
     }
-    
+
     try {
       await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.autoMessage.stop, accountId)
       console.log(`${this.logPrefix} auto-message: IPC stop invoked`)
@@ -326,14 +352,16 @@ class TaskStateManager {
   /**
    * 停止自动弹窗
    */
-  private async _stopAutoPopUp(accountId: string): Promise<{ stopped: boolean; alreadyStopped: boolean; error?: unknown }> {
+  private async _stopAutoPopUp(
+    accountId: string,
+  ): Promise<{ stopped: boolean; alreadyStopped: boolean; error?: unknown }> {
     const store = useAutoPopUpStore.getState()
     const isRunning = store.contexts[accountId]?.isRunning === true
-    
+
     if (!isRunning) {
       return { alreadyStopped: true, stopped: false }
     }
-    
+
     try {
       await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.autoPopUp.stop, accountId)
       console.log(`${this.logPrefix} auto-popup: IPC stop invoked`)
@@ -348,14 +376,16 @@ class TaskStateManager {
   /**
    * 停止小号互动
    */
-  private async _stopSubAccount(accountId: string): Promise<{ stopped: boolean; alreadyStopped: boolean; error?: unknown }> {
+  private async _stopSubAccount(
+    accountId: string,
+  ): Promise<{ stopped: boolean; alreadyStopped: boolean; error?: unknown }> {
     const store = useSubAccountStore.getState()
     const isRunning = store.contexts[accountId]?.isRunning === true
-    
+
     if (!isRunning) {
       return { alreadyStopped: true, stopped: false }
     }
-    
+
     try {
       await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.subAccount.stop, accountId)
       console.log(`${this.logPrefix} sub-account: IPC stop invoked`)
@@ -372,7 +402,7 @@ class TaskStateManager {
    */
   private _getStopMessage(reason: string, stoppedTasks: TaskType[]): string {
     const taskNames = stoppedTasks.map(t => TASK_DISPLAY_NAMES[t]).join('、')
-    
+
     switch (reason) {
       case 'manual':
         return `已停止: ${taskNames}`

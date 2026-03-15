@@ -1,14 +1,14 @@
 /**
  * 统一任务状态管理器
- * 
+ *
  * 作为所有直播任务状态的单一真相源（Single Source of Truth）
- * 
+ *
  * 职责：
  * 1. 统一管理所有任务运行状态
  * 2. 提供 isAnyTaskRunning 的统一计算
  * 3. 提供 stopAllTasksForAccount 的统一入口
  * 4. 提供状态校验/自愈机制
- * 
+ *
  * 任务列表：
  * - auto-message (自动发言)
  * - auto-popup (自动弹窗)
@@ -21,9 +21,8 @@ import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { useAutoMessageStore } from './useAutoMessage'
 import { useAutoPopUpStore } from './useAutoPopUp'
 import { useAutoReplyStore } from './useAutoReply'
-import { useSubAccountStore } from './useSubAccount'
 import { useLiveStatsStore } from './useLiveStats'
-import { taskManager } from '@/tasks'
+import { useSubAccountStore } from './useSubAccount'
 
 export type TaskType = 'auto-message' | 'auto-popup' | 'auto-reply' | 'sub-account' | 'live-stats'
 
@@ -52,7 +51,8 @@ export function getAllTaskStatuses(accountId: string): TaskStatus[] {
   const liveStatsStore = useLiveStatsStore.getState()
 
   const autoReplyContext = autoReplyStore.contexts[accountId]
-  const autoReplyListening = autoReplyContext?.isListening === 'listening' || autoReplyContext?.isListening === 'waiting'
+  const autoReplyListening =
+    autoReplyContext?.isListening === 'listening' || autoReplyContext?.isListening === 'waiting'
 
   return [
     {
@@ -101,38 +101,38 @@ export function getRunningTasks(accountId: string): TaskType[] {
 
 /**
  * 统一停止所有任务入口
- * 
+ *
  * 这是停止所有任务的唯一合法入口
- * 
+ *
  * @param accountId 账号ID
  * @param reason 停止原因
  * @returns 停止结果
  */
 export async function stopAllTasksForAccount(
   accountId: string,
-  reason: 'manual' | 'disconnected' | 'stream_ended' | 'other' = 'manual'
+  reason: 'manual' | 'disconnected' | 'stream_ended' | 'other' = 'manual',
 ): Promise<{
   success: boolean
   stoppedTasks: TaskType[]
   alreadyStopped: boolean
   errors: { task: TaskType; error: unknown }[]
 }> {
-  console.log(`[TaskStateManager] ==============================================`)
-  console.log(`[TaskStateManager] stopAllTasksForAccount called`)
+  console.log('[TaskStateManager] ==============================================')
+  console.log('[TaskStateManager] stopAllTasksForAccount called')
   console.log(`[TaskStateManager] accountId: ${accountId}`)
   console.log(`[TaskStateManager] reason: ${reason}`)
 
   const beforeStatuses = getAllTaskStatuses(accountId)
   const runningBefore = beforeStatuses.filter(s => s.isRunning)
-  
-  console.log(`[TaskStateManager] Before stop:`)
+
+  console.log('[TaskStateManager] Before stop:')
   runningBefore.forEach(s => {
     console.log(`[TaskStateManager]   - ${s.displayName} (${s.type}): running`)
   })
 
   if (runningBefore.length === 0) {
-    console.log(`[TaskStateManager] No tasks running, nothing to stop`)
-    console.log(`[TaskStateManager] ==============================================`)
+    console.log('[TaskStateManager] No tasks running, nothing to stop')
+    console.log('[TaskStateManager] ==============================================')
     return {
       success: true,
       stoppedTasks: [],
@@ -152,15 +152,16 @@ export async function stopAllTasksForAccount(
 
   // 1. 停止自动回复和数据监控（共享同一个监听器）
   const autoReplyContext = autoReplyStore.contexts[accountId]
-  const autoReplyListening = autoReplyContext?.isListening === 'listening' || autoReplyContext?.isListening === 'waiting'
+  const autoReplyListening =
+    autoReplyContext?.isListening === 'listening' || autoReplyContext?.isListening === 'waiting'
   const liveStatsListening = liveStatsStore.contexts[accountId]?.isListening === true
 
   if (autoReplyListening || liveStatsListening) {
     try {
-      console.log(`[TaskStateManager] Stopping comment listener...`)
+      console.log('[TaskStateManager] Stopping comment listener...')
       await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.autoReply.stopCommentListener, accountId)
-      console.log(`[TaskStateManager] Comment listener stopped`)
-      
+      console.log('[TaskStateManager] Comment listener stopped')
+
       if (autoReplyListening) {
         autoReplyStore.setIsListening(accountId, 'stopped')
         autoReplyStore.setIsRunning(accountId, false)
@@ -171,7 +172,7 @@ export async function stopAllTasksForAccount(
         stoppedTasks.push('live-stats')
       }
     } catch (error) {
-      console.error(`[TaskStateManager] Failed to stop comment listener:`, error)
+      console.error('[TaskStateManager] Failed to stop comment listener:', error)
       errors.push({ task: 'auto-reply', error })
       // 即使失败也更新状态
       if (autoReplyListening) {
@@ -187,13 +188,13 @@ export async function stopAllTasksForAccount(
   // 2. 停止自动发言
   if (autoMessageStore.contexts[accountId]?.isRunning) {
     try {
-      console.log(`[TaskStateManager] Stopping auto message...`)
+      console.log('[TaskStateManager] Stopping auto message...')
       await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.autoMessage.stop, accountId)
-      console.log(`[TaskStateManager] Auto message stopped`)
+      console.log('[TaskStateManager] Auto message stopped')
       autoMessageStore.setIsRunning(accountId, false)
       stoppedTasks.push('auto-message')
     } catch (error) {
-      console.error(`[TaskStateManager] Failed to stop auto message:`, error)
+      console.error('[TaskStateManager] Failed to stop auto message:', error)
       errors.push({ task: 'auto-message', error })
       autoMessageStore.setIsRunning(accountId, false)
     }
@@ -202,13 +203,13 @@ export async function stopAllTasksForAccount(
   // 3. 停止自动弹窗
   if (autoPopUpStore.contexts[accountId]?.isRunning) {
     try {
-      console.log(`[TaskStateManager] Stopping auto popup...`)
+      console.log('[TaskStateManager] Stopping auto popup...')
       await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.autoPopUp.stop, accountId)
-      console.log(`[TaskStateManager] Auto popup stopped`)
+      console.log('[TaskStateManager] Auto popup stopped')
       autoPopUpStore.setIsRunning(accountId, false)
       stoppedTasks.push('auto-popup')
     } catch (error) {
-      console.error(`[TaskStateManager] Failed to stop auto popup:`, error)
+      console.error('[TaskStateManager] Failed to stop auto popup:', error)
       errors.push({ task: 'auto-popup', error })
       autoPopUpStore.setIsRunning(accountId, false)
     }
@@ -217,13 +218,13 @@ export async function stopAllTasksForAccount(
   // 4. 停止小号互动
   if (subAccountStore.contexts[accountId]?.isRunning) {
     try {
-      console.log(`[TaskStateManager] Stopping sub-account interaction...`)
+      console.log('[TaskStateManager] Stopping sub-account interaction...')
       await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.subAccount.stop, accountId)
-      console.log(`[TaskStateManager] Sub-account interaction stopped`)
+      console.log('[TaskStateManager] Sub-account interaction stopped')
       subAccountStore.setIsRunning(accountId, false)
       stoppedTasks.push('sub-account')
     } catch (error) {
-      console.error(`[TaskStateManager] Failed to stop sub-account:`, error)
+      console.error('[TaskStateManager] Failed to stop sub-account:', error)
       errors.push({ task: 'sub-account', error })
       subAccountStore.setIsRunning(accountId, false)
     }
@@ -232,14 +233,16 @@ export async function stopAllTasksForAccount(
   // 验证停止结果
   const afterStatuses = getAllTaskStatuses(accountId)
   const stillRunning = afterStatuses.filter(s => s.isRunning)
-  
-  console.log(`[TaskStateManager] After stop:`)
+
+  console.log('[TaskStateManager] After stop:')
   afterStatuses.forEach(s => {
-    console.log(`[TaskStateManager]   - ${s.displayName} (${s.type}): ${s.isRunning ? 'RUNNING' : 'stopped'}`)
+    console.log(
+      `[TaskStateManager]   - ${s.displayName} (${s.type}): ${s.isRunning ? 'RUNNING' : 'stopped'}`,
+    )
   })
 
   if (stillRunning.length > 0) {
-    console.warn(`[TaskStateManager] WARNING: Some tasks still running after stop!`)
+    console.warn('[TaskStateManager] WARNING: Some tasks still running after stop!')
     stillRunning.forEach(s => {
       console.warn(`[TaskStateManager]   - ${s.displayName} (${s.type})`)
     })
@@ -247,7 +250,7 @@ export async function stopAllTasksForAccount(
 
   console.log(`[TaskStateManager] Stopped: ${stoppedTasks.join(', ') || 'none'}`)
   console.log(`[TaskStateManager] Errors: ${errors.length}`)
-  console.log(`[TaskStateManager] ==============================================`)
+  console.log('[TaskStateManager] ==============================================')
 
   return {
     success: errors.length === 0,
@@ -259,7 +262,7 @@ export async function stopAllTasksForAccount(
 
 /**
  * 校验并修复状态不一致
- * 
+ *
  * 检查前端 Store 状态与后台实际状态是否一致，如果不一致则自动修复
  */
 export async function reconcileTaskStates(accountId: string): Promise<{
@@ -270,7 +273,7 @@ export async function reconcileTaskStates(accountId: string): Promise<{
 
   const storeStatuses = getAllTaskStatuses(accountId)
   const fixedTasks: TaskType[] = []
-  let wasInconsistent = false
+  const wasInconsistent = false
 
   // 检查每个任务的前端状态
   for (const status of storeStatuses) {
@@ -287,7 +290,7 @@ export async function reconcileTaskStates(accountId: string): Promise<{
   if (wasInconsistent) {
     console.log(`[TaskStateManager] Fixed inconsistencies: ${fixedTasks.join(', ')}`)
   } else {
-    console.log(`[TaskStateManager] No inconsistencies found`)
+    console.log('[TaskStateManager] No inconsistencies found')
   }
 
   return {
@@ -298,7 +301,7 @@ export async function reconcileTaskStates(accountId: string): Promise<{
 
 /**
  * 强制重置所有任务状态为停止
- * 
+ *
  * 用于断开连接等场景，强制清理所有状态
  */
 export function forceResetAllTaskStates(accountId: string): void {
@@ -317,5 +320,5 @@ export function forceResetAllTaskStates(accountId: string): void {
   subAccountStore.setIsRunning(accountId, false)
   liveStatsStore.setListening(accountId, false)
 
-  console.log(`[TaskStateManager] All task states reset to stopped`)
+  console.log('[TaskStateManager] All task states reset to stopped')
 }

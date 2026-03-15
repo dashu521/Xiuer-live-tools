@@ -1,5 +1,6 @@
 import { useMemoizedFn } from 'ahooks'
 import { useEffect, useMemo, useRef } from 'react'
+import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { useShallow } from 'zustand/react/shallow'
@@ -123,6 +124,13 @@ export const useAutoMessageStore = create<AutoMessageStore>()(
             ...config,
           }
           saveToStorage(accountId, context)
+
+          // 【P1-2 运行时配置热更新】如果任务正在运行，同步更新到主进程
+          if (context.isRunning) {
+            window.ipcRenderer
+              .invoke(IPC_CHANNELS.tasks.autoMessage.updateConfig, accountId, config)
+              .catch((err: Error) => console.error('[AutoMessage] 同步配置到主进程失败:', err))
+          }
         }),
 
       setBatchCount: (accountId, count) =>

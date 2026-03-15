@@ -122,15 +122,44 @@ export function createAutoCommentTask(
     return result
   }
 
+  /**
+   * 【P1-2 运行时配置热更新】更新配置
+   *
+   * 可热更新项（无需重启任务）：
+   * - messages: 消息列表（立即生效，下一条消息使用新配置）
+   * - random: 随机发送模式（立即生效）
+   * - extraSpaces: 随机空格（立即生效）
+   * - scheduler.interval: 发送间隔（下一个周期生效）
+   *
+   * 仍需重启项（变更后需重启任务）：
+   * - 无（所有配置都支持热更新）
+   */
   function updateConfig(newConfig: Partial<AutoCommentConfig>) {
     const mergedConfig = merge({}, config, newConfig)
     return Result.pipe(
       validateConfig(mergedConfig),
       Result.andThen(_ => intervalTask.validateInterval(mergedConfig.scheduler.interval)),
       Result.inspect(() => {
+        const _oldConfig = { ...config }
         config = mergedConfig
-        // 更新配置后重新启动任务
-        intervalTask.restart()
+
+        // 更新间隔（热更新，不重启任务）
+        const intervalResult = intervalTask.updateInterval(mergedConfig.scheduler.interval)
+        if (Result.isFailure(intervalResult)) {
+          logger.error('[热更新] 间隔更新失败:', intervalResult.error)
+        }
+
+        // 记录变更的字段
+        const changedFields: string[] = []
+        if (newConfig.messages) changedFields.push('messages')
+        if (newConfig.random !== undefined) changedFields.push('random')
+        if (newConfig.extraSpaces !== undefined) changedFields.push('extraSpaces')
+        if (newConfig.scheduler?.interval) changedFields.push('interval')
+
+        logger.info(`[热更新] 配置已更新: [${changedFields.join(', ')}]，无需重启任务`)
+
+        // 【P1-2 改进】不再调用 restart()，实现真正的热更新
+        // intervalTask.restart()
       }),
       Result.inspectError(err => logger.error('配置更新失败：', err)),
     )

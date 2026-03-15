@@ -431,14 +431,14 @@ const ConnectToLiveControl = React.memo(() => {
             if (latestStatus === 'connecting') {
               console.log('[State Machine] Login timeout, status transition: connecting → error')
               setConnectState({
-              status: 'error',
-              error: '登录超时，请检查是否已完成扫码登录',
-            })
-            const timeoutError = getFullErrorInfo('登录超时')
-            toast.error(`${timeoutError.title}：${timeoutError.message}`)
-            setTimeout(() => {
-              toast.info(`💡 ${timeoutError.solution}`)
-            }, 1000)
+                status: 'error',
+                error: '登录超时，请检查是否已完成扫码登录',
+              })
+              const timeoutError = getFullErrorInfo('登录超时')
+              toast.error(`${timeoutError.title}：${timeoutError.message}`)
+              setTimeout(() => {
+                toast.info(`💡 ${timeoutError.solution}`)
+              }, 1000)
             } else if (latestStatus === 'connected') {
               // 已经在 connected 状态，说明登录成功了，只是 notifyAccountName 事件可能延迟
               console.log('[State Machine] Login already succeeded, ignoring timeout')

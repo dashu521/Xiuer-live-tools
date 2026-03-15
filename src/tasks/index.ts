@@ -19,6 +19,5 @@ taskManager.register(AutoSpeakTask)
 // taskManager.register(autoReplyTask)
 // taskManager.register(autoPopupTask)
 
-export { taskManager }
-export { AutoSpeakTask }
 export type { StopReason, TaskContext, TaskId, TaskStatus } from './types'
+export { AutoSpeakTask, taskManager }
