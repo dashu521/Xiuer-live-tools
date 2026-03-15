@@ -1,0 +1,77 @@
+# 质量门禁工作流
+# 在 PR 和 push 时运行代码质量检查，阻塞不合规代码合并
+
+name: Quality Gate
+
+on:
+  pull_request:
+    branches: [main, master, develop]
+  push:
+    branches: [main, master, develop]
+
+jobs:
+  # 1. 前端代码质量检查
+  frontend-quality:
+    name: Frontend Quality Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Biome 代码检查
+      - name: Run Biome check
+        run: npx biome check --no-errors-on-unmatched --files-ignore-unknown=true .
+
+      # TypeScript 类型检查
+      - name: Run TypeScript check
+        run: npx tsc --noEmit
+
+      # 测试运行（smoke test）
+      - name: Run tests
+        run: npm test -- --run
+
+  # 2. Python 代码质量检查（auth-api）
+  python-quality:
+    name: Python Quality Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 安装 auth-api 依赖
+      - name: Install dependencies
+        working-directory: ./auth-api
+        run: |
+          pip install -r requirements.txt
+
+      # Python 语法检查
+      - name: Python syntax check
+        working-directory: ./auth-api
+        run: |
+          python -m py_compile main.py config.py deps.py models.py schemas.py sms_service.py
+          find routers -name "*.py" -exec python -m py_compile {} \;
+
+      # FastAPI 应用能否正常导入（冒烟测试）
+      - name: FastAPI import check
+        working-directory: ./auth-api
+        run: |
+          python -c "from main import app; print('FastAPI app imported successfully')"
+        env:
+          JWT_SECRET: test-secret-for-ci
+          DATABASE_URL: sqlite:///tmp/test.db
