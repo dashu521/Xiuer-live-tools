@@ -3,6 +3,7 @@
  * 统一管理所有直播相关任务的运行前置条件
  */
 import type { StreamStatus } from 'shared/streamStatus'
+import { type GateTaskName, getTaskDisplayName } from '@/tasks/taskMeta'
 
 export type TaskStopReason =
   | 'disconnected'
@@ -23,18 +24,104 @@ export interface TaskStartCheckResult {
   action?: TaskAction
 }
 
-/**
- * 任务名称映射
- */
-const TASK_NAMES: Record<string, string> = {
-  'auto-reply': '自动回复',
-  'auto-comment': '自动发言',
-  'auto-popup': '自动弹窗',
-}
-
 interface TaskGateContext {
   status: string
   streamState?: StreamStatus
+}
+
+function buildConnectionMessage(
+  status: string,
+  displayName?: string,
+): { message: string; action: TaskAction } {
+  const requiresSpecificTask = Boolean(displayName)
+
+  if (status === 'disconnected') {
+    return {
+      message: requiresSpecificTask
+        ? `请先连接直播中控台\n连接成功后才能使用【${displayName}】`
+        : '请先连接直播中控台',
+      action: 'CONNECT',
+    }
+  }
+
+  if (status === 'connecting') {
+    return {
+      message: requiresSpecificTask
+        ? `正在连接中控台，请稍候\n连接成功后才能使用【${displayName}】`
+        : '正在连接中控台，请稍候',
+      action: 'CONNECT',
+    }
+  }
+
+  return {
+    message: requiresSpecificTask
+      ? `中控台连接异常，请重新连接\n连接成功后才能使用【${displayName}】`
+      : '中控台连接异常，请重新连接',
+    action: 'CONNECT',
+  }
+}
+
+function buildLiveMessage(
+  streamState: StreamStatus,
+  displayName?: string,
+): { message: string; action: TaskAction } {
+  const requiresSpecificTask = Boolean(displayName)
+
+  if (requiresSpecificTask) {
+    const stateMessages: Record<StreamStatus, string> = {
+      unknown: '直播状态未知',
+      offline: '当前未开播',
+      live: '直播中',
+      ended: '直播已结束',
+    }
+
+    return {
+      message: `${stateMessages[streamState]}\n请先开播，再启动【${displayName}】`,
+      action: 'GO_LIVE',
+    }
+  }
+
+  if (streamState === 'ended') {
+    return {
+      message: '直播已结束，请重新开播后再启用该功能',
+      action: 'GO_LIVE',
+    }
+  }
+
+  return {
+    message: '当前未开播，请先开始直播后再启用该功能',
+    action: 'GO_LIVE',
+  }
+}
+
+export function evaluateLiveTaskGate(
+  connectState: TaskGateContext,
+  taskName?: GateTaskName,
+): TaskStartCheckResult {
+  const displayName = taskName ? getTaskDisplayName(taskName) : undefined
+
+  if (connectState.status !== 'connected') {
+    const { message, action } = buildConnectionMessage(connectState.status, displayName)
+    return {
+      ok: false,
+      reason: 'NOT_CONNECTED',
+      message,
+      action,
+    }
+  }
+
+  const streamState = connectState.streamState ?? 'unknown'
+  if (streamState !== 'live') {
+    const { message, action } = buildLiveMessage(streamState, displayName)
+    return {
+      ok: false,
+      reason: 'NOT_LIVE',
+      message,
+      action,
+    }
+  }
+
+  return { ok: true, message: '' }
 }
 
 /**
@@ -46,64 +133,9 @@ interface TaskGateContext {
  */
 export function ensureCanStartTask(
   connectState: TaskGateContext,
-  taskName: 'auto-reply' | 'auto-comment' | 'auto-popup',
+  taskName: GateTaskName,
 ): TaskStartCheckResult {
-  const displayName = TASK_NAMES[taskName] || taskName
-
-  // 前置条件1：中控台必须已连接
-  if (connectState.status !== 'connected') {
-    if (connectState.status === 'disconnected') {
-      return {
-        ok: false,
-        reason: 'NOT_CONNECTED',
-        message: `请先连接直播中控台\n连接成功后才能使用【${displayName}】`,
-        action: 'CONNECT',
-      }
-    }
-    if (connectState.status === 'connecting') {
-      return {
-        ok: false,
-        reason: 'NOT_CONNECTED',
-        message: `正在连接中控台，请稍候\n连接成功后才能使用【${displayName}】`,
-        action: 'CONNECT',
-      }
-    }
-    return {
-      ok: false,
-      reason: 'NOT_CONNECTED',
-      message: `中控台连接异常，请重新连接\n连接成功后才能使用【${displayName}】`,
-      action: 'CONNECT',
-    }
-  }
-
-  // 前置条件2：直播状态检查（streamStatus === 'live'）
-  const streamState = connectState.streamState ?? 'unknown'
-  if (streamState !== 'live') {
-    const stateMessages: Record<StreamStatus, string> = {
-      unknown: '直播状态未知',
-      offline: '当前未开播',
-      live: '直播中',
-      ended: '直播已结束',
-    }
-    return {
-      ok: false,
-      reason: 'NOT_LIVE',
-      message: `${stateMessages[streamState]}\n请先开播，再启动【${displayName}】`,
-      action: 'GO_LIVE',
-    }
-  }
-
-  // TODO: 前置条件3：登录状态检查（authState !== 'invalid'）
-  // if (authState === 'invalid') {
-  //   return {
-  //     ok: false,
-  //     reason: 'AUTH_LOST',
-  //     message: `登录已失效\n请重新扫码登录后再启动【${displayName}】`,
-  //     action: 'RELOGIN'
-  //   }
-  // }
-
-  return { ok: true, message: '' }
+  return evaluateLiveTaskGate(connectState, taskName)
 }
 
 /**
@@ -115,7 +147,7 @@ export function canRunLiveTasks(connectState: { status: string }): {
   canRun: boolean
   reason?: string
 } {
-  const check = ensureCanStartTask(connectState, 'auto-reply')
+  const check = evaluateLiveTaskGate(connectState)
   return {
     canRun: check.ok,
     reason: check.message,
@@ -126,7 +158,7 @@ export function canRunLiveTasks(connectState: { status: string }): {
  * 获取任务停止原因的描述文本（用于强制停止时的提示）
  */
 export function getStopReasonText(reason: TaskStopReason, taskName?: string): string {
-  const displayName = taskName ? TASK_NAMES[taskName] || taskName : '任务'
+  const displayName = getTaskDisplayName(taskName)
 
   const reasonMap: Record<TaskStopReason, string> = {
     disconnected: `连接已断开，${displayName}已停止`,

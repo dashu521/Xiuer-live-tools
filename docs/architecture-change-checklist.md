@@ -39,6 +39,7 @@
 ### 2.3 契约
 
 - `shared/ipcChannels.ts`、`shared/electron-api.d.ts`、preload 暴露、renderer 类型声明是否一致？
+- 如果新增或改名了 IPC 通道，`electron/preload/ipcWhitelist.gen.ts` 是否已重新生成？
 - 是否删除或替换了旧兼容字段？如果有，调用面是否已全部迁移？
 - 是否新增了手写字符串 channel / action name，而不是复用集中定义？
 
@@ -64,6 +65,7 @@
 - token 是否仍只有主进程安全存储一个写入口？
 - renderer 是否避免重新引入 `setTokens/getTokens` 这类旁路？
 - 刷新 token 是否通过正式 auth IPC，而不是本地拼写回逻辑？
+- `auth.refreshSession`、preload 暴露、renderer 调用链是否保持一致？
 
 ### 3.3 权限 / 套餐 / 能力
 
@@ -84,6 +86,7 @@
 - 是否避免一个功能启动时自动点亮另一个功能状态？
 - 是否只在无消费者时才真正关闭底层评论监听？
 - IPC 和文档命名是否继续使用 `commentListener` 语义，而不是回退成 `autoReply` 私有语义？
+- 监听停止事件的动态前缀是否已加入 preload whitelist 生成规则？
 
 ---
 

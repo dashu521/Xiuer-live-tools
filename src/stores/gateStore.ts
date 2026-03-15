@@ -11,7 +11,8 @@
  */
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
-import { buildAccessContext, checkAccess, type FeatureType } from '@/domain/access'
+import { buildAccessContext, checkAccess } from '@/domain/access'
+import { type GateActionName, getFeatureTypeForGateAction } from '@/domain/access/gateActions'
 
 export type GuardActionOptions = {
   /** 通过门控后要执行的回调（可选，登录/试用后会自动执行或用户再次点击） */
@@ -24,17 +25,17 @@ interface GateStore {
   /** 登录/试用后待执行的回调 */
   pendingAction: (() => void | Promise<void>) | null
   /** 当前门控触发的 action 名称（用于弹窗文案） */
-  pendingActionName: string
+  pendingActionName: GateActionName | ''
   /** 首次登录后是否已设置默认平台为 test（persist） */
   defaultPlatformSetAfterLogin: boolean
-  setPendingAction: (fn: (() => void | Promise<void>) | null, name?: string) => void
+  setPendingAction: (fn: (() => void | Promise<void>) | null, name?: GateActionName | '') => void
   setDefaultPlatformSetAfterLogin: (v: boolean) => void
   /** 执行并清空 pendingAction（由 AuthProvider/SubscribeDialog 在登录/试用成功后调用） */
   runPendingActionAndClear: () => Promise<void>
   /**
    * 统一门控：未登录弹登录；需订阅且未在试用弹订阅；否则执行 action
    */
-  guardAction: (actionName: string, options: GuardActionOptions) => Promise<void>
+  guardAction: (actionName: GateActionName, options: GuardActionOptions) => Promise<void>
 }
 
 export const useGateStore = create<GateStore>()(
@@ -70,7 +71,7 @@ export const useGateStore = create<GateStore>()(
         }
       },
 
-      guardAction: async (actionName: string, options: GuardActionOptions) => {
+      guardAction: async (actionName: GateActionName, options: GuardActionOptions) => {
         const { requireSubscription = false } = options
         const pendingFn = options.action != null ? options.action : null
 
@@ -114,18 +115,8 @@ export const useGateStore = create<GateStore>()(
           return
         }
 
-        // 3. 【重构】使用 AccessControl 进行权限检查
-        // 将 actionName 映射到 FeatureType
-        const featureMap: Record<string, FeatureType> = {
-          'connect-live-control': 'connectLiveControl',
-          'ai-assistant': 'aiAssistant',
-          'auto-reply': 'autoReply',
-          'auto-message': 'autoMessage',
-          'auto-popup': 'autoPopUp',
-          'add-live-account': 'addLiveAccount',
-        }
-
-        const feature = featureMap[actionName] || 'connectLiveControl'
+        // 3. 【重构】动作名称到权限功能的映射收敛到权限域适配表
+        const feature = getFeatureTypeForGateAction(actionName)
         const decision = checkAccess(context, feature)
 
         // DEV 模式权限检查日志

@@ -158,9 +158,11 @@ class SubAccountManager {
     session.lastEnterError = options?.error
     session.liveRoomUrl =
       state === 'entered'
-        ? normalizeSubAccountLiveRoomUrl(options?.url ?? session.page?.url() ?? session.liveRoomUrl) ??
+        ? (normalizeSubAccountLiveRoomUrl(
+            options?.url ?? session.page?.url() ?? session.liveRoomUrl,
+          ) ??
           options?.url ??
-          session.liveRoomUrl
+          session.liveRoomUrl)
         : options?.url
     this.notifySessionUpdate(session.id)
   }
@@ -261,7 +263,10 @@ class SubAccountManager {
     return true
   }
 
-  private persistStorageState(session: SubAccountSession, storageState: StorageState | string): void {
+  private persistStorageState(
+    session: SubAccountSession,
+    storageState: StorageState | string,
+  ): void {
     const serialized =
       typeof storageState === 'string' ? storageState : JSON.stringify(storageState)
     session.storageState = serialized
@@ -973,7 +978,8 @@ class SubAccountManager {
         })
 
         let score = box.y
-        if (meta.placeholder.includes('发弹幕') || meta.placeholder.includes('说点什么')) score += 2000
+        if (meta.placeholder.includes('发弹幕') || meta.placeholder.includes('说点什么'))
+          score += 2000
         if (meta.contentEditable === 'true') score += 500
         if (meta.tagName === 'textarea' || meta.tagName === 'input') score += 200
 
@@ -1037,9 +1043,13 @@ class SubAccountManager {
         const node = el as HTMLElement
         node.focus()
         node.textContent = ''
-        node.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }))
+        node.dispatchEvent(
+          new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }),
+        )
         node.textContent = value
-        node.dispatchEvent(new InputEvent('input', { bubbles: true, data: value, inputType: 'insertText' }))
+        node.dispatchEvent(
+          new InputEvent('input', { bubbles: true, data: value, inputType: 'insertText' }),
+        )
       }, message)
       return
     }

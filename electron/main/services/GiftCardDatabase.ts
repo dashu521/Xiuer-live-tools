@@ -2,6 +2,7 @@ import { existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { app } from 'electron'
+import { normalizePlan } from 'shared/planRules'
 import { v4 as uuidv4 } from 'uuid'
 import type {
   GiftCard,
@@ -145,27 +146,6 @@ function mapRowToGiftCard(row: GiftCardRow): GiftCard {
     redeemedBy: row.redeemed_by,
     orderId: row.order_id,
   }
-}
-
-// 本地 PlanType 定义
-type PlanType = 'free' | 'trial' | 'pro' | 'pro_max' | 'ultra'
-
-/**
- * 归一化套餐值
- * 首发版：仅支持标准套餐名称，不保留旧名称兼容映射
- */
-function normalizePlan(plan: string | null | undefined): PlanType {
-  if (!plan) return 'free'
-
-  const normalized = plan.toLowerCase().trim()
-
-  // 首发版标准套餐名称
-  if (['free', 'trial', 'pro', 'pro_max', 'ultra'].includes(normalized)) {
-    return normalized as PlanType
-  }
-
-  // 非标准名称统一返回 free
-  return 'free'
 }
 
 function mapRowToRedemption(row: RedemptionRow): GiftCardRedemption {

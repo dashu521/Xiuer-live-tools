@@ -15,6 +15,7 @@ import { join } from 'node:path'
 const DYNAMIC_PREFIXES = [
   'tasks:autoMessage:stopped:',    // tasks:autoMessage:stopped:accountId
   'tasks:autoPopUp:stopped:',      // tasks:autoPopUp:stopped:accountId
+  'tasks:commentListener:stopped:', // tasks:commentListener:stopped:accountId
   'tasks:autoReply:listenerStopped:', // tasks:autoReply:listenerStopped:accountId
   'tasks:subAccount:stopped:',     // tasks:subAccount:stopped:accountId
 ]

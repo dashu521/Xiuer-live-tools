@@ -1,3 +1,4 @@
+import { normalizePlan } from 'shared/planRules'
 import type {
   CreateGiftCardRequest,
   GiftCard,
@@ -19,24 +20,6 @@ function getGiftCardDb(): GiftCardDatabase {
     giftCardDb = new GiftCardDatabase()
   }
   return giftCardDb
-}
-
-// 统一套餐类型
-type PlanType = 'free' | 'trial' | 'pro' | 'pro_max' | 'ultra'
-
-/**
- * 归一化套餐值
- */
-function normalizePlan(plan: string | null | undefined): PlanType {
-  if (!plan) return 'free'
-
-  const normalized = plan.toLowerCase().trim()
-
-  if (['free', 'trial', 'pro', 'pro_max', 'ultra'].includes(normalized)) {
-    return normalized as PlanType
-  }
-
-  return 'free'
 }
 
 export class GiftCardService {

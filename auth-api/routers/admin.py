@@ -35,6 +35,7 @@ from schemas_admin import (
     PaginatedAuditLogs,
     PaginatedUserList,
 )
+from subscription_rules import build_membership_info, is_paid_plan, normalize_plan
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -119,20 +120,13 @@ def _get_membership_status(u: User, db: Session) -> dict:
         sub = db.query(Subscription).filter(Subscription.user_id == u.id).first()
         if sub and sub.plan and sub.current_period_end:
             # 检查订阅是否过期
-            if sub.current_period_end > now:
-                plan = sub.plan.lower()
-                if plan in ["pro", "pro_max", "ultra"]:
-                    label_map = {
-                        "pro": "Pro",
-                        "pro_max": "ProMax", 
-                        "ultra": "Ultra"
-                    }
-                    return {
-                        "membership_status": plan,
-                        "membership_label": label_map.get(plan, plan.upper()),
-                        "membership_expire_at": sub.current_period_end.isoformat(),
-                        "membership_type": "subscription"
-                    }
+            plan = normalize_plan(sub.plan)
+            if sub.current_period_end > now and is_paid_plan(plan):
+                return build_membership_info(
+                    status=plan,
+                    expire_at=sub.current_period_end,
+                    membership_type="subscription",
+                )
     except Exception:
         pass
     
@@ -142,20 +136,9 @@ def _get_membership_status(u: User, db: Session) -> dict:
         if trial_end:
             trial_end_dt = datetime.utcfromtimestamp(trial_end)
             if trial_end > now_ts:
-                return {
-                    "membership_status": "trial",
-                    "membership_label": "试用中",
-                    "membership_expire_at": trial_end_dt.isoformat(),
-                    "membership_type": "trial"
-                }
+                return build_membership_info("trial", trial_end_dt, "trial")
             else:
-                # 试用已过期
-                return {
-                    "membership_status": "expired",
-                    "membership_label": "已过期",
-                    "membership_expire_at": trial_end_dt.isoformat(),
-                    "membership_type": "trial"
-                }
+                return build_membership_info("expired", trial_end_dt, "trial")
     except Exception:
         pass
     
@@ -175,20 +158,10 @@ def _get_membership_status(u: User, db: Session) -> dict:
             pass
     
     if has_history:
-        return {
-            "membership_status": "expired",
-            "membership_label": "已过期",
-            "membership_expire_at": None,
-            "membership_type": "none"
-        }
+        return build_membership_info("expired", membership_type="none")
     
     # 4. 免费版（无任何记录）
-    return {
-        "membership_status": "free",
-        "membership_label": "免费版",
-        "membership_expire_at": None,
-        "membership_type": "none"
-    }
+    return build_membership_info("free", membership_type="none")
 
 
 def _build_user_item(u: User, db: Session) -> AdminUserListItem:
@@ -205,7 +178,7 @@ def _build_user_item(u: User, db: Session) -> AdminUserListItem:
         is_online=_is_user_online(u),
         last_active_at=u.last_active_at.isoformat() if u.last_active_at else None,
         trial_end=_trial_end_ts(db, u.id),
-        plan=getattr(u, "plan", None) or "free",
+        plan=normalize_plan(getattr(u, "plan", None)),
         # 【新增】会员状态字段
         membership_status=membership["membership_status"],
         membership_label=membership["membership_label"],

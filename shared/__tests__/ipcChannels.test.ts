@@ -17,12 +17,12 @@ describe('IPC 通道契约测试', () => {
         'validateToken',
         'getCurrentUser',
         'restoreSession',
+        'refreshSession',
         'getAuthSummary',
         'proxyRequest',
         'getTokenInternal',
         'clearTokens',
         'checkFeatureAccess',
-        'requiresAuthentication',
         'updateUserProfile',
         'changePassword',
         'stateChanged',
@@ -65,7 +65,13 @@ describe('IPC 通道契约测试', () => {
       expect(IPC_CHANNELS.tasks.autoMessage).toHaveProperty('stop')
     })
 
-    it('应包含 autoReply 子命名空间', () => {
+    it('应包含 commentListener 子命名空间', () => {
+      expect(IPC_CHANNELS.tasks).toHaveProperty('commentListener')
+      expect(IPC_CHANNELS.tasks.commentListener).toHaveProperty('start')
+      expect(IPC_CHANNELS.tasks.commentListener).toHaveProperty('stop')
+    })
+
+    it('应保留 autoReply 下的 commentListener 兼容别名', () => {
       expect(IPC_CHANNELS.tasks).toHaveProperty('autoReply')
       expect(IPC_CHANNELS.tasks.autoReply).toHaveProperty('startCommentListener')
       expect(IPC_CHANNELS.tasks.autoReply).toHaveProperty('stopCommentListener')
@@ -81,6 +87,12 @@ describe('IPC 通道契约测试', () => {
   describe('通道命名唯一性', () => {
     it('所有通道值应唯一', () => {
       const allChannels: string[] = []
+      const allowedDuplicateChannels = new Set([
+        IPC_CHANNELS.tasks.autoReply.startCommentListener,
+        IPC_CHANNELS.tasks.autoReply.stopCommentListener,
+        IPC_CHANNELS.tasks.autoReply.listenerStopped,
+        IPC_CHANNELS.tasks.autoReply.showComment,
+      ])
 
       // 收集所有通道值
       Object.entries(IPC_CHANNELS).forEach(([_key, value]) => {
@@ -101,9 +113,11 @@ describe('IPC 通道契约测试', () => {
         }
       })
 
-      // 验证唯一性
-      const uniqueChannels = new Set(allChannels)
-      expect(uniqueChannels.size).toBe(allChannels.length)
+      const nonAliasedChannels = allChannels.filter(
+        channel => !allowedDuplicateChannels.has(channel),
+      )
+      const uniqueChannels = new Set(nonAliasedChannels)
+      expect(uniqueChannels.size).toBe(nonAliasedChannels.length)
     })
   })
 

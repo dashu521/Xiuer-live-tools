@@ -25,10 +25,7 @@ export function normalizeSubAccountLiveRoomUrl(rawUrl?: string | null): string |
   }
 }
 
-export function isSameSubAccountLiveRoomUrl(
-  left?: string | null,
-  right?: string | null,
-): boolean {
+export function isSameSubAccountLiveRoomUrl(left?: string | null, right?: string | null): boolean {
   const normalizedLeft = normalizeSubAccountLiveRoomUrl(left)
   const normalizedRight = normalizeSubAccountLiveRoomUrl(right)
 

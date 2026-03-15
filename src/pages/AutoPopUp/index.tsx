@@ -1,31 +1,17 @@
 import { useMemoizedFn } from 'ahooks'
 import { Title } from '@/components/common/Title'
 import { useAccounts } from '@/hooks/useAccounts'
-import { useAutoPopUpActions, useCurrentAutoPopUp, useShortcutListener } from '@/hooks/useAutoPopUp'
+import { useCurrentAutoPopUp, useShortcutListener } from '@/hooks/useAutoPopUp'
 import { useAutoStopOnGateLoss } from '@/hooks/useAutoStopOnGateLoss'
 import { useLiveFeatureGate } from '@/hooks/useLiveFeatureGate'
-import { useTaskControl } from '@/hooks/useTaskControl'
+import { useTaskManager } from '@/hooks/useTaskManager'
 import { stopAllLiveTasks } from '@/utils/stopAllLiveTasks'
 import GoodsListCard from './components/GoodsListCard'
 import TaskControlCard from './components/TaskControlCard'
 
-const useAutoPopUpTaskControl = () => {
-  const isRunning = useCurrentAutoPopUp(context => context.isRunning)
-  const config = useCurrentAutoPopUp(context => context.config)
-  const { setIsRunning } = useAutoPopUpActions()
-
-  return useTaskControl({
-    taskType: 'auto-popup',
-    getIsRunning: () => isRunning,
-    getConfig: () => config,
-    setIsRunning,
-    startSuccessMessage: '自动弹窗任务已启动',
-    startFailureMessage: '自动弹窗任务启动失败',
-  })
-}
-
 export default function AutoPopUp() {
-  const { isRunning, onStartTask, onStopTask } = useAutoPopUpTaskControl()
+  const isRunning = useCurrentAutoPopUp(context => context.isRunning)
+  const { startTask, stopTask } = useTaskManager()
   const gate = useLiveFeatureGate()
   const { currentAccountId } = useAccounts()
 
@@ -40,10 +26,9 @@ export default function AutoPopUp() {
 
   const handleTaskButtonClick = useMemoizedFn(async () => {
     if (!isRunning) {
-      onStartTask()
+      await startTask('autoPopup')
     } else {
-      // 停止任务（不需要登录检查）
-      onStopTask()
+      await stopTask('autoPopup', 'manual')
     }
   })
 

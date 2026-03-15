@@ -6,19 +6,12 @@
  */
 
 import { useMemo } from 'react'
-import type { PlanType } from '@/constants/subscription'
-import {
-  canUseAllFeatures,
-  getEffectivePlan,
-  getMaxLiveAccounts,
-  isPaidPlan,
-} from '@/constants/subscription'
 import { useAccounts } from '@/hooks/useAccounts'
 import { useAuthStore } from '@/stores/authStore'
-import { useTrialStore } from '@/stores/trialStore'
 import type { AccessContext, AccessDecision } from './AccessContext'
 import { createEmptyAccessContext } from './AccessContext'
 import * as Policy from './AccessPolicy'
+import type { PlanType } from './planRules'
 
 // ===== 功能类型枚举 =====
 
@@ -46,17 +39,19 @@ export type FeatureType =
  */
 export function buildAccessContext(): AccessContext {
   const authState = useAuthStore.getState()
-  const _trialState = useTrialStore.getState()
   const accountsState = useAccounts.getState()
 
   const userStatus = authState.userStatus
   const user = authState.user
+  const capabilities = userStatus?.capabilities ?? null
 
-  // 计算有效套餐（正式套餐优先于试用）
-  const effectivePlan = getEffectivePlan(userStatus?.plan, userStatus?.trial)
+  // 服务端 userStatus.plan 作为套餐真相源；只有缺少 userStatus 时才回退到本地缓存用户信息。
+  const effectivePlan = userStatus?.plan
+    ? Policy.normalizePlan(userStatus.plan)
+    : Policy.normalizePlan(user?.plan)
 
   // 判断试用状态（优先使用服务端状态）
-  const trialActive = userStatus?.trial?.is_active ?? false
+  const trialActive = userStatus?.trial?.is_active ?? effectivePlan === 'trial'
   const trialExpired = userStatus?.trial?.is_expired ?? false
   const trialEndsAt = userStatus?.trial?.end_at ? new Date(userStatus.trial.end_at).getTime() : null
 
@@ -68,11 +63,14 @@ export function buildAccessContext(): AccessContext {
       : null
 
   // 计算功能权限
-  const paidUser = isPaidPlan(effectivePlan)
-  const allFeatures = canUseAllFeatures(effectivePlan)
+  const paidUser = capabilities?.is_paid_user ?? Policy.isPaidPlan(effectivePlan)
+  const allFeatures = capabilities?.can_use_all_features ?? Policy.canUseAllFeatures(effectivePlan)
 
   // 获取账号上限（优先使用服务端返回的值）
-  const maxAccounts = userStatus?.max_accounts ?? getMaxLiveAccounts(effectivePlan)
+  const maxAccounts =
+    capabilities?.max_live_accounts ??
+    userStatus?.max_accounts ??
+    Policy.getMaxLiveAccounts(effectivePlan)
 
   // 【日志】仅开发环境打印，避免生产环境频繁输出
   if (import.meta.env.DEV) {
@@ -92,6 +90,7 @@ export function buildAccessContext(): AccessContext {
     username: user?.username ?? null,
     plan: effectivePlan,
     userStatus,
+    capabilities,
     trialActive,
     trialExpired,
     trialEndsAt,
@@ -115,9 +114,9 @@ export function buildAccessContextForPlan(plan: PlanType): AccessContext {
 
   context.isAuthenticated = true
   context.plan = plan
-  context.isPaidUser = isPaidPlan(plan)
-  context.canUseAllFeatures = canUseAllFeatures(plan)
-  context.maxLiveAccounts = getMaxLiveAccounts(plan)
+  context.isPaidUser = Policy.isPaidPlan(plan)
+  context.canUseAllFeatures = Policy.canUseAllFeatures(plan)
+  context.maxLiveAccounts = Policy.getMaxLiveAccounts(plan)
 
   return context
 }
@@ -278,10 +277,6 @@ export function useAccessContext(): AccessContext {
   const _user = useAuthStore(s => s.user)
   const _userStatus = useAuthStore(s => s.userStatus)
 
-  // 订阅 trialStore 的关键状态
-  const _trialActivated = useTrialStore(s => s.trialActivated)
-  const _trialEndsAt = useTrialStore(s => s.trialEndsAt)
-
   // 订阅 accounts 状态
   const _accounts = useAccounts(s => s.accounts)
 
@@ -301,14 +296,7 @@ export function useAccessContext(): AccessContext {
     }
 
     return context
-  }, [
-    _isAuthenticated,
-    _user,
-    _userStatus,
-    _trialActivated,
-    _trialEndsAt,
-    _accounts,
-  ])
+  }, [])
 }
 
 /**

@@ -76,7 +76,7 @@ export function createCommentListenerTask(
   const messageBuffer = new MessageBuffer(messages => {
     // 批量发送到渲染进程
     for (const msg of messages) {
-      windowManager.send(IPC_CHANNELS.tasks.autoReply.showComment, msg)
+      windowManager.send(IPC_CHANNELS.tasks.commentListener.showComment, msg)
     }
   })
 
@@ -95,9 +95,9 @@ export function createCommentListenerTask(
     } catch (err) {
       // 失败了还要告诉渲染层关闭按钮
       // 发送账号隔离的停止事件
-      windowManager.send(IPC_CHANNELS.tasks.autoReply.listenerStoppedFor(account.id), account.id)
+      windowManager.send(IPC_CHANNELS.tasks.commentListener.stoppedFor(account.id), account.id)
       // 同时发送旧事件以保持兼容（后续可移除）
-      windowManager.send(IPC_CHANNELS.tasks.autoReply.listenerStopped, account.id)
+      windowManager.send(IPC_CHANNELS.tasks.commentListener.stopped, account.id)
       task.stop(TaskStopReason.ERROR, err)
     }
   }

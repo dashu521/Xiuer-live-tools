@@ -9,15 +9,14 @@
 import { useMemoizedFn } from 'ahooks'
 import { useMemo, useState } from 'react'
 import type { LooseElectronAPI } from 'shared/electron-api'
-import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { taskManager } from '@/tasks'
 import type { TaskContext } from '@/tasks/types'
 import { taskStateManager } from '@/utils/TaskStateManager'
 import { useAccounts } from './useAccounts'
 import { useCurrentAutoMessage } from './useAutoMessage'
-import { useAutoPopUpActions, useCurrentAutoPopUp } from './useAutoPopUp'
+import { useCurrentAutoPopUp } from './useAutoPopUp'
 import { useAutoReply } from './useAutoReply'
-import { useAutoReplyConfig } from './useAutoReplyConfig'
+import { useLiveControlStore } from './useLiveControl'
 import { useLiveFeatureGate } from './useLiveFeatureGate'
 import { useLiveStatsStore } from './useLiveStats'
 import { useToast } from './useToast'
@@ -41,19 +40,12 @@ export function useOneClickStart(): {
   const { currentAccountId } = useAccounts()
 
   // 自动回复
-  const {
-    setIsRunning: setAutoReplyRunning,
-    isRunning: isAutoReplyRunning,
-    setIsListening: setAutoReplyListening,
-    isListening: autoReplyListening,
-  } = useAutoReply()
-  const { config: autoReplyConfig } = useAutoReplyConfig()
+  const { isRunning: isAutoReplyRunning } = useAutoReply()
 
   // 自动发言
   const isAutoMessageRunning = useCurrentAutoMessage(ctx => ctx.isRunning)
 
   // 自动弹窗
-  const { setIsRunning: setAutoPopUpRunning } = useAutoPopUpActions()
   const isAutoPopUpRunning = useCurrentAutoPopUp(ctx => ctx.isRunning)
 
   const [isLoading, setIsLoading] = useState(false)
@@ -69,41 +61,26 @@ export function useOneClickStart(): {
     return true
   })
 
-  // 启动自动回复（包含数据监控）
-  const startAutoReply = useMemoizedFn(async () => {
-    if (
-      isAutoReplyRunning &&
-      (autoReplyListening === 'listening' || autoReplyListening === 'waiting')
-    ) {
-      return true // 已经在运行中
-    }
-
-    try {
-      setAutoReplyListening('waiting')
-      console.log(`[OneClickStart] Starting comment listener for account ${currentAccountId}`)
-
-      const result = await window.ipcRenderer.invoke(
-        IPC_CHANNELS.tasks.autoReply.startCommentListener,
-        currentAccountId,
-        {
-          source: autoReplyConfig.entry,
-          ws: autoReplyConfig.ws?.enable ? { port: autoReplyConfig.ws.port } : undefined,
-        },
-      )
-
-      if (!result) throw new Error('监听评论失败')
-
-      setAutoReplyListening('listening')
-      setAutoReplyRunning(true)
-
-      useLiveStatsStore.getState().setListening(currentAccountId, true)
-      console.log('[OneClickStart] Comment listener started successfully')
-
-      return true
-    } catch (error) {
-      setAutoReplyListening('error')
-      console.error('[OneClickStart] Failed to start comment listener:', error)
-      return false
+  const createTaskContext = useMemoizedFn((): TaskContext => {
+    const liveControlContext = useLiveControlStore.getState().contexts[currentAccountId]
+    return {
+      accountId: currentAccountId,
+      gateState: liveControlContext
+        ? {
+            connectionState: liveControlContext.connectState.status,
+            streamState: liveControlContext.streamState,
+          }
+        : undefined,
+      toast: {
+        success: (message: string) => toast.success(message),
+        error: (message: string) => toast.error(message),
+      },
+      ipcInvoke: async <T = unknown>(channel: string, ...args: unknown[]): Promise<T> => {
+        return (window as unknown as LooseElectronAPI).ipcRenderer.invoke(
+          channel,
+          ...args,
+        ) as Promise<T>
+      },
     }
   })
 
@@ -114,24 +91,12 @@ export function useOneClickStart(): {
     const results: { task: string; success: boolean }[] = []
 
     try {
-      const autoReplySuccess = await startAutoReply()
-      results.push({ task: '自动回复', success: autoReplySuccess })
+      const ctx = createTaskContext()
+      const autoReplyResult = await taskManager.start('autoReply', ctx)
+      results.push({ task: '自动回复', success: autoReplyResult.success })
 
       if (!isAutoMessageRunning) {
         try {
-          const ctx: TaskContext = {
-            accountId: currentAccountId,
-            toast: {
-              success: (message: string) => toast.success(message),
-              error: (message: string) => toast.error(message),
-            },
-            ipcInvoke: async <T = unknown>(channel: string, ...args: unknown[]): Promise<T> => {
-              return (window as unknown as LooseElectronAPI).ipcRenderer.invoke(
-                channel,
-                ...args,
-              ) as Promise<T>
-            },
-          }
           const result = await taskManager.start('autoSpeak', ctx)
           if (result.success) {
             results.push({ task: '自动发言', success: true })
@@ -148,7 +113,9 @@ export function useOneClickStart(): {
       }
 
       if (!isAutoPopUpRunning) {
-        setAutoPopUpRunning(true)
+        const result = await taskManager.start('autoPopup', ctx)
+        results.push({ task: '自动弹窗', success: result.success })
+      } else {
         results.push({ task: '自动弹窗', success: true })
       }
 

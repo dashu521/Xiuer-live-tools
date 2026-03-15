@@ -34,6 +34,10 @@ export type Disposable = () => void
  */
 export interface TaskContext {
   accountId: string
+  gateState?: {
+    connectionState: 'disconnected' | 'connecting' | 'connected' | 'error'
+    streamState: import('shared/streamStatus').StreamStatus
+  }
   toast: {
     success: (message: string) => void
     error: (message: string) => void

@@ -1,0 +1,92 @@
+{
+  "validPlans": ["free", "trial", "pro", "pro_max", "ultra"],
+  "paidPlans": ["pro", "pro_max", "ultra"],
+  "planTextMap": {
+    "free": "免费版",
+    "trial": "试用版",
+    "pro": "专业版",
+    "pro_max": "专业增强版",
+    "ultra": "旗舰版"
+  },
+  "membershipLabels": {
+    "free": "免费版",
+    "trial": "试用中",
+    "pro": "Pro",
+    "pro_max": "ProMax",
+    "ultra": "Ultra",
+    "expired": "已过期"
+  },
+  "planRules": {
+    "free": {
+      "name": "免费版",
+      "level": 0,
+      "maxLiveAccounts": 1,
+      "canUseAllFeatures": false,
+      "isPaid": false,
+      "themeColor": "gray",
+      "iconType": "free"
+    },
+    "trial": {
+      "name": "试用版",
+      "level": 1,
+      "maxLiveAccounts": 1,
+      "canUseAllFeatures": true,
+      "isPaid": false,
+      "themeColor": "blue",
+      "iconType": "trial"
+    },
+    "pro": {
+      "name": "专业版",
+      "level": 2,
+      "maxLiveAccounts": 1,
+      "canUseAllFeatures": true,
+      "isPaid": true,
+      "themeColor": "green",
+      "iconType": "pro"
+    },
+    "pro_max": {
+      "name": "专业增强版",
+      "level": 3,
+      "maxLiveAccounts": 3,
+      "canUseAllFeatures": true,
+      "isPaid": true,
+      "themeColor": "orange",
+      "iconType": "pro_max"
+    },
+    "ultra": {
+      "name": "旗舰版",
+      "level": 4,
+      "maxLiveAccounts": -1,
+      "canUseAllFeatures": true,
+      "isPaid": true,
+      "themeColor": "purple",
+      "iconType": "ultra"
+    }
+  },
+  "legacyMembershipTypeToTier": {
+    "trial": "pro",
+    "pro": "pro",
+    "pro_max": "pro_max",
+    "ultra": "ultra"
+  },
+  "tierBenefits": {
+    "pro": {
+      "max_accounts": 1,
+      "features": ["all"],
+      "duration_days": null,
+      "plan": "pro"
+    },
+    "pro_max": {
+      "max_accounts": 3,
+      "features": ["all"],
+      "duration_days": null,
+      "plan": "pro_max"
+    },
+    "ultra": {
+      "max_accounts": -1,
+      "features": ["all"],
+      "duration_days": null,
+      "plan": "ultra"
+    }
+  }
+}

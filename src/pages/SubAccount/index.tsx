@@ -128,9 +128,7 @@ export default function SubAccount() {
   })
 
   useIpcListener(
-    IPC_CHANNELS.tasks.subAccount.stoppedFor(
-      SUB_ACCOUNT_WORKSPACE_ID,
-    ) as keyof IpcChannels,
+    IPC_CHANNELS.tasks.subAccount.stoppedFor(SUB_ACCOUNT_WORKSPACE_ID) as keyof IpcChannels,
     () => {
       actions.setIsRunning(false)
     },
@@ -573,13 +571,19 @@ export default function SubAccount() {
       setSelectedPresetCategoryId(null)
       return
     }
-    if (!selectedPresetCategoryId || !presetCategories.some(item => item.id === selectedPresetCategoryId)) {
+    if (
+      !selectedPresetCategoryId ||
+      !presetCategories.some(item => item.id === selectedPresetCategoryId)
+    ) {
       setSelectedPresetCategoryId(presetCategories[0].id)
     }
   }, [presetCategories, selectedPresetCategoryId])
 
   const updatePresetCategory = useMemoizedFn(
-    (categoryId: string, updater: (category: SubAccountPresetCategory) => SubAccountPresetCategory) => {
+    (
+      categoryId: string,
+      updater: (category: SubAccountPresetCategory) => SubAccountPresetCategory,
+    ) => {
       actions.setPresetCategories(
         presetCategories.map(category =>
           category.id === categoryId ? updater(category) : category,
@@ -820,12 +824,12 @@ export default function SubAccount() {
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleEnterAllLiveRoom}
-                    disabled={connectedCount === 0 || !liveRoomUrl.trim() || isEnteringAll}
-                  >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleEnterAllLiveRoom}
+                  disabled={connectedCount === 0 || !liveRoomUrl.trim() || isEnteringAll}
+                >
                   <RefreshCw className="h-4 w-4 mr-1" />
                   全部进入
                 </Button>
@@ -868,13 +872,13 @@ export default function SubAccount() {
                 <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
                   <MessageSquare className="h-5 w-5 text-primary" />
                 </div>
-                  <div>
-                    <div className="text-sm font-medium">{isRunning ? '正在运行' : '已停止'}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {connectedCount} 个小号在线 · {enteredCount} 个已进目标直播间
-                    </div>
+                <div>
+                  <div className="text-sm font-medium">{isRunning ? '正在运行' : '已停止'}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {connectedCount} 个小号在线 · {enteredCount} 个已进目标直播间
                   </div>
                 </div>
+              </div>
 
               <div className="flex items-center gap-3">
                 <Button
@@ -894,14 +898,16 @@ export default function SubAccount() {
                     min={1}
                     max={50}
                   />
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleSendBatch}
-                      disabled={isRunning || enteredCount === 0 || !liveRoomUrl.trim() || isEnteringAll}
-                    >
-                      一键刷屏
-                    </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSendBatch}
+                    disabled={
+                      isRunning || enteredCount === 0 || !liveRoomUrl.trim() || isEnteringAll
+                    }
+                  >
+                    一键刷屏
+                  </Button>
                 </div>
                 <Button
                   size="sm"
@@ -1157,140 +1163,143 @@ export default function SubAccount() {
                         key={account.id}
                         className="flex items-center justify-between p-3 border rounded-lg"
                       >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-2 h-2 rounded-full ${
-                            account.status === 'connected'
-                              ? 'bg-green-500'
-                              : account.status === 'connecting'
-                                ? 'bg-yellow-500 animate-pulse'
-                                : account.status === 'error'
-                                  ? 'bg-red-500'
-                                  : 'bg-gray-300'
-                          }`}
-                        />
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">{account.name}</span>
-                            <span
-                              className={`text-[11px] px-1.5 py-0.5 rounded ${loginStateBadge.className}`}
-                            >
-                              {loginStateBadge.label}
-                            </span>
-                            {account.group && (
-                              <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded">
-                                {account.group}
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-2 h-2 rounded-full ${
+                              account.status === 'connected'
+                                ? 'bg-green-500'
+                                : account.status === 'connecting'
+                                  ? 'bg-yellow-500 animate-pulse'
+                                  : account.status === 'error'
+                                    ? 'bg-red-500'
+                                    : 'bg-gray-300'
+                            }`}
+                          />
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">{account.name}</span>
+                              <span
+                                className={`text-[11px] px-1.5 py-0.5 rounded ${loginStateBadge.className}`}
+                              >
+                                {loginStateBadge.label}
                               </span>
-                            )}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {viewerPlatforms[account.platform] || account.platform} ·{' '}
-                            {account.status === 'connected'
-                              ? '已连接'
-                              : account.status === 'connecting'
-                                ? account.error || '连接中'
-                                : account.status === 'error'
-                                  ? `错误: ${account.error}`
-                                  : '未连接'}
-                            {account.status === 'connected' && (
-                              <span className="ml-2">
-                                ·{' '}
-                                {account.liveRoomStatus === 'entered' &&
-                                isSameSubAccountLiveRoomUrl(
-                                  account.liveRoomUrl,
-                                  liveRoomUrl.trim(),
-                                )
-                                  ? '已进入目标直播间'
-                                  : account.liveRoomStatus === 'entering'
-                                    ? '进入中'
-                                    : account.liveRoomStatus === 'error'
-                                      ? `进入失败: ${account.lastEnterError || '未知错误'}`
-                                      : '未进入直播间'}
-                              </span>
-                            )}
-                            {account.stats.totalSent > 0 && (
-                              <span className="ml-2 text-green-600">
-                                发送{account.stats.successCount}/{account.stats.totalSent}
-                              </span>
-                            )}
+                              {account.group && (
+                                <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded">
+                                  {account.group}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {viewerPlatforms[account.platform] || account.platform} ·{' '}
+                              {account.status === 'connected'
+                                ? '已连接'
+                                : account.status === 'connecting'
+                                  ? account.error || '连接中'
+                                  : account.status === 'error'
+                                    ? `错误: ${account.error}`
+                                    : '未连接'}
+                              {account.status === 'connected' && (
+                                <span className="ml-2">
+                                  ·{' '}
+                                  {account.liveRoomStatus === 'entered' &&
+                                  isSameSubAccountLiveRoomUrl(
+                                    account.liveRoomUrl,
+                                    liveRoomUrl.trim(),
+                                  )
+                                    ? '已进入目标直播间'
+                                    : account.liveRoomStatus === 'entering'
+                                      ? '进入中'
+                                      : account.liveRoomStatus === 'error'
+                                        ? `进入失败: ${account.lastEnterError || '未知错误'}`
+                                        : '未进入直播间'}
+                                </span>
+                              )}
+                              {account.stats.totalSent > 0 && (
+                                <span className="ml-2 text-green-600">
+                                  发送{account.stats.successCount}/{account.stats.totalSent}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {config.groups && config.groups.length > 0 && (
-                          <select
-                            value={
-                              config.groups?.find(g => g.accountIds.includes(account.id))?.id || ''
-                            }
-                            onChange={e =>
-                              handleAssignToGroup(account.id, e.target.value || undefined)
-                            }
-                            className="text-xs border rounded px-2 py-1 bg-background"
-                          >
-                            <option value="">未分组</option>
-                            {config.groups.map(group => (
-                              <option key={group.id} value={group.id}>
-                                {group.name}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                        {account.status === 'connected' && (
-                          <>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleEnterLiveRoom(account.id)}
-                              disabled={!liveRoomUrl.trim() || account.liveRoomStatus === 'entering'}
+                        <div className="flex items-center gap-2">
+                          {config.groups && config.groups.length > 0 && (
+                            <select
+                              value={
+                                config.groups?.find(g => g.accountIds.includes(account.id))?.id ||
+                                ''
+                              }
+                              onChange={e =>
+                                handleAssignToGroup(account.id, e.target.value || undefined)
+                              }
+                              className="text-xs border rounded px-2 py-1 bg-background"
                             >
-                              {account.liveRoomStatus === 'entering' ? '进入中...' : '进入直播间'}
-                            </Button>
-                            {account.hasStorageState && (
+                              <option value="">未分组</option>
+                              {config.groups.map(group => (
+                                <option key={group.id} value={group.id}>
+                                  {group.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                          {account.status === 'connected' && (
+                            <>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEnterLiveRoom(account.id)}
+                                disabled={
+                                  !liveRoomUrl.trim() || account.liveRoomStatus === 'entering'
+                                }
+                              >
+                                {account.liveRoomStatus === 'entering' ? '进入中...' : '进入直播间'}
+                              </Button>
+                              {account.hasStorageState && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleClearSavedLoginState(account.id)}
+                                >
+                                  清除登录态
+                                </Button>
+                              )}
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleClearSavedLoginState(account.id)}
+                                onClick={() => handleDisconnectAccount(account.id)}
                               >
-                                清除登录态
+                                断开
                               </Button>
-                            )}
+                            </>
+                          )}
+                          {account.status !== 'connected' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleLoginAccount(account.id)}
+                              disabled={account.status === 'connecting'}
+                            >
+                              {account.status === 'connecting' ? '验证中...' : '登录'}
+                            </Button>
+                          )}
+                          {account.status !== 'connected' && account.hasStorageState && (
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleDisconnectAccount(account.id)}
+                              onClick={() => handleClearSavedLoginState(account.id)}
                             >
-                              断开
+                              清除登录态
                             </Button>
-                          </>
-                        )}
-                        {account.status !== 'connected' && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleLoginAccount(account.id)}
-                            disabled={account.status === 'connecting'}
-                          >
-                            {account.status === 'connecting' ? '验证中...' : '登录'}
-                          </Button>
-                        )}
-                        {account.status !== 'connected' && account.hasStorageState && (
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleClearSavedLoginState(account.id)}
+                            onClick={() => handleRemoveAccount(account.id)}
                           >
-                            清除登录态
+                            <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleRemoveAccount(account.id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
+                        </div>
                       </div>
-                    </div>
                     )
                   })}
               </div>

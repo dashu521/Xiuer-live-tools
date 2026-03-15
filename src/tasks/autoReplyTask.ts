@@ -5,6 +5,7 @@
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { useAutoReplyStore } from '@/hooks/useAutoReply'
 import { createDefaultConfig, useAutoReplyConfigStore } from '@/hooks/useAutoReplyConfig'
+import { acquireCommentListener, releaseCommentListener } from '@/utils/commentListenerRuntime'
 import { BaseTask, type StopReason, type TaskContext } from './types'
 
 export class AutoReplyTask extends BaseTask {
@@ -25,19 +26,20 @@ export class AutoReplyTask extends BaseTask {
     this.accountId = ctx.accountId
     const config =
       useAutoReplyConfigStore.getState().contexts[ctx.accountId]?.config ?? createDefaultConfig()
+    const autoReplyStore = useAutoReplyStore.getState()
 
     // 更新状态为 waiting
-    useAutoReplyStore.getState().setIsListening(ctx.accountId, 'waiting')
+    autoReplyStore.setIsListening(ctx.accountId, 'waiting')
 
     try {
-      // 启动评论监听
-      const result = await ctx.ipcInvoke<boolean>(
-        IPC_CHANNELS.tasks.autoReply.startCommentListener,
+      const result = await acquireCommentListener(
         ctx.accountId,
+        'autoReply',
         {
           source: config.entry,
           ws: config.ws?.enable ? { port: config.ws.port } : undefined,
         },
+        ctx.ipcInvoke,
       )
 
       if (!result) {
@@ -57,25 +59,25 @@ export class AutoReplyTask extends BaseTask {
       // 监听后端停止事件
       if (window.ipcRenderer) {
         // 【P2方案】监听账号隔离的事件通道
-        const eventChannel = IPC_CHANNELS.tasks.autoReply.listenerStoppedFor(ctx.accountId)
+        const eventChannel = IPC_CHANNELS.tasks.commentListener.stoppedFor(ctx.accountId)
         const unsubscribe = window.ipcRenderer.on(
-          eventChannel as `tasks:autoReply:listenerStopped:${string}`,
+          eventChannel as `tasks:commentListener:stopped:${string}`,
           handleListenerStopped as (accountId: string) => void,
         )
         this.registerDisposable(() => unsubscribe())
       }
 
       // 更新状态为 listening
-      useAutoReplyStore.getState().setIsListening(ctx.accountId, 'listening')
-      useAutoReplyStore.getState().setIsRunning(ctx.accountId, true)
+      autoReplyStore.setIsListening(ctx.accountId, 'listening')
+      autoReplyStore.setIsRunning(ctx.accountId, true)
       this.status = 'running'
 
       ctx.toast.success('监听评论成功')
       console.log(`[AutoReplyTask] Started successfully for account ${ctx.accountId}`)
     } catch (error) {
       console.error('[AutoReplyTask] Failed to start:', error)
-      useAutoReplyStore.getState().setIsListening(ctx.accountId, 'error')
-      useAutoReplyStore.getState().setIsRunning(ctx.accountId, false)
+      autoReplyStore.setIsListening(ctx.accountId, 'error')
+      autoReplyStore.setIsRunning(ctx.accountId, false)
       this.status = 'error'
       ctx.toast.error('监听评论失败')
       throw error
@@ -96,21 +98,20 @@ export class AutoReplyTask extends BaseTask {
     // - 任何其他定时器、websocket 等资源
     this.executeDisposers()
 
-    // 调用 IPC 停止监听（后端会清理 interval/websocket/listener）
     if (this.accountId) {
-      try {
-        if (window.ipcRenderer) {
-          await window.ipcRenderer.invoke(
-            IPC_CHANNELS.tasks.autoReply.stopCommentListener,
-            this.accountId,
-          )
-          console.log('[AutoReplyTask] IPC stopCommentListener invoked successfully')
-        }
-      } catch (error) {
-        console.error('[AutoReplyTask] Error stopping IPC listener:', error)
+      // 自动回复与数据监控共享底层评论监听。这里只释放自动回复消费者，
+      // 仅当没有其他消费者时才真正停止监听器。
+      if (window.ipcRenderer) {
+        const invokeCommentListenerIpc = <T = unknown>(
+          channel: string,
+          ...args: unknown[]
+        ): Promise<T> =>
+          (window.ipcRenderer as { invoke: (...invokeArgs: unknown[]) => Promise<unknown> }).invoke(
+            channel,
+            ...args,
+          ) as Promise<T>
+        await releaseCommentListener(this.accountId, 'autoReply', invokeCommentListenerIpc)
       }
-
-      // 更新状态
       useAutoReplyStore.getState().setIsListening(this.accountId, 'stopped')
       useAutoReplyStore.getState().setIsRunning(this.accountId, false)
       console.log('[AutoReplyTask] Store state updated: isListening=stopped, isRunning=false')

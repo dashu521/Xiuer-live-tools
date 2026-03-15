@@ -5,180 +5,69 @@
  * 所有权限判断函数必须是纯函数，只依赖 AccessContext。
  */
 
-import type { PlanType } from '@/constants/subscription'
 import type { AccessContext, AccessDecision } from './AccessContext'
+import { type CapabilityFeatureType, getAuthFeatureForCapabilityFeature } from './featureAccessMap'
 
-// ===== 套餐规则定义 =====
+export type { PlanRule, PlanType } from './planRules'
+export {
+  canUseAllFeatures,
+  comparePlanLevel,
+  getEffectivePlan,
+  getMaxLiveAccounts,
+  getUpgradeSuggestion,
+  isPaidPlan,
+  meetsMinimumPlan,
+  normalizePlan,
+  PLAN_LEVEL,
+  PLAN_RULES,
+  PLAN_TEXT_MAP,
+  VALID_PLANS,
+} from './planRules'
 
-/** 套餐等级 (用于比较) */
-export const PLAN_LEVEL: Record<PlanType, number> = {
-  free: 0,
-  trial: 1,
-  pro: 2,
-  pro_max: 3,
-  ultra: 4,
-}
+import { getUpgradeSuggestion, normalizePlan, PLAN_TEXT_MAP } from './planRules'
 
-/** 套餐显示文案映射 */
-export const PLAN_TEXT_MAP: Record<PlanType, string> = {
-  free: '免费版',
-  trial: '试用版',
-  pro: '专业版',
-  pro_max: '专业增强版',
-  ultra: '旗舰版',
-}
+function getServerFeatureDecision(
+  context: AccessContext,
+  feature: CapabilityFeatureType,
+): AccessDecision | null {
+  const authFeature = getAuthFeatureForCapabilityFeature(feature)
+  const serverDecision = context.capabilities?.feature_access?.[authFeature]
 
-/** 套餐规则配置 */
-export interface PlanRule {
-  name: string
-  level: number
-  maxLiveAccounts: number
-  canUseAllFeatures: boolean
-  isPaid: boolean
-  themeColor: string
-  iconType: PlanType
-}
-
-/** 套餐规则表 - 单一事实来源 */
-export const PLAN_RULES: Record<PlanType, PlanRule> = {
-  free: {
-    name: '免费版',
-    level: 0,
-    maxLiveAccounts: 1,
-    canUseAllFeatures: false,
-    isPaid: false,
-    themeColor: 'gray',
-    iconType: 'free',
-  },
-  trial: {
-    name: '试用版',
-    level: 1,
-    maxLiveAccounts: 1,
-    canUseAllFeatures: true,
-    isPaid: false,
-    themeColor: 'blue',
-    iconType: 'trial',
-  },
-  pro: {
-    name: '专业版',
-    level: 2,
-    maxLiveAccounts: 1,
-    canUseAllFeatures: true,
-    isPaid: true,
-    themeColor: 'green',
-    iconType: 'pro',
-  },
-  pro_max: {
-    name: '专业增强版',
-    level: 3,
-    maxLiveAccounts: 3,
-    canUseAllFeatures: true,
-    isPaid: true,
-    themeColor: 'orange',
-    iconType: 'pro_max',
-  },
-  ultra: {
-    name: '旗舰版',
-    level: 4,
-    maxLiveAccounts: -1, // -1 表示无限制
-    canUseAllFeatures: true,
-    isPaid: true,
-    themeColor: 'purple',
-    iconType: 'ultra',
-  },
-}
-
-/** 所有合法套餐值 */
-export const VALID_PLANS: PlanType[] = ['free', 'trial', 'pro', 'pro_max', 'ultra']
-
-// ===== 套餐判断函数 =====
-
-/**
- * 归一化套餐值
- */
-export function normalizePlan(plan: string | null | undefined): PlanType {
-  if (!plan) return 'free'
-
-  const normalized = plan.toLowerCase().trim()
-
-  if (VALID_PLANS.includes(normalized as PlanType)) {
-    return normalized as PlanType
+  if (!serverDecision) {
+    return null
   }
 
-  return 'free'
-}
-
-/**
- * 判断是否为付费套餐
- */
-export function isPaidPlan(plan: PlanType): boolean {
-  return PLAN_RULES[plan]?.isPaid || false
-}
-
-/**
- * 判断是否可以使用全部功能
- */
-export function canUseAllFeatures(plan: PlanType): boolean {
-  return PLAN_RULES[plan]?.canUseAllFeatures || false
-}
-
-/**
- * 获取最大直播账号数
- */
-export function getMaxLiveAccounts(plan: PlanType): number {
-  return PLAN_RULES[plan]?.maxLiveAccounts ?? 1
-}
-
-/**
- * 比较两个套餐的等级
- * @returns 正数表示 planA 等级更高，负数表示 planB 等级更高，0 表示相等
- */
-export function comparePlanLevel(planA: PlanType, planB: PlanType): number {
-  return PLAN_LEVEL[planA] - PLAN_LEVEL[planB]
-}
-
-/**
- * 判断是否满足最低套餐要求
- */
-export function meetsMinimumPlan(currentPlan: PlanType, requiredPlan: PlanType): boolean {
-  return comparePlanLevel(currentPlan, requiredPlan) >= 0
-}
-
-/**
- * 获取有效套餐
- * 规则：正式套餐(pro/pro_max/ultra) > 试用(trial) > 免费(free)
- */
-export function getEffectivePlan(
-  plan: string | null | undefined,
-  trialStatus?: { is_active?: boolean; is_expired?: boolean } | null,
-): PlanType {
-  const normalizedPlan = normalizePlan(plan)
-
-  // 正式套餐直接返回
-  if (['pro', 'pro_max', 'ultra'].includes(normalizedPlan)) {
-    return normalizedPlan as PlanType
+  if (serverDecision.can_access) {
+    return { allowed: true }
   }
 
-  // 试用状态判断
-  if (normalizedPlan === 'trial' || (trialStatus?.is_active && !trialStatus?.is_expired)) {
-    return 'trial'
+  if (serverDecision.requires_auth && !context.isAuthenticated) {
+    return {
+      allowed: false,
+      reason: '请先登录',
+      action: 'login',
+    }
   }
 
-  return 'free'
-}
-
-/**
- * 获取套餐升级建议
- */
-export function getUpgradeSuggestion(currentPlan: PlanType): PlanType | undefined {
-  const upgradeMap: Record<PlanType, PlanType | undefined> = {
-    free: 'pro',
-    trial: 'pro',
-    pro: 'pro_max',
-    pro_max: 'ultra',
-    ultra: undefined,
+  const requiredPlan = normalizePlan(serverDecision.required_plan)
+  if (requiredPlan === 'trial') {
+    return {
+      allowed: false,
+      reason:
+        context.plan === 'trial' && context.trialExpired
+          ? '试用已经结束，升级会员后就能继续使用这个功能'
+          : '开通免费试用或升级会员后，就可以使用这个功能了',
+      action: 'subscribe',
+      requiredPlan,
+    }
   }
-  return upgradeMap[currentPlan]
+
+  return {
+    allowed: false,
+    reason: `此功能需要 ${PLAN_TEXT_MAP[requiredPlan]} 权限`,
+    action: 'upgrade',
+    requiredPlan,
+  }
 }
 
 // ===== 用户类型判断 =====
@@ -211,6 +100,11 @@ export function isFreeUser(context: AccessContext): boolean {
  * 规则：已登录 + (付费用户 | 试用有效)
  */
 export function canConnectLiveControl(context: AccessContext): AccessDecision {
+  const serverDecision = getServerFeatureDecision(context, 'connectLiveControl')
+  if (serverDecision) {
+    return serverDecision
+  }
+
   if (!context.isAuthenticated) {
     return {
       allowed: false,
@@ -248,7 +142,7 @@ export function canConnectLiveControl(context: AccessContext): AccessDecision {
  * 规则：与连接直播中控台相同
  */
 export function canUseAiAssistant(context: AccessContext): AccessDecision {
-  return canConnectLiveControl(context)
+  return getServerFeatureDecision(context, 'aiAssistant') ?? canConnectLiveControl(context)
 }
 
 /**
@@ -256,7 +150,7 @@ export function canUseAiAssistant(context: AccessContext): AccessDecision {
  * 规则：与连接直播中控台相同
  */
 export function canUseAutoReply(context: AccessContext): AccessDecision {
-  return canConnectLiveControl(context)
+  return getServerFeatureDecision(context, 'autoReply') ?? canConnectLiveControl(context)
 }
 
 /**
@@ -264,7 +158,7 @@ export function canUseAutoReply(context: AccessContext): AccessDecision {
  * 规则：与连接直播中控台相同
  */
 export function canUseAutoMessage(context: AccessContext): AccessDecision {
-  return canConnectLiveControl(context)
+  return getServerFeatureDecision(context, 'autoMessage') ?? canConnectLiveControl(context)
 }
 
 /**
@@ -272,7 +166,7 @@ export function canUseAutoMessage(context: AccessContext): AccessDecision {
  * 规则：与连接直播中控台相同
  */
 export function canUseAutoPopUp(context: AccessContext): AccessDecision {
-  return canConnectLiveControl(context)
+  return getServerFeatureDecision(context, 'autoPopUp') ?? canConnectLiveControl(context)
 }
 
 // ===== 资源限制判断 =====

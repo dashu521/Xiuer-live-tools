@@ -2,7 +2,7 @@
  * 统一权限上下文 - AccessContext
  *
  * 这是全项目权限判断的唯一数据来源。
- * 聚合 authStore、trialStore、userStatus 等所有权限相关状态。
+ * 聚合 authStore、账号列表和服务端 userStatus 等所有权限相关状态。
  *
  * 设计原则：
  * 1. 单一数据源 - 所有权限判断必须通过此上下文
@@ -10,8 +10,10 @@
  * 3. 完整 - 包含所有权限判断所需信息
  */
 
-import type { PlanType } from '@/constants/subscription'
 import type { UserStatus } from '@/types/auth'
+import type { PlanType } from './planRules'
+
+type UserCapabilities = NonNullable<UserStatus['capabilities']>
 
 /**
  * 统一权限上下文接口
@@ -30,12 +32,16 @@ export interface AccessContext {
   // ===== 套餐信息 =====
   /**
    * 当前有效套餐类型
-   * 已通过 getEffectivePlan 处理，正式套餐优先于试用
+   * 以服务端 userStatus.plan 为真相源；
+   * 仅在缺少 userStatus 时回退到本地缓存用户信息。
    */
   plan: PlanType
 
   /** 用户状态（来自服务端 /auth/status） */
   userStatus: UserStatus | null
+
+  /** 服务端下发的能力摘要（来自 userStatus.capabilities） */
+  capabilities: UserCapabilities | null
 
   // ===== 试用状态 =====
   /** 试用是否激活 */
@@ -97,6 +103,7 @@ export function createEmptyAccessContext(): AccessContext {
     username: null,
     plan: 'free',
     userStatus: null,
+    capabilities: null,
     trialActive: false,
     trialExpired: false,
     trialEndsAt: null,

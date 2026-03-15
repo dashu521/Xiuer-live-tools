@@ -1,4 +1,4 @@
-import type { PlanType } from '@/constants/subscription'
+import type { PlanType } from '@/domain/access/planRules'
 
 export type GiftCardType = 'balance' | 'membership' | 'both'
 

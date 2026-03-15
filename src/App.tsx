@@ -12,12 +12,11 @@ import {
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
 import { Toaster } from '@/components/ui/toaster'
+import { useAppIpcBootstrap } from '@/hooks/useAppIpcBootstrap'
 import { useDevMode } from '@/hooks/useDevMode'
 import { Header } from './components/common/Header'
-import { useIpcListener } from './hooks/useIpc'
 import './App.css'
 import React, { Suspense, useEffect, useState } from 'react'
-import type { StreamStatus } from 'shared/streamStatus'
 import { AuthProvider } from '@/components/auth/AuthProvider'
 // 新用户引导组件
 import { QuickStartDialog, WelcomeDialog } from '@/components/onboarding'
@@ -30,194 +29,20 @@ import {
 // 初始化平台偏好设置服务
 import { initializePlatformPreferenceService } from '@/services/platformPreferenceService'
 import { useAuthCheckDone, useIsAuthenticated } from '@/stores/authStore'
-// 初始化 TaskManager（注册所有任务）
-import { taskManager } from '@/tasks'
-import { getFriendlyErrorMessage } from '@/utils/errorMessages'
 // 初始化统一存储系统
 import { initializeStorage } from '@/utils/storage'
 import { UpdateDialog } from './components/update/UpdateDialog'
 import { useAccounts } from './hooks/useAccounts'
-import { useAutoMessageStore, useLoadAutoMessageOnLogin } from './hooks/useAutoMessage'
-import { useAutoPopUpStore, useLoadAutoPopUpOnLogin } from './hooks/useAutoPopUp'
-import { useAutoReply, useAutoReplyStore } from './hooks/useAutoReply'
+import { useLoadAutoMessageOnLogin } from './hooks/useAutoMessage'
+import { useLoadAutoPopUpOnLogin } from './hooks/useAutoPopUp'
 import { useLoadAutoReplyConfigOnLogin } from './hooks/useAutoReplyConfig'
 // 加载隔离存储配置
-import { useChromeConfigStore, useLoadChromeConfigOnLogin } from './hooks/useChromeConfig'
+import { useLoadChromeConfigOnLogin } from './hooks/useChromeConfig'
 import { useLiveControlStore, useLoadLiveControlOnLogin } from './hooks/useLiveControl'
 import { useLoadSubAccountOnLogin } from './hooks/useSubAccount'
 import { useTaskConnectionGuard } from './hooks/useTaskConnectionGuard'
 import { useToast } from './hooks/useToast'
-import { useUpdateConfigStore, useUpdateStore } from './hooks/useUpdate'
 import { cn } from './lib/utils'
-
-function useGlobalIpcListener() {
-  const { handleComment } = useAutoReply()
-  const { setIsListening } = useAutoReplyStore()
-  const { setConnectState, setAccountName, setStreamState } = useLiveControlStore()
-  const setIsRunningAutoMessage = useAutoMessageStore(s => s.setIsRunning)
-  const setIsRunningAutoPopUp = useAutoPopUpStore(s => s.setIsRunning)
-  const setStorageState = useChromeConfigStore(s => s.setStorageState)
-  const enableAutoCheckUpdate = useUpdateConfigStore(s => s.enableAutoCheckUpdate)
-  const handleUpdate = useUpdateStore.use.handleUpdate()
-  const { toast } = useToast()
-
-  useIpcListener(IPC_CHANNELS.tasks.autoReply.showComment, ({ comment, accountId }) => {
-    handleComment(comment, accountId)
-  })
-
-  useIpcListener(IPC_CHANNELS.tasks.liveControl.disconnectedEvent, async (id, reason) => {
-    console.log(`[renderer][${id}] ==============================================`)
-    console.log(`[renderer][${id}][event] 🚨 收到 disconnectedEvent 事件`, {
-      accountId: id,
-      reason: reason || '未知原因',
-      timestamp: new Date().toISOString(),
-    })
-
-    const reasonStr = (reason || '') as string
-    const isFatalDisconnect =
-      reasonStr.includes('browser has been closed') ||
-      reasonStr.includes('连接已取消') ||
-      reasonStr.includes('连接超时') ||
-      reasonStr.includes('网络连接失败')
-
-    // 【关键】仅在「用户正在登录中」且非致命断开时忽略，避免登录过程中的短暂断开误报
-    // 浏览器被关闭、连接已取消、超时等致命原因立即更新 UI，不再转圈
-    const currentStatus = useLiveControlStore.getState().contexts[id]?.connectState
-    console.log(`[renderer][${id}] currentStatus before:`, currentStatus)
-    if (currentStatus?.phase === 'waiting_for_login' && !isFatalDisconnect) {
-      console.log(`[renderer][${id}][event] ⏭️ 忽略 disconnectedEvent：用户正在登录中（非致命断开）`)
-      return
-    }
-
-    console.log(`[renderer][${id}] >>> Step 1: setConnectState to disconnected`)
-    setConnectState(id, {
-      status: 'disconnected',
-      phase: 'idle',
-      error: reason || '直播中控台已断开连接',
-    })
-    console.log(
-      `[renderer][${id}] >>> Step 1 done, new status:`,
-      useLiveControlStore.getState().contexts[id]?.connectState,
-    )
-
-    if (reason && !reasonStr.includes('用户主动断开')) {
-      const friendlyMessage = getFriendlyErrorMessage(reason)
-      toast.error(friendlyMessage)
-    }
-
-    // 只停止该账号的任务，避免误停其他账号的 autoSpeak（TaskManager 为全局单任务）
-    console.log(`[renderer][${id}] >>> Step 2: calling stopAllLiveTasks for account ${id}`)
-    const { stopAllLiveTasks } = await import('@/utils/stopAllLiveTasks')
-    await stopAllLiveTasks(id, 'disconnected', false) // 不显示 toast，避免重复
-    console.log(`[renderer][${id}] >>> Step 2 done, stopAllLiveTasks completed`)
-    console.log(`[renderer][${id}] ==============================================`)
-  })
-
-  useIpcListener(IPC_CHANNELS.tasks.autoMessage.stoppedEvent, async id => {
-    // 同步状态：后端停止事件（可能是手动停止或系统停止）
-    setIsRunningAutoMessage(id, false)
-
-    // 【修复】同步 TaskManager 状态（按账号隔离）
-    try {
-      // 【修复】只同步指定账号的任务状态，不影响其他账号
-      const taskStatus = taskManager.getStatus('autoSpeak', id)
-      if (taskStatus === 'running') {
-        // 【修复】调用 TaskManager 的 stop 方法，传入账号ID实现精确停止
-        await taskManager.stop('autoSpeak', 'error', id)
-        console.log(`[TaskManager] Synced autoSpeak status to stopped for account ${id}`)
-      }
-    } catch (error) {
-      // TaskManager 可能未初始化，忽略
-      console.log('[TaskManager] Failed to sync status (may not be initialized):', error)
-    }
-
-    console.log(`[TaskGate] Auto message stopped event for account ${id}`)
-  })
-
-  useIpcListener(IPC_CHANNELS.tasks.autoPopUp.stoppedEvent, id => {
-    setIsRunningAutoPopUp(id, false)
-    // 注意：如果是系统强制停止，toast 已在 stopAllLiveTasks 中显示
-    // 这里只处理手动停止的情况
-    console.log(`[TaskGate] Auto popup stopped event for account ${id}`)
-  })
-
-  useIpcListener(IPC_CHANNELS.tasks.autoReply.listenerStopped, id => {
-    setIsListening(id, 'stopped')
-    // 注意：如果是系统强制停止，toast 已在 stopAllLiveTasks 中显示
-    // 这里只处理手动停止的情况
-    console.log(`[TaskGate] Auto reply listener stopped event for account ${id}`)
-  })
-
-  useIpcListener(IPC_CHANNELS.chrome.saveState, (id, state) => {
-    setStorageState(id, state)
-  })
-
-  useIpcListener(IPC_CHANNELS.tasks.liveControl.notifyAccountName, params => {
-    if (params.ok) {
-      console.log(`[conn][${params.accountId}][event] 收到 notifyAccountName 事件`, {
-        accountId: params.accountId,
-        accountName: params.accountName,
-      })
-
-      setAccountName(params.accountId, params.accountName)
-
-      // 登录成功！更新连接状态为 connected，phase 设置为 streaming（等待开始直播）
-      setConnectState(params.accountId, {
-        status: 'connected',
-        phase: 'streaming',
-        error: null,
-        lastVerifiedAt: Date.now(),
-      })
-      console.log(`[conn][${params.accountId}][event] 更新状态为 connected`, {
-        accountId: params.accountId,
-      })
-      toast.success('已成功连接到直播控制台')
-    } else {
-      console.warn('[conn][event] notifyAccountName 返回失败')
-    }
-  })
-
-  // 监听直播状态变化事件
-  useIpcListener(
-    IPC_CHANNELS.tasks.liveControl.streamStateChanged,
-    async (accountId: string, streamState: StreamStatus) => {
-      console.log(`[renderer][${accountId}] ==============================================`)
-      console.log(
-        `[renderer][${accountId}][event] 🌡️ streamStateChanged event received: ${streamState}`,
-        { accountId, streamState, timestamp: new Date().toISOString() },
-      )
-
-      // 获取之前的状态
-      const prevState = useLiveControlStore.getState().contexts[accountId]?.streamState
-      console.log(`[renderer][${accountId}] prevState: ${prevState}, newState: ${streamState}`)
-
-      // 更新状态
-      console.log(`[renderer][${accountId}] >>> Step 1: setStreamState to ${streamState}`)
-      setStreamState(accountId, streamState)
-      console.log(
-        `[renderer][${accountId}] >>> Step 1 done, new store state:`,
-        useLiveControlStore.getState().contexts[accountId]?.streamState,
-      )
-
-      // 如果从 live 变为非 live，只停止该账号的任务，避免误停其他账号的 autoSpeak
-      if (prevState === 'live' && streamState !== 'live') {
-        console.log(
-          `[renderer][${accountId}] >>> Step 2: Stream ended (${prevState} -> ${streamState}), calling stopAllLiveTasks`,
-        )
-        const { stopAllLiveTasks } = await import('@/utils/stopAllLiveTasks')
-        await stopAllLiveTasks(accountId, 'stream_ended', false) // 不显示 toast，避免重复
-        console.log(`[renderer][${accountId}] >>> Step 2 done, stopAllLiveTasks completed`)
-      }
-      console.log(`[renderer][${accountId}] ==============================================`)
-    },
-  )
-
-  useIpcListener(IPC_CHANNELS.app.notifyUpdate, info => {
-    if (enableAutoCheckUpdate) {
-      handleUpdate(info)
-    }
-  })
-}
 
 function AppContent() {
   const { enabled: devMode } = useDevMode()
@@ -230,8 +55,8 @@ function AppContent() {
     return saved === null ? true : saved === 'true'
   })
 
-  // 【关键】注册全局 IPC 事件监听（notifyAccountName -> 已连接、disconnectedEvent、streamStateChanged 等），不调用则 UI 收不到主进程事件，界面会空白/异常
-  useGlobalIpcListener()
+  // 全局 IPC 同步集中在专用 bootstrap hook，App 只负责装配
+  useAppIpcBootstrap()
 
   // 【数据隔离】登录时加载各 Store 的配置
   useLoadChromeConfigOnLogin()

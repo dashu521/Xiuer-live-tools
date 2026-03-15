@@ -4,6 +4,7 @@ import { AuthDialog } from '@/components/auth/AuthDialog'
 import { SubscribeDialog } from '@/components/auth/SubscribeDialog'
 import { UserCenter } from '@/components/auth/UserCenter'
 import { useAccessContext } from '@/domain/access'
+import { GATE_ACTIONS } from '@/domain/access/gateActions'
 import { useAccounts } from '@/hooks/useAccounts'
 import { useAuthInit } from '@/hooks/useAuth'
 import { useLiveControlStore } from '@/hooks/useLiveControl'
@@ -44,7 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const pendingActionName = useGateStore.getState().pendingActionName
       runPendingActionAndClear()
       // 若用户是因「连接直播中控台」而登录，说明已在下拉框中选择了平台，不应覆盖
-      const wasConnectAction = pendingActionName === 'connect-live-control'
+      const wasConnectAction = pendingActionName === GATE_ACTIONS.CONNECT_LIVE_CONTROL
       if (!wasConnectAction && !useGateStore.getState().defaultPlatformSetAfterLogin) {
         const accountId = useAccounts.getState().currentAccountId
         if (accountId) {

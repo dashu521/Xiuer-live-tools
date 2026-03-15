@@ -1,3 +1,11 @@
+const COMMENT_LISTENER_CHANNELS = {
+  start: 'tasks:commentListener:start',
+  stop: 'tasks:commentListener:stop',
+  stopped: 'tasks:commentListener:stopped',
+  stoppedFor: (accountId: string) => `tasks:commentListener:stopped:${accountId}`,
+  showComment: 'tasks:commentListener:showComment',
+} as const
+
 export const IPC_CHANNELS = {
   auth: {
     register: 'auth:register',
@@ -7,12 +15,12 @@ export const IPC_CHANNELS = {
     validateToken: 'auth:validateToken',
     getCurrentUser: 'auth:getCurrentUser',
     restoreSession: 'auth:restoreSession',
+    refreshSession: 'auth:refreshSession',
     getAuthSummary: 'auth:getAuthSummary',
     proxyRequest: 'auth:proxyRequest',
     getTokenInternal: 'auth:getTokenInternal',
     clearTokens: 'auth:clearTokens',
     checkFeatureAccess: 'auth:checkFeatureAccess',
-    requiresAuthentication: 'auth:requiresAuthentication',
     updateUserProfile: 'auth:updateUserProfile',
     changePassword: 'auth:changePassword',
     stateChanged: 'auth:stateChanged',
@@ -66,14 +74,26 @@ export const IPC_CHANNELS = {
       normalChat: 'tasks:aiChat:normalChat',
       testApiKey: 'tasks:aiChat:testApiKey',
     },
-    autoReply: {
-      startCommentListener: 'tasks:autoReply:startCommentListener',
-      stopCommentListener: 'tasks:autoReply:stopCommentListener',
-      /** @deprecated 使用 listenerStoppedFor(accountId) 替代 */
-      listenerStopped: 'tasks:autoReply:listenerStopped',
+    commentListener: {
+      start: COMMENT_LISTENER_CHANNELS.start,
+      stop: COMMENT_LISTENER_CHANNELS.stop,
+      /** @deprecated 使用 stoppedFor(accountId) 替代 */
+      stopped: COMMENT_LISTENER_CHANNELS.stopped,
       /** 账号隔离的监听器停止事件 */
-      listenerStoppedFor: (accountId: string) => `tasks:autoReply:listenerStopped:${accountId}`,
-      showComment: 'tasks:autoReply:showComment',
+      stoppedFor: COMMENT_LISTENER_CHANNELS.stoppedFor,
+      showComment: COMMENT_LISTENER_CHANNELS.showComment,
+    },
+    autoReply: {
+      /** @deprecated 使用 tasks.commentListener.start 替代 */
+      startCommentListener: COMMENT_LISTENER_CHANNELS.start,
+      /** @deprecated 使用 tasks.commentListener.stop 替代 */
+      stopCommentListener: COMMENT_LISTENER_CHANNELS.stop,
+      /** @deprecated 使用 tasks.commentListener.stopped 替代 */
+      listenerStopped: COMMENT_LISTENER_CHANNELS.stopped,
+      /** @deprecated 使用 tasks.commentListener.stoppedFor(accountId) 替代 */
+      listenerStoppedFor: COMMENT_LISTENER_CHANNELS.stoppedFor,
+      /** @deprecated 使用 tasks.commentListener.showComment 替代 */
+      showComment: COMMENT_LISTENER_CHANNELS.showComment,
       startAutoReply: 'tasks:autoReply:startAutoReply',
       stopAutoReply: 'tasks:autoReply:stopAutoReply',
       replyGenerated: 'tasks:autoReply:replyGenerated',

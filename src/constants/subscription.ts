@@ -1,104 +1,32 @@
 /**
  * 订阅系统规则中心
  *
- * 【重构说明】
- * 本文件的权限判断函数已迁移至 src/domain/access
- * 新代码请使用：
- * - buildAccessContext() - 构建权限上下文
- * - checkAccess(context, feature) - 检查功能权限
- * - useAccessCheck(feature) - React Hook
- *
- * 本文件保留用于：
- * - 类型定义 (PlanType, PlanRule)
- * - 常量定义 (PLAN_RULES, PLAN_TEXT_MAP)
- * - 向后兼容（已标记废弃的函数）
+ * 当前仅保留兼容入口；基础套餐规则已收敛到 src/domain/access/planRules。
  */
 
+import type { PlanType } from '@/domain/access/planRules'
+import {
+  canUseAllFeatures as canUseAllFeaturesByPlan,
+  comparePlanLevel as comparePlanLevelByPlan,
+  PLAN_LEVEL as DOMAIN_PLAN_LEVEL,
+  PLAN_RULES as DOMAIN_PLAN_RULES,
+  PLAN_TEXT_MAP as DOMAIN_PLAN_TEXT_MAP,
+  VALID_PLANS as DOMAIN_VALID_PLANS,
+  getEffectivePlan as getEffectivePlanByRule,
+  getMaxLiveAccounts as getMaxLiveAccountsByPlan,
+  getUpgradeSuggestion as getUpgradePlanSuggestion,
+  isPaidPlan as isPaidPlanByPlan,
+  meetsMinimumPlan as meetsMinimumPlanByPlan,
+  normalizePlan as normalizePlanByRule,
+} from '@/domain/access/planRules'
 import type { UserStatus } from '@/types/auth'
 
-/** 套餐类型 */
-export type PlanType = 'free' | 'trial' | 'pro' | 'pro_max' | 'ultra'
+export type { PlanRule, PlanType } from '@/domain/access/planRules'
 
-/** 所有合法套餐值 */
-export const VALID_PLANS: PlanType[] = ['free', 'trial', 'pro', 'pro_max', 'ultra']
-
-/** 套餐显示文案映射 */
-export const PLAN_TEXT_MAP: Record<PlanType, string> = {
-  free: '免费版',
-  trial: '试用版',
-  pro: '专业版',
-  pro_max: '专业增强版',
-  ultra: '旗舰版',
-}
-
-/** 套餐等级 (用于比较) */
-export const PLAN_LEVEL: Record<PlanType, number> = {
-  free: 0,
-  trial: 1,
-  pro: 2,
-  pro_max: 3,
-  ultra: 4,
-}
-
-/** 套餐规则配置 */
-export interface PlanRule {
-  name: string
-  level: number
-  maxLiveAccounts: number
-  canUseAllFeatures: boolean
-  isPaid: boolean
-  themeColor: string
-  iconType: PlanType
-}
-
-/** 套餐规则表 - 单一事实来源 */
-export const PLAN_RULES: Record<PlanType, PlanRule> = {
-  free: {
-    name: '免费版',
-    level: 0,
-    maxLiveAccounts: 1,
-    canUseAllFeatures: false,
-    isPaid: false,
-    themeColor: 'gray',
-    iconType: 'free',
-  },
-  trial: {
-    name: '试用版',
-    level: 1,
-    maxLiveAccounts: 1,
-    canUseAllFeatures: true,
-    isPaid: false,
-    themeColor: 'blue',
-    iconType: 'trial',
-  },
-  pro: {
-    name: '专业版',
-    level: 2,
-    maxLiveAccounts: 1,
-    canUseAllFeatures: true,
-    isPaid: true,
-    themeColor: 'green',
-    iconType: 'pro',
-  },
-  pro_max: {
-    name: '专业增强版',
-    level: 3,
-    maxLiveAccounts: 3,
-    canUseAllFeatures: true,
-    isPaid: true,
-    themeColor: 'orange',
-    iconType: 'pro_max',
-  },
-  ultra: {
-    name: '旗舰版',
-    level: 4,
-    maxLiveAccounts: -1,
-    canUseAllFeatures: true,
-    isPaid: true,
-    themeColor: 'purple',
-    iconType: 'ultra',
-  },
-}
+export const VALID_PLANS = DOMAIN_VALID_PLANS
+export const PLAN_TEXT_MAP = DOMAIN_PLAN_TEXT_MAP
+export const PLAN_LEVEL = DOMAIN_PLAN_LEVEL
+export const PLAN_RULES = DOMAIN_PLAN_RULES
 
 /**
  * 归一化套餐值
@@ -108,15 +36,7 @@ export const PLAN_RULES: Record<PlanType, PlanRule> = {
  * 或直接使用 context.plan
  */
 export function normalizePlan(plan: string | null | undefined): PlanType {
-  if (!plan) return 'free'
-
-  const normalized = plan.toLowerCase().trim()
-
-  if (VALID_PLANS.includes(normalized as PlanType)) {
-    return normalized as PlanType
-  }
-
-  return 'free'
+  return normalizePlanByRule(plan)
 }
 
 /**
@@ -127,8 +47,7 @@ export function normalizePlan(plan: string | null | undefined): PlanType {
  * 或 checkAccess(context, feature).allowed
  */
 export function isPaidPlan(plan: string | null | undefined): boolean {
-  const normalized = normalizePlan(plan)
-  return PLAN_RULES[normalized]?.isPaid || false
+  return isPaidPlanByPlan(normalizePlan(plan))
 }
 
 /**
@@ -139,8 +58,7 @@ export function isPaidPlan(plan: string | null | undefined): boolean {
  * 或 checkAccess(context, 'useAllFeatures').allowed
  */
 export function canUseAllFeatures(plan: string | null | undefined): boolean {
-  const normalized = normalizePlan(plan)
-  return PLAN_RULES[normalized]?.canUseAllFeatures || false
+  return canUseAllFeaturesByPlan(normalizePlan(plan))
 }
 
 /**
@@ -150,8 +68,7 @@ export function canUseAllFeatures(plan: string | null | undefined): boolean {
  * 使用 AccessControl.buildAccessContext() + context.maxLiveAccounts
  */
 export function getMaxLiveAccounts(plan: string | null | undefined): number {
-  const normalized = normalizePlan(plan)
-  return PLAN_RULES[normalized]?.maxLiveAccounts ?? 1
+  return getMaxLiveAccountsByPlan(normalizePlan(plan))
 }
 
 /**
@@ -194,9 +111,7 @@ export function getAccountLimitMessage(plan: string | null | undefined): string 
  * 使用 AccessControl.Policy.comparePlanLevel(planA, planB)
  */
 export function comparePlanLevel(planA: string, planB: string): number {
-  const levelA = PLAN_LEVEL[normalizePlan(planA)]
-  const levelB = PLAN_LEVEL[normalizePlan(planB)]
-  return levelA - levelB
+  return comparePlanLevelByPlan(normalizePlan(planA), normalizePlan(planB))
 }
 
 /**
@@ -209,7 +124,7 @@ export function meetsMinimumPlan(
   currentPlan: string | null | undefined,
   requiredPlan: PlanType,
 ): boolean {
-  return comparePlanLevel(currentPlan || 'free', requiredPlan) >= 0
+  return meetsMinimumPlanByPlan(normalizePlan(currentPlan), requiredPlan)
 }
 
 /**
@@ -223,17 +138,7 @@ export function getEffectivePlan(
   plan: string | null | undefined,
   trialStatus?: { is_active?: boolean; is_expired?: boolean } | null,
 ): PlanType {
-  const normalizedPlan = normalizePlan(plan)
-
-  if (['pro', 'pro_max', 'ultra'].includes(normalizedPlan)) {
-    return normalizedPlan as PlanType
-  }
-
-  if (normalizedPlan === 'trial' || (trialStatus?.is_active && !trialStatus?.is_expired)) {
-    return 'trial'
-  }
-
-  return 'free'
+  return getEffectivePlanByRule(plan, trialStatus)
 }
 
 /**
@@ -252,7 +157,9 @@ export function getSubscriptionFromUserStatus(userStatus: UserStatus | null) {
     }
   }
 
-  const plan = getEffectivePlan(userStatus.plan, userStatus.trial)
+  // 服务端 userStatus.plan 已经是套餐真相源；
+  // 这里只保留兼容出口，不再在前端重新推导正式套餐与试用优先级。
+  const plan = normalizePlan(userStatus.plan)
 
   let expireAt: number | null = null
   let isExpired = false
@@ -265,7 +172,10 @@ export function getSubscriptionFromUserStatus(userStatus: UserStatus | null) {
   return {
     plan,
     expireAt,
-    maxAccounts: userStatus.max_accounts ?? getMaxLiveAccounts(plan),
+    maxAccounts:
+      userStatus.capabilities?.max_live_accounts ??
+      userStatus.max_accounts ??
+      getMaxLiveAccounts(plan),
     isExpired,
   }
 }
@@ -278,6 +188,11 @@ export function getSubscriptionFromUserStatus(userStatus: UserStatus | null) {
  */
 export function getUpgradeSuggestion(currentPlan: string): string {
   const normalized = normalizePlan(currentPlan)
+  const targetPlan = getUpgradePlanSuggestion(normalized)
+
+  if (!targetPlan) {
+    return ''
+  }
 
   if (normalized === 'free') {
     return '升级专业版可使用全部功能'
@@ -292,5 +207,5 @@ export function getUpgradeSuggestion(currentPlan: string): string {
     return '升级旗舰版可无限制添加直播账号'
   }
 
-  return ''
+  return `升级 ${PLAN_TEXT_MAP[targetPlan]} 可获得更多权益`
 }

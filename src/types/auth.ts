@@ -1,4 +1,4 @@
-import type { PlanType } from '@/constants/subscription'
+import type { PlanType } from '@/domain/access/planRules'
 
 /**
  * 用户类型
@@ -137,6 +137,19 @@ export interface UserStatus {
     end_at?: string | null
     is_active?: boolean
     is_expired?: boolean
+  }
+  capabilities?: {
+    is_paid_user?: boolean
+    can_use_all_features?: boolean
+    max_live_accounts?: number
+    feature_access?: Record<
+      string,
+      {
+        requires_auth?: boolean
+        required_plan?: PlanType
+        can_access?: boolean
+      }
+    >
   }
 }
 

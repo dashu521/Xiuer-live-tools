@@ -19,15 +19,8 @@ import { useAccounts } from '@/hooks/useAccounts'
 import { useLiveControlStore } from '@/hooks/useLiveControl'
 import { useOneClickStart } from '@/hooks/useOneClickStart'
 import { cn } from '@/lib/utils'
+import { getTaskDisplayName } from '@/tasks/taskMeta'
 import type { AccountTaskState, TaskStatusInfo } from '@/types/account-status'
-
-// 任务名称映射 - 按照侧边栏顺序
-const TASK_NAME_MAP: Record<string, string> = {
-  autoSpeak: '自动发言',
-  autoPopup: '自动弹窗',
-  autoReply: '自动回复',
-  liveStats: '数据监控',
-}
 
 // 任务顺序 - 按照侧边栏从上到下排列
 const TASK_ORDER = ['autoSpeak', 'autoPopup', 'autoReply', 'liveStats']
@@ -152,7 +145,7 @@ function CompactAccountItem({
             {TASK_ORDER.map(taskId => (
               <div key={taskId} className="flex items-center gap-2 text-xs">
                 <TaskStatusDot status={taskStatuses[taskId]} size="sm" />
-                <span className="text-muted-foreground">{TASK_NAME_MAP[taskId]}</span>
+                <span className="text-muted-foreground">{getTaskDisplayName(taskId)}</span>
               </div>
             ))}
           </div>
@@ -258,7 +251,7 @@ function ExpandedAccountRow({
           <div key={taskId} className="flex items-center gap-1">
             <TaskStatusDot status={taskStatuses[taskId].status} size="md" />
             <span className="text-xs text-muted-foreground hidden sm:inline whitespace-nowrap">
-              {TASK_NAME_MAP[taskId]}
+              {getTaskDisplayName(taskId)}
             </span>
           </div>
         ))}

@@ -32,6 +32,7 @@ from schemas import (
     AuthResponse,
     ChangePasswordBody,
     ErrorDetail,
+    FeatureAccessOut,
     LoginBody,
     LoginResponse,
     RefreshBody,
@@ -39,12 +40,20 @@ from schemas import (
     RegisterBody,
     SetPasswordBody,
     TrialOut,
+    UserCapabilitiesOut,
     UserOut,
     UserStatusResponse,
     err_account_exists,
     err_invalid_params,
     err_wrong_password,
     err_token_invalid,
+)
+from auth_feature_rules import build_feature_access
+from subscription_rules import (
+    can_use_all_features,
+    is_paid_plan,
+    normalize_plan,
+    resolve_user_max_accounts,
 )
 
 router = APIRouter(prefix="", tags=["auth"])
@@ -89,10 +98,10 @@ def build_user_status_response(user: User, db: Optional[Session] = None) -> User
                 {"u": user.id},
             ).fetchone()
             if sub_row and sub_row[0]:
-                sub_plan = sub_row[0].strip().lower()
+                sub_plan = normalize_plan(sub_row[0])
                 sub_end_dt = sub_row[1]
                 # 检查订阅是否过期
-                if sub_end_dt and sub_end_dt > now:
+                if is_paid_plan(sub_plan) and sub_end_dt and sub_end_dt > now:
                     plan = sub_plan
                     expire_at = sub_end_dt
         except Exception as e:
@@ -125,9 +134,9 @@ def build_user_status_response(user: User, db: Optional[Session] = None) -> User
     
     # 【第3优先级】兜底：从 user 对象获取（无数据库连接时）
     if plan == "free":
-        user_plan = getattr(user, "plan", None)
-        if user_plan and user_plan.lower() in ["pro", "pro_max", "ultra"]:
-            plan = user_plan.lower()
+        user_plan = normalize_plan(getattr(user, "plan", None))
+        if is_paid_plan(user_plan):
+            plan = user_plan
             # 从 user 表获取过期时间
             user_expire = getattr(user, "expire_at", None)
             if user_expire:
@@ -156,11 +165,21 @@ def build_user_status_response(user: User, db: Optional[Session] = None) -> User
         trial = TrialOut(is_active=False, is_expired=False)
     
     # 如果有正式订阅，trial.is_active 应该为 false
-    if plan in ["pro", "pro_max", "ultra"]:
+    if is_paid_plan(plan):
         trial = TrialOut(is_active=False, is_expired=trial.is_expired, start_at=trial.start_at, end_at=trial.end_at)
 
     has_password = not verify_password("!", user.password_hash)
-    max_accounts = getattr(user, "max_accounts", 1)
+    max_accounts = resolve_user_max_accounts(plan, getattr(user, "max_accounts", None))
+    feature_access = {
+        feature: FeatureAccessOut(**access)
+        for feature, access in build_feature_access(plan, is_authenticated=True).items()
+    }
+    capabilities = UserCapabilitiesOut(
+        is_paid_user=is_paid_plan(plan),
+        can_use_all_features=can_use_all_features(plan),
+        max_live_accounts=max_accounts,
+        feature_access=feature_access,
+    )
 
     return UserStatusResponse(
         username=username,
@@ -170,7 +189,9 @@ def build_user_status_response(user: User, db: Optional[Session] = None) -> User
         has_password=has_password,
         created_at=user.created_at.isoformat() if user.created_at else None,
         last_login_at=user.last_login_at.isoformat() if user.last_login_at else None,
+        expire_at=expire_at.isoformat() if expire_at else None,
         trial=trial,
+        capabilities=capabilities,
     )
 
 
@@ -466,7 +487,7 @@ def start_trial(
         Subscription.current_period_end > datetime.utcnow()
     ).first()
     
-    if existing_sub and existing_sub.plan in ["pro", "pro_max", "ultra"]:
+    if existing_sub and is_paid_plan(existing_sub.plan):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": "already_paid", "message": "您已是付费会员，无需试用"},

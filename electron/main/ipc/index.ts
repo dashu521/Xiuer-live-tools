@@ -4,7 +4,7 @@ import { setupAuthHandlers } from './auth'
 import { setupAutoMessageIpcHandlers } from './autoMessage'
 import { setupAutoPopUpIpcHandlers } from './autoPopUp'
 import { setupBrowserIpcHandlers } from './browser'
-import { setupAutoReplyIpcHandlers } from './commentListener'
+import { setupCommentListenerIpcHandlers } from './commentListener'
 import { setupLiveControlIpcHandlers } from './connection'
 import { setupDiagnosticsIpcHandlers } from './diagnostics'
 import { setupGiftCardIpcHandlers } from './giftCard'
@@ -17,7 +17,7 @@ setupDiagnosticsIpcHandlers()
 setupLiveControlIpcHandlers()
 setupAIChatIpcHandlers()
 setupAutoPopUpIpcHandlers()
-setupAutoReplyIpcHandlers()
+setupCommentListenerIpcHandlers()
 setupAutoMessageIpcHandlers()
 setupBrowserIpcHandlers()
 setupAppIpcHandlers()

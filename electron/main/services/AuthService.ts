@@ -1,8 +1,16 @@
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
-
-// 统一套餐类型
-type PlanType = 'free' | 'trial' | 'pro' | 'pro_max' | 'ultra'
+import {
+  getRequiredPlan as getRequiredPlanByFeature,
+  requiresAuthentication as requiresAuthenticationByFeature,
+} from 'shared/authFeatureRules'
+import {
+  canUseAllFeatures as canUseAllFeaturesByPlan,
+  getMaxLiveAccounts as getMaxLiveAccountsByPlan,
+  meetsMinimumPlan,
+  normalizePlan,
+  type PlanType,
+} from 'shared/planRules'
 
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET
@@ -55,40 +63,6 @@ interface AuthResponse {
 }
 
 import { getAuthDatabase } from './AuthDatabase'
-
-/** 套餐等级 (用于比较) */
-const PLAN_LEVEL: Record<PlanType, number> = {
-  free: 0,
-  trial: 1,
-  pro: 2,
-  pro_max: 3,
-  ultra: 4,
-}
-
-/** 套餐规则配置 */
-const PLAN_RULES: Record<PlanType, { maxLiveAccounts: number; canUseAllFeatures: boolean }> = {
-  free: { maxLiveAccounts: 1, canUseAllFeatures: false },
-  trial: { maxLiveAccounts: 1, canUseAllFeatures: true },
-  pro: { maxLiveAccounts: 1, canUseAllFeatures: true },
-  pro_max: { maxLiveAccounts: 3, canUseAllFeatures: true },
-  ultra: { maxLiveAccounts: -1, canUseAllFeatures: true }, // -1 表示无限制
-}
-
-/**
- * 归一化套餐值
- */
-function _normalizePlan(plan: string | null | undefined): PlanType {
-  if (!plan) return 'free'
-
-  const normalized = plan.toLowerCase().trim()
-
-  // 直接匹配
-  if (['free', 'trial', 'pro', 'pro_max', 'ultra'].includes(normalized)) {
-    return normalized as PlanType
-  }
-
-  return 'free'
-}
 
 export class AuthService {
   private static readonly TOKEN_EXPIRY_HOURS = 24 * 7 // 7 days
@@ -284,16 +258,14 @@ export class AuthService {
   static hasPlanLevel(user: Omit<User, 'passwordHash'> | null, requiredPlan: PlanType): boolean {
     if (!user) return requiredPlan === 'free'
 
-    const userPlan = user.plan
-    const userLevel = PLAN_LEVEL[userPlan] ?? 0
-    const requiredLevel = PLAN_LEVEL[requiredPlan] ?? 0
+    const userPlan = normalizePlan(user.plan)
 
     // 检查试用是否过期
     if (userPlan === 'trial' && user.expire_at) {
-      return Date.now() < user.expire_at && userLevel >= requiredLevel
+      return Date.now() < user.expire_at && meetsMinimumPlan(userPlan, requiredPlan)
     }
 
-    return userLevel >= requiredLevel
+    return meetsMinimumPlan(userPlan, requiredPlan)
   }
 
   /**
@@ -303,14 +275,14 @@ export class AuthService {
   static canUseAllFeatures(user: Omit<User, 'passwordHash'> | null): boolean {
     if (!user) return false
 
-    const userPlan = user.plan
+    const userPlan = normalizePlan(user.plan)
 
     // 检查试用是否过期
     if (userPlan === 'trial' && user.expire_at) {
       if (Date.now() >= user.expire_at) return false
     }
 
-    return PLAN_RULES[userPlan]?.canUseAllFeatures ?? false
+    return canUseAllFeaturesByPlan(userPlan)
   }
 
   /**
@@ -318,7 +290,7 @@ export class AuthService {
    */
   static getMaxLiveAccounts(user: Omit<User, 'passwordHash'> | null): number {
     if (!user) return 1
-    return PLAN_RULES[user.plan]?.maxLiveAccounts ?? 1
+    return getMaxLiveAccountsByPlan(normalizePlan(user.plan))
   }
 
   /**
@@ -335,17 +307,7 @@ export class AuthService {
 
   // Check if feature requires authentication
   static requiresAuthentication(feature: string): boolean {
-    const featuresRequiringAuth: Record<string, boolean> = {
-      auto_reply: true,
-      auto_message: true,
-      auto_popup: true,
-      ai_chat: true,
-      live_control: false,
-      settings: false,
-      preview: false,
-    }
-
-    return featuresRequiringAuth[feature] || false
+    return requiresAuthenticationByFeature(feature)
   }
 
   /**
@@ -354,17 +316,7 @@ export class AuthService {
    * 只有免费版和试用版有功能限制
    */
   static getRequiredPlan(feature: string): PlanType {
-    const featurePlans: Record<string, PlanType> = {
-      auto_reply: 'trial',
-      auto_message: 'trial',
-      auto_popup: 'trial',
-      ai_chat: 'pro',
-      live_control: 'free',
-      settings: 'free',
-      preview: 'free',
-    }
-
-    return featurePlans[feature] || 'free'
+    return getRequiredPlanByFeature(feature)
   }
 
   static getUserById(userId: string): User | null {

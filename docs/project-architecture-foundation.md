@@ -161,12 +161,15 @@
 
 - token 的唯一写入口在主进程
 - renderer 不再作为 token 权威写源
+- access token 刷新必须走正式 `auth.refreshSession` IPC
 - preload/global/shared 契约必须保持一致
+- 新增 IPC 通道后，必须同步再生成 preload 白名单
 
 主文件：
 
 - `/Users/xiuer/TRAE-CN/Xiuer-live-tools/electron/main/ipc/auth.ts`
 - `/Users/xiuer/TRAE-CN/Xiuer-live-tools/electron/preload/auth.ts`
+- `/Users/xiuer/TRAE-CN/Xiuer-live-tools/electron/preload/ipcWhitelist.gen.ts`
 - `/Users/xiuer/TRAE-CN/Xiuer-live-tools/src/stores/authStore.ts`
 - `/Users/xiuer/TRAE-CN/Xiuer-live-tools/src/services/apiClient.ts`
 - `/Users/xiuer/TRAE-CN/Xiuer-live-tools/shared/electron-api.d.ts`
@@ -175,6 +178,7 @@
 
 - 不允许新增 renderer 侧直接写 token 的旁路
 - 不允许再次恢复废弃的 `setTokens/getTokens` 语义
+- 不允许手改 whitelist 语义却不回写 `shared/ipcChannels.ts` 和生成产物
 
 ### 3.3 权限 / 套餐 / 能力真相源
 
@@ -226,6 +230,7 @@
 - 自动回复与数据监控不互相依赖
 - 两者共同依赖 `comment-listener runtime`
 - 共享评论监听是基础设施，不属于自动回复私有能力
+- 评论监听 IPC 正名为 `commentListener`，`autoReply` 下的旧通道仅保留兼容别名
 
 主文件：
 
@@ -240,6 +245,7 @@
 - 自动回复启动不应自动点亮数据监控
 - 数据监控启动不应自动点亮自动回复
 - 停止一个消费者时，只释放自己的监听占用；只有无消费者时才真正关闭底层监听
+- `shared/ipcChannels.ts`、preload whitelist、renderer 监听名称必须同步为 `commentListener`
 
 ---
 

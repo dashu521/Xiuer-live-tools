@@ -5,8 +5,8 @@ import { isSameSubAccountLiveRoomUrl } from 'shared/subAccountLiveRoom'
 import { AbortError } from '#/errors/AppError'
 import type { ScopedLogger } from '#/logger'
 import {
-  SubAccountVerificationRequiredError,
   type SubAccountSession,
+  SubAccountVerificationRequiredError,
   subAccountManager,
 } from '#/managers/SubAccountManager'
 import {
@@ -246,7 +246,9 @@ export function createSubAccountInteractionTask(
         } else {
           if (sendResult.error instanceof SubAccountVerificationRequiredError) {
             const verificationMessage = sendResult.error.message
-            logger.warn(`小号 ${subAccount.name} 触发平台安全验证，任务将暂停：${verificationMessage}`)
+            logger.warn(
+              `小号 ${subAccount.name} 触发平台安全验证，任务将暂停：${verificationMessage}`,
+            )
             windowManager.send(IPC_CHANNELS.tasks.subAccount.accountStatusChanged, account.id, {
               accountId: subAccount.id,
               accountName: subAccount.name,

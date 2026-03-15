@@ -30,9 +30,25 @@ class MockTask extends BaseTask {
   }
 }
 
+class MockAutoReplyTask extends MockTask {
+  constructor() {
+    super('autoReply')
+  }
+}
+
+class MockAutoPopupTask extends MockTask {
+  constructor() {
+    super('autoPopup')
+  }
+}
+
 // 模拟 TaskContext
 const createMockContext = (accountId: string): TaskContext => ({
   accountId,
+  gateState: {
+    connectionState: 'connected',
+    streamState: 'live',
+  },
   toast: {
     success: vi.fn(),
     error: vi.fn(),
@@ -46,6 +62,8 @@ describe('TaskManager 多账号隔离测试', () => {
   beforeEach(() => {
     taskManager = new TaskManagerImpl()
     // 注册模拟任务
+    taskManager.register(MockAutoReplyTask as any)
+    taskManager.register(MockAutoPopupTask as any)
     taskManager.register(MockTask as any)
   })
 
@@ -122,6 +140,19 @@ describe('TaskManager 多账号隔离测试', () => {
       expect(statusA.autoSpeak).toBe('running')
       expect(statusB.autoSpeak).toBe('idle')
     })
+
+    it('应为 autoReply 和 autoPopup 维护独立状态', async () => {
+      const ctxA = createMockContext('account-a')
+      const ctxB = createMockContext('account-b')
+
+      await taskManager.start('autoReply', ctxA)
+      await taskManager.start('autoPopup', ctxB)
+
+      expect(taskManager.getStatus('autoReply', 'account-a')).toBe('running')
+      expect(taskManager.getStatus('autoReply', 'account-b')).toBe('idle')
+      expect(taskManager.getStatus('autoPopup', 'account-a')).toBe('idle')
+      expect(taskManager.getStatus('autoPopup', 'account-b')).toBe('running')
+    })
   })
 
   describe('账号隔离 - 并发场景', () => {
@@ -179,6 +210,21 @@ describe('TaskManager 多账号隔离测试', () => {
       // 账号B的任务应该不受影响
       expect(taskManager.getStatus('autoSpeak', 'account-b')).toBe('running')
     })
+
+    it('stopAllForAccount 应停止该账号下的多个任务', async () => {
+      const ctxA = createMockContext('account-a')
+      const ctxB = createMockContext('account-b')
+
+      await taskManager.start('autoReply', ctxA)
+      await taskManager.start('autoPopup', ctxA)
+      await taskManager.start('autoSpeak', ctxB)
+
+      await taskManager.stopAllForAccount('account-a', 'manual')
+
+      expect(taskManager.getStatus('autoReply', 'account-a')).toBe('stopped')
+      expect(taskManager.getStatus('autoPopup', 'account-a')).toBe('stopped')
+      expect(taskManager.getStatus('autoSpeak', 'account-b')).toBe('running')
+    })
   })
 
   describe('错误处理', () => {
@@ -200,6 +246,28 @@ describe('TaskManager 多账号隔离测试', () => {
       await expect(
         taskManager.stop('autoSpeak', 'manual', 'non-existent-account'),
       ).resolves.not.toThrow()
+    })
+
+    it('任务实例已停止但管理器状态残留为 running 时应允许重新启动', async () => {
+      const ctxA = createMockContext('account-a')
+
+      const firstStart = await taskManager.start('autoReply', ctxA)
+      expect(firstStart.success).toBe(true)
+
+      const accountTasks = (
+        taskManager as unknown as {
+          accountTasks: Map<string, Map<TaskId, { status: string; taskInstance: MockTask }>>
+        }
+      ).accountTasks
+      const taskState = accountTasks.get('account-a')?.get('autoReply')
+      expect(taskState).toBeDefined()
+
+      taskState!.status = 'running'
+      taskState!.taskInstance.status = 'stopped'
+
+      const secondStart = await taskManager.start('autoReply', ctxA)
+      expect(secondStart.success).toBe(true)
+      expect(taskManager.getStatus('autoReply', 'account-a')).toBe('running')
     })
   })
 
@@ -226,6 +294,19 @@ describe('TaskManager 多账号隔离测试', () => {
       // 两个账号的任务都应该停止
       expect(taskManager.getStatus('autoSpeak', 'account-a')).toBe('stopped')
       expect(taskManager.getStatus('autoSpeak', 'account-b')).toBe('stopped')
+    })
+
+    it('syncStatus 应支持 autoReply 和 autoPopup 的后端事件校准', async () => {
+      const ctxA = createMockContext('account-a')
+
+      await taskManager.start('autoReply', ctxA)
+      await taskManager.start('autoPopup', ctxA)
+
+      taskManager.syncStatus('autoReply', 'stopped', 'account-a')
+      taskManager.syncStatus('autoPopup', 'error', 'account-a')
+
+      expect(taskManager.getStatus('autoReply', 'account-a')).toBe('stopped')
+      expect(taskManager.getStatus('autoPopup', 'account-a')).toBe('error')
     })
   })
 })

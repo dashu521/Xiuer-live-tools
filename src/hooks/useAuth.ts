@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
+import { normalizePlan, PLAN_TEXT_MAP } from '@/domain/access'
 import { useAuthStore } from '@/stores/authStore'
 
 export function useAuthInit() {
@@ -20,19 +21,21 @@ export function useRequireAuth(feature: string) {
 
     try {
       const response = await window.authAPI.checkFeatureAccess(token || '', feature)
+      const { featureAccess } = response
 
-      if (!response.canAccess) {
-        if (response.requiresAuth) {
+      if (!featureAccess.can_access) {
+        if (featureAccess.requires_auth) {
           // Emit event to show auth dialog
           window.dispatchEvent(new CustomEvent('auth:required', { detail: { feature } }))
         } else {
           // Show license upgrade message
-          const licenseText = getLicenseText(response.requiredLicense)
+          const requiredPlan = normalizePlan(featureAccess.required_plan)
+          const licenseText = PLAN_TEXT_MAP[requiredPlan]
           window.dispatchEvent(
             new CustomEvent('auth:license-required', {
               detail: {
                 feature,
-                requiredLicense: response.requiredLicense,
+                requiredPlan,
                 message: `此功能需要 ${licenseText} 许可证`,
               },
             }),
@@ -44,22 +47,6 @@ export function useRequireAuth(feature: string) {
     } catch (error) {
       console.error('Feature access check failed:', error)
       return false
-    }
-  }
-
-  const getLicenseText = (licenseType: string) => {
-    // 首发版：仅支持标准套餐名称
-    switch (licenseType) {
-      case 'trial':
-        return '试用版'
-      case 'pro':
-        return '专业版'
-      case 'pro_max':
-        return '专业增强版'
-      case 'ultra':
-        return '旗舰版'
-      default:
-        return '免费版'
     }
   }
 

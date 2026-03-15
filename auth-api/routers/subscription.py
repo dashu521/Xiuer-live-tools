@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from deps import get_current_user
 from models import User
+from subscription_rules import normalize_plan
 
 router = APIRouter(prefix="/subscription", tags=["subscription"])
 
@@ -71,7 +72,7 @@ def subscription_status(
             "expired": True,
         }
     current_period_end = int(row[0]) if row[0] is not None else 0
-    plan = (row[1] or "trial").strip() if row[1] else "trial"
+    plan = normalize_plan(row[1], default="trial")
     expired = current_period_end < now_ts
 
     return {

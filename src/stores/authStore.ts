@@ -6,7 +6,7 @@ import {
   AUTH_REMEMBER_ME_KEY,
   AUTH_ZUSTAND_PERSIST_KEY,
 } from '@/constants/authStorageKeys'
-import { getEffectivePlan, normalizePlan } from '@/constants/subscription'
+import { normalizePlan } from '@/domain/access/planRules'
 import { useAccounts } from '../hooks/useAccounts'
 import { useAutoMessageStore } from '../hooks/useAutoMessage'
 import { useAutoPopUpStore } from '../hooks/useAutoPopUp'
@@ -59,6 +59,16 @@ function safeUserFromUsername(username: string): SafeUser {
     machineFingerprint: '',
     balance: 0,
   }
+}
+
+function resolvePlanFromStatus(
+  status: UserStatus | null | undefined,
+  fallbackPlan?: string | null,
+): SafeUser['plan'] {
+  if (status?.plan) {
+    return normalizePlan(status.plan)
+  }
+  return normalizePlan(fallbackPlan)
 }
 
 /** 将后端 /login 返回的 user 转为 SafeUser */
@@ -182,38 +192,6 @@ export const useAuthStore = create<AuthStore>()(
           if (response.success && response.token) {
             const user = response.user ?? safeUserFromUsername(credentials.username)
 
-            // [SECURITY] 将敏感 token 保存到主进程安全存储
-            console.log('[AuthStore] Saving tokens to main process...')
-            if (typeof window !== 'undefined') {
-              const authAPI = (
-                window as unknown as {
-                  authAPI?: {
-                    setTokens?: (tokens: {
-                      token: string | null
-                      refreshToken: string | null
-                    }) => Promise<void>
-                  }
-                }
-              ).authAPI
-              console.log('[AuthStore] authAPI exists:', !!authAPI)
-              console.log('[AuthStore] setTokens exists:', !!authAPI?.setTokens)
-              if (authAPI?.setTokens) {
-                try {
-                  await authAPI.setTokens({
-                    token: response.token,
-                    refreshToken: refreshToken ?? null,
-                  })
-                  console.log('[AuthStore] Tokens saved successfully')
-                } catch (err) {
-                  console.error('[AuthStore] Failed to save tokens to main process:', err)
-                }
-              } else {
-                console.warn('[AuthStore] authAPI.setTokens not available')
-              }
-            } else {
-              console.warn('[AuthStore] window is undefined')
-            }
-
             set({
               isAuthenticated: true,
               user,
@@ -234,10 +212,10 @@ export const useAuthStore = create<AuthStore>()(
               const status = await getUserStatus()
               if (status) {
                 get().setUserStatus(status)
-                // 同步更新 user.plan - 使用 getEffectivePlan 确保正式套餐优先于试用
+                // 服务端 userStatus.plan 是套餐真相源；前端只做归一化。
                 const currentUser = get().user
                 if (currentUser && status.plan) {
-                  const effectivePlan = getEffectivePlan(status.plan, status.trial)
+                  const effectivePlan = resolvePlanFromStatus(status, currentUser.plan)
                   set({
                     user: {
                       ...currentUser,
@@ -362,39 +340,6 @@ export const useAuthStore = create<AuthStore>()(
           // 成功条件与后端一致：res.status==200 且 res.data.success===true；不依赖 user/token
           if (response.success) {
             if (response.token && response.user) {
-              // [SECURITY] 将敏感 token 保存到主进程安全存储
-              if (
-                typeof window !== 'undefined' &&
-                (
-                  window as unknown as {
-                    authAPI?: {
-                      setTokens?: (tokens: {
-                        token: string | null
-                        refreshToken: string | null
-                      }) => Promise<void>
-                    }
-                  }
-                ).authAPI?.setTokens
-              ) {
-                try {
-                  await (
-                    window as unknown as {
-                      authAPI: {
-                        setTokens: (tokens: {
-                          token: string | null
-                          refreshToken: string | null
-                        }) => Promise<void>
-                      }
-                    }
-                  ).authAPI.setTokens({
-                    token: response.token,
-                    refreshToken: refreshToken ?? null,
-                  })
-                } catch (err) {
-                  console.error('[AuthStore] Failed to save tokens to main process:', err)
-                }
-              }
-
               set({
                 isAuthenticated: true,
                 user: response.user,
@@ -412,7 +357,11 @@ export const useAuthStore = create<AuthStore>()(
           // 【步骤B】统一错误处理：展示 status + 后端 detail + requestUrl；status 0 时引导尝试手机验证码注册
           const status = (response as { status?: number }).status
           const errorObj = (response as { error?: { code?: string; message?: string } }).error
-          const detail = errorObj?.message ?? (response as { detail?: string }).detail ?? extractErrorMessage(response, '') ?? ''
+          const detail =
+            errorObj?.message ??
+            (response as { detail?: string }).detail ??
+            extractErrorMessage(response, '') ??
+            ''
           const errorCode = errorObj?.code
           const requestUrl = (response as { requestUrl?: string }).requestUrl
           const isNetworkError = status === 0 || /fetch failed|network|timeout/i.test(detail || '')
@@ -425,10 +374,11 @@ export const useAuthStore = create<AuthStore>()(
             const { userMessage } = mapAuthError({ status, detail, requestUrl, errorCode })
             errorMessage = userMessage
           } else {
-            errorMessage = typeof status === 'number'
-              ? `注册失败（${status}）：${detail || '(无详情)'}${typeof requestUrl === 'string' ? `（请求地址：${requestUrl}）` : ''}`
-              : (detail || '注册失败') +
-                (typeof requestUrl === 'string' ? ` (请求地址: ${requestUrl})` : '')
+            errorMessage =
+              typeof status === 'number'
+                ? `注册失败（${status}）：${detail || '(无详情)'}${typeof requestUrl === 'string' ? `（请求地址：${requestUrl}）` : ''}`
+                : (detail || '注册失败') +
+                  (typeof requestUrl === 'string' ? ` (请求地址: ${requestUrl})` : '')
           }
           console.error(`[AuthStore] Register failed [${requestId}]:`, {
             error: errorMessage,
@@ -498,7 +448,7 @@ export const useAuthStore = create<AuthStore>()(
             try {
               // 停止评论监听（自动回复和数据监控）
               await window.ipcRenderer.invoke(
-                IPC_CHANNELS.tasks.autoReply.stopCommentListener,
+                IPC_CHANNELS.tasks.commentListener.stop,
                 currentAccountId,
               )
             } catch (e) {
@@ -720,10 +670,10 @@ export const useAuthStore = create<AuthStore>()(
               .then(status => {
                 if (status) {
                   get().setUserStatus(status)
-                  // 同步更新 user.plan - 使用 getEffectivePlan 确保正式套餐优先于试用
+                  // 服务端 userStatus.plan 是套餐真相源；前端只做归一化。
                   const currentUser = get().user
                   if (currentUser && status.plan) {
-                    const effectivePlan = getEffectivePlan(status.plan, status.trial)
+                    const effectivePlan = resolvePlanFromStatus(status, currentUser.plan)
                     // 如果 username 是手机号格式，更新 phone 和 username 显示
                     const isPhone = /^1[3-9]\d{9}$/.test(status.username)
                     set({
@@ -801,10 +751,10 @@ export const useAuthStore = create<AuthStore>()(
         const status = await getUserStatus()
         if (status) {
           set({ userStatus: status })
-          // 同步更新 user.plan - 使用 getEffectivePlan 确保正式套餐优先于试用
+          // 服务端 userStatus.plan 是套餐真相源；前端只做归一化。
           const currentUser = get().user
           if (currentUser && status.plan) {
-            const effectivePlan = getEffectivePlan(status.plan, status.trial)
+            const effectivePlan = resolvePlanFromStatus(status, currentUser.plan)
             set({
               user: {
                 ...currentUser,
@@ -835,33 +785,38 @@ export const useAuthStore = create<AuthStore>()(
           return { success: false as const, message: '开通试用失败' }
         }
         const username = get().user?.username ?? ''
-        const statusResult = await getTrialStatus(username)
-        console.log('[AuthStore] getTrialStatus result:', statusResult)
-        const statusData = statusResult.ok ? statusResult.data : null
-        const userStatus: UserStatus = statusData
-          ? {
-              username: get().user?.username ?? username,
-              status: 'active',
-              plan: statusData.active ? 'trial' : 'free',
-              trial: {
-                start_at:
-                  statusData.start_ts != null
-                    ? new Date(statusData.start_ts * 1000).toISOString()
-                    : null,
-                end_at:
-                  statusData.end_ts != null
-                    ? new Date(statusData.end_ts * 1000).toISOString()
-                    : null,
-                is_active: statusData.active,
-                is_expired: statusData.has_trial && !statusData.active,
-              },
-            }
-          : {
-              username: get().user?.username ?? username,
-              status: 'active',
-              plan: 'trial',
-              trial: { is_active: true },
-            }
+        const refreshedStatus = await getUserStatus()
+        const statusResult = refreshedStatus ? null : await getTrialStatus(username)
+        if (statusResult) {
+          console.log('[AuthStore] getTrialStatus result:', statusResult)
+        }
+        const statusData = statusResult?.ok ? statusResult.data : null
+        const userStatus: UserStatus =
+          refreshedStatus ??
+          (statusData
+            ? {
+                username: get().user?.username ?? username,
+                status: 'active',
+                plan: statusData.active ? 'trial' : 'free',
+                trial: {
+                  start_at:
+                    statusData.start_ts != null
+                      ? new Date(statusData.start_ts * 1000).toISOString()
+                      : null,
+                  end_at:
+                    statusData.end_ts != null
+                      ? new Date(statusData.end_ts * 1000).toISOString()
+                      : null,
+                  is_active: statusData.active,
+                  is_expired: statusData.has_trial && !statusData.active,
+                },
+              }
+            : {
+                username: get().user?.username ?? username,
+                status: 'active',
+                plan: 'trial',
+                trial: { is_active: true },
+              })
         console.log('[AuthStore] Setting userStatus after trial:', userStatus)
         set({ userStatus })
 

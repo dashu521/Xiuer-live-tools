@@ -105,7 +105,9 @@ export function createAutoPopupTask(
       Result.inspect(() => {
         // 统计有单独间隔配置的商品
         const customIntervalCount = normalizedConfig.goods.filter(g => g.interval).length
-        logger.info(`商品配置验证通过，共加载 ${normalizedConfig.goods.length} 个商品，其中 ${customIntervalCount} 个设置了单独间隔`)
+        logger.info(
+          `商品配置验证通过，共加载 ${normalizedConfig.goods.length} 个商品，其中 ${customIntervalCount} 个设置了单独间隔`,
+        )
       }),
     )
   }

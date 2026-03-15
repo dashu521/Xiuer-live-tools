@@ -6,17 +6,12 @@
 import { useMemoizedFn } from 'ahooks'
 import type { IpcChannels } from 'shared/electron-api'
 import { taskManager } from '@/tasks'
+import { getGateTaskName } from '@/tasks/taskMeta'
 import type { StopReason, TaskContext, TaskId } from '@/tasks/types'
 import { getStopReasonText } from '@/utils/taskGate'
 import { useAccounts } from './useAccounts'
+import { useLiveControlStore } from './useLiveControl'
 import { useToast } from './useToast'
-
-// 任务名称映射
-const TASK_NAME_MAP: Record<TaskId, string> = {
-  autoReply: 'auto-reply',
-  autoPopup: 'auto-popup',
-  autoSpeak: 'auto-comment',
-}
 
 /**
  * 使用 TaskManager 的 Hook
@@ -29,8 +24,16 @@ export function useTaskManager() {
    * 创建任务上下文
    */
   const createContext = useMemoizedFn((): TaskContext => {
+    const liveControlContext = useLiveControlStore.getState().contexts[currentAccountId]
+
     return {
       accountId: currentAccountId,
+      gateState: liveControlContext
+        ? {
+            connectionState: liveControlContext.connectState.status,
+            streamState: liveControlContext.streamState,
+          }
+        : undefined,
       toast: {
         success: (message: string) => toast.success(message),
         error: (message: string) => toast.error(message),
@@ -78,7 +81,7 @@ export function useTaskManager() {
 
       // 显示停止提示（仅非手动停止时显示）
       if (reason !== 'manual') {
-        const taskName = TASK_NAME_MAP[taskId]
+        const taskName = getGateTaskName(taskId)
         const reasonText = getStopReasonText(reason, taskName)
         toast.error(reasonText)
       }

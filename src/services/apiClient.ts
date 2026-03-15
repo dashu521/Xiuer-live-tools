@@ -146,54 +146,31 @@ async function request<T>(
   }
 }
 
-/** POST /refresh 响应：仅返回 access_token（与 auth-api 无 /auth 前缀一致） */
-interface RefreshResponse {
-  access_token: string
-  token_type?: string
-}
-
 let refreshLock: Promise<string | null> | null = null
 
-/** 调用 POST /refresh，成功返回新 access_token 并写入 store，失败清空 token 并返回 null */
+/** 通过主进程刷新会话，成功返回新 access_token 并同步 renderer 镜像状态 */
 async function doRefresh(): Promise<string | null> {
   const { setToken, clearTokensAndUnauth } = useAuthStore.getState()
-  // 首发版：仅从主进程安全存储获取 refresh token，不保留降级逻辑
-  const refreshToken = await getRefreshTokenFromMainProcess()
-  if (!refreshToken) {
+  const authAPI = window.authAPI
+  if (!authAPI?.refreshSession) {
     clearTokensAndUnauth()
     return null
   }
 
-  const result = await request<RefreshResponse>('POST', '/refresh', null, {
-    refresh_token: refreshToken,
-  })
-  if (result.ok && result.data?.access_token) {
-    setToken(result.data.access_token)
-    // 更新主进程安全存储中的 token
-    const authAPI = (
-      window as {
-        authAPI?: {
-          setTokens?: (tokens: {
-            token: string | null
-            refreshToken: string | null
-          }) => Promise<void>
-        }
-      }
-    ).authAPI
-    if (authAPI?.setTokens) {
-      try {
-        await authAPI.setTokens({
-          token: result.data.access_token,
-          refreshToken: refreshToken,
-        })
-      } catch (err) {
-        console.error('[apiClient] Failed to update tokens in main process:', err)
-      }
+  try {
+    const result = await authAPI.refreshSession()
+    if (!result.success || !result.token) {
+      clearTokensAndUnauth()
+      return null
     }
-    return result.data.access_token
+
+    setToken(result.token)
+    return result.token
+  } catch (err) {
+    console.error('[apiClient] Failed to refresh session via main process:', err)
+    clearTokensAndUnauth()
+    return null
   }
-  clearTokensAndUnauth()
-  return null
 }
 
 /**

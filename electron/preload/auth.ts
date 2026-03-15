@@ -76,6 +76,15 @@ export const authAPI = {
     return await ipcRenderer.invoke(IPC_CHANNELS.auth.restoreSession)
   },
 
+  refreshSession: async (): Promise<{
+    success: boolean
+    token?: string
+    refreshToken?: string | null
+    error?: string
+  }> => {
+    return await ipcRenderer.invoke(IPC_CHANNELS.auth.refreshSession)
+  },
+
   // [SECURITY-FIX] Token 管理接口已收紧
   // renderer 不再直接获取/设置完整 token
 
@@ -108,32 +117,6 @@ export const authAPI = {
     return await ipcRenderer.invoke(IPC_CHANNELS.auth.getTokenInternal)
   },
 
-  /**
-   * [DEPRECATED-SECURITY] getTokens 已移除
-   * 原因：直接暴露完整 token 违反最小权限原则
-   * 迁移方案：
-   * - 检查登录状态：使用 getAuthSummary()
-   * - 发起鉴权请求：使用 proxyRequest()
-   */
-  getTokens: async (): Promise<AuthTokens> => {
-    console.warn(
-      '[SECURITY] authAPI.getTokens() is deprecated and will return nulls. Use getAuthSummary() or proxyRequest() instead.',
-    )
-    return { token: null, refreshToken: null }
-  },
-
-  /**
-   * [DEPRECATED-SECURITY] setTokens 已移除
-   * 原因：renderer 不应直接设置 token
-   * 登录/注册流程内部处理 token 存储
-   */
-  setTokens: async (_tokens: AuthTokens): Promise<void> => {
-    console.warn(
-      '[SECURITY] authAPI.setTokens() is deprecated and has no effect. Token storage is handled internally.',
-    )
-    // No-op: token storage is handled internally during login/register
-  },
-
   clearTokens: async (): Promise<void> => {
     return await ipcRenderer.invoke(IPC_CHANNELS.auth.clearTokens)
   },
@@ -141,9 +124,6 @@ export const authAPI = {
   // Feature access
   checkFeatureAccess: (token: string, feature: string) =>
     ipcRenderer.invoke(IPC_CHANNELS.auth.checkFeatureAccess, token, feature),
-
-  requiresAuthentication: (feature: string) =>
-    ipcRenderer.invoke(IPC_CHANNELS.auth.requiresAuthentication, feature),
 
   // User management
   updateUserProfile: (token: string, data: { username?: string; email?: string }) =>

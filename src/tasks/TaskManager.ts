@@ -4,7 +4,6 @@
  * 【修复】支持多账号隔离，每个账号的任务状态独立管理
  */
 
-import { useLiveControlStore } from '@/hooks/useLiveControl'
 import { gateCanRun } from './gateCheck'
 import type { StopReason, Task, TaskContext, TaskId, TaskStatus } from './types'
 import { BaseTask } from './types'
@@ -86,6 +85,22 @@ export class TaskManagerImpl {
   }
 
   /**
+   * 同步任务状态，不触发任务副作用。
+   * 用于后端事件已发生后，仅校准前端调度器状态。
+   */
+  syncStatus(taskId: TaskId, status: TaskStatus, accountId: string): void {
+    const accountMap = this.accountTasks.get(accountId)
+    const taskState = accountMap?.get(taskId)
+    if (!taskState) {
+      return
+    }
+
+    taskState.status = status
+    taskState.taskInstance.status = status
+    this.statusStore.set(taskId, status)
+  }
+
+  /**
    * 启动任务
    * @param taskId - 任务 ID
    * @param ctx - 任务上下文
@@ -108,11 +123,9 @@ export class TaskManagerImpl {
 
     const task = taskState.taskInstance
 
-    // Gate 检查
-    const liveControlStore = useLiveControlStore.getState()
-    const context = liveControlStore.contexts[accountId]
-    if (context) {
-      const gateResult = gateCanRun(context.connectState.status, context.streamState)
+    // Gate 检查：由调用方显式提供运行上下文，避免 TaskManager 反向依赖 UI store
+    if (ctx.gateState) {
+      const gateResult = gateCanRun(ctx.gateState.connectionState, ctx.gateState.streamState)
       if (!gateResult.ok) {
         console.log(`[TaskManager] Gate check failed for task ${taskId}: ${gateResult.reason}`)
         return {
@@ -122,7 +135,23 @@ export class TaskManagerImpl {
         }
       }
     } else {
-      console.warn(`[TaskManager] Context not found for account ${accountId}, skipping gate check`)
+      console.warn(
+        `[TaskManager] Gate state not provided for account ${accountId}, skipping gate check`,
+      )
+    }
+
+    // 任务实例可能被后端事件或任务内部直接置为 stopped/error，
+    // 但调度器状态还停留在 running/stopping。这里先做一次自愈校准。
+    if (
+      (taskState.status === 'running' || taskState.status === 'stopping') &&
+      task.status !== 'running' &&
+      task.status !== 'stopping'
+    ) {
+      console.warn(
+        `[TaskManager] Detected stale status for task ${taskId} on account ${accountId}, reconciling ${taskState.status} -> ${task.status}`,
+      )
+      taskState.status = task.status
+      this.statusStore.set(taskId, task.status)
     }
 
     // 【修复】检查该账号的任务是否已在运行

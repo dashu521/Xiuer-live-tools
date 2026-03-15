@@ -26,15 +26,15 @@ export interface ShortcutMapping {
  */
 export interface GoodsItemConfig {
   id: number
-  interval?: [number, number]  // 可选：单独设置间隔（毫秒）
+  interval?: [number, number] // 可选：单独设置间隔（毫秒）
 }
 
 interface AutoPopUpConfig {
   scheduler: {
-    interval: [number, number]  // 全局默认间隔（毫秒）
+    interval: [number, number] // 全局默认间隔（毫秒）
   }
-  goods: GoodsItemConfig[]      // 商品配置列表（替代 goodsIds）
-  goodsIds?: number[]           // 【兼容旧配置】
+  goods: GoodsItemConfig[] // 商品配置列表（替代 goodsIds）
+  goodsIds?: number[] // 【兼容旧配置】
   random: boolean
 }
 
@@ -51,7 +51,7 @@ const defaultContext = (): AutoPopUpContext => ({
     scheduler: {
       interval: [30000, 45000],
     },
-    goods: [],  // 【P1-3】使用 goods 替代 goodsIds
+    goods: [], // 【P1-3】使用 goods 替代 goodsIds
     random: false,
   },
   shortcuts: [],
@@ -140,7 +140,8 @@ export const useAutoPopUpStore = create<AutoPopUpStore>()(
             // 【P1-3】同步到主进程时，确保使用新的 goods 格式
             const ipcConfig = {
               ...config,
-              goods: config.goods || (config.goodsIds ? config.goodsIds.map(id => ({ id })) : undefined),
+              goods:
+                config.goods || (config.goodsIds ? config.goodsIds.map(id => ({ id })) : undefined),
             }
             window.ipcRenderer
               .invoke(IPC_CHANNELS.tasks.autoPopUp.updateConfig, accountId, ipcConfig)
@@ -181,7 +182,11 @@ export const useAutoPopUpStore = create<AutoPopUpStore>()(
               })
               if (savedContext) {
                 // 【P1-3】数据迁移：旧配置 goodsIds -> 新配置 goods
-                if (savedContext.config.goodsIds && savedContext.config.goodsIds.length > 0 && (!savedContext.config.goods || savedContext.config.goods.length === 0)) {
+                if (
+                  savedContext.config.goodsIds &&
+                  savedContext.config.goodsIds.length > 0 &&
+                  (!savedContext.config.goods || savedContext.config.goods.length === 0)
+                ) {
                   savedContext.config.goods = savedContext.config.goodsIds.map(id => ({ id }))
                   console.log(`[AutoPopUp] 数据迁移: account ${account.id} goodsIds -> goods`)
                 }

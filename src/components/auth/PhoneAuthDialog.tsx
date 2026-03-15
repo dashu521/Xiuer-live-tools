@@ -4,7 +4,7 @@ import { SetPasswordDialog } from '@/components/auth/SetPasswordDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { getEffectivePlan } from '@/constants/subscription'
+import { normalizePlan } from '@/domain/access/planRules'
 import { useAccounts } from '@/hooks/useAccounts'
 import { useAutoMessageStore } from '@/hooks/useAutoMessage'
 import { useAutoPopUpStore } from '@/hooks/useAutoPopUp'
@@ -277,7 +277,7 @@ export function PhoneAuthDialog({
               // 同步更新 user.plan
               const currentUser = useAuthStore.getState().user
               if (currentUser && status.plan) {
-                const effectivePlan = getEffectivePlan(status.plan, status.trial)
+                const effectivePlan = normalizePlan(status.plan)
                 setUser({
                   ...currentUser,
                   plan: effectivePlan,

@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import type { PlanType } from '@/constants/subscription'
+import type { PlanType } from '@/domain/access/planRules'
 
 export interface UserCenterProps {
   isOpen: boolean

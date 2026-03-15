@@ -1,10 +1,7 @@
 import { useMemoizedFn } from 'ahooks'
 import { useEffect, useMemo, useRef } from 'react'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
-import {
-  SUB_ACCOUNT_STORAGE_KEY,
-  SUB_ACCOUNT_WORKSPACE_ID,
-} from 'shared/subAccountWorkspace'
+import { SUB_ACCOUNT_STORAGE_KEY, SUB_ACCOUNT_WORKSPACE_ID } from 'shared/subAccountWorkspace'
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { useShallow } from 'zustand/react/shallow'
@@ -395,7 +392,8 @@ export const useSubAccountActions = () => {
   return useMemo(() => {
     const getStore = () => useSubAccountStore.getState()
     return {
-      setIsRunning: (running: boolean) => getStore().setIsRunning(SUB_ACCOUNT_WORKSPACE_ID, running),
+      setIsRunning: (running: boolean) =>
+        getStore().setIsRunning(SUB_ACCOUNT_WORKSPACE_ID, running),
       setScheduler: (scheduler: SubAccountInteractionConfig['scheduler']) =>
         updateConfig({ scheduler }),
       setMessages: (messages: SubAccountMessage[]) => updateConfig({ messages }),
@@ -414,8 +412,7 @@ export const useSubAccountActions = () => {
       setBatchCount: (count: number) => getStore().setBatchCount(SUB_ACCOUNT_WORKSPACE_ID, count),
       setLiveRoomUrl: (url: string) => getStore().setLiveRoomUrl(SUB_ACCOUNT_WORKSPACE_ID, url),
       addGroup: (group: SubAccountGroup) => getStore().addGroup(SUB_ACCOUNT_WORKSPACE_ID, group),
-      removeGroup: (groupId: string) =>
-        getStore().removeGroup(SUB_ACCOUNT_WORKSPACE_ID, groupId),
+      removeGroup: (groupId: string) => getStore().removeGroup(SUB_ACCOUNT_WORKSPACE_ID, groupId),
       updateGroup: (groupId: string, updates: Partial<SubAccountGroup>) =>
         getStore().updateGroup(SUB_ACCOUNT_WORKSPACE_ID, groupId, updates),
       setAccountGroup: (subAccountId: string, groupId: string | undefined) =>

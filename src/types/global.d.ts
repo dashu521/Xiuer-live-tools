@@ -1,3 +1,4 @@
+import type { PlanType } from 'shared/planRules'
 import type { User } from './auth'
 
 export interface AuthAPI {
@@ -17,7 +18,25 @@ export interface AuthAPI {
     success: boolean
     user?: Omit<User, 'passwordHash'>
     token?: string
+    refresh_token?: string
     error?: string
+    errorType?: string
+    status?: number
+    detail?: string
+  }>
+
+  loginWithSms: (
+    phone: string,
+    code: string,
+  ) => Promise<{
+    success: boolean
+    user?: Omit<User, 'passwordHash'>
+    token?: string
+    refresh_token?: string
+    needs_password?: boolean
+    error?: string
+    status?: number
+    responseDetail?: string
   }>
 
   logout: (token: string) => Promise<boolean>
@@ -33,17 +52,34 @@ export interface AuthAPI {
     token?: string
   }>
 
+  refreshSession: () => Promise<{
+    success: boolean
+    token?: string
+    refreshToken?: string | null
+    error?: string
+  }>
+
+  getAuthSummary: () => Promise<{ isAuthenticated: boolean; hasToken: boolean }>
+
+  proxyRequest: (requestConfig: {
+    endpoint: string
+    method?: string
+    body?: object
+  }) => Promise<{ success: boolean; status?: number; data?: unknown; error?: string }>
+
+  getTokenInternal: () => Promise<{ token: string | null; refreshToken: string | null }>
+
   checkFeatureAccess: (
     token: string,
     feature: string,
   ) => Promise<{
-    canAccess: boolean
-    requiresAuth: boolean
-    requiredLicense: string
+    featureAccess: {
+      can_access: boolean
+      requires_auth: boolean
+      required_plan: PlanType
+    }
     user: Omit<User, 'passwordHash'> | null
   }>
-
-  requiresAuthentication: (feature: string) => Promise<boolean>
 
   updateUserProfile: (
     token: string,
@@ -72,11 +108,6 @@ export interface AuthAPI {
   onLoginRequired: (callback: (feature: string) => void) => void
 
   removeAllListeners: () => void
-
-  // Token 管理
-  getTokens: () => Promise<{ token: string | null; refreshToken: string | null }>
-
-  setTokens: (tokens: { token: string | null; refreshToken: string | null }) => Promise<void>
 
   clearTokens: () => Promise<void>
 }

@@ -5,6 +5,7 @@
 
 import { useMemo } from 'react'
 import type { StreamStatus } from 'shared/streamStatus'
+import { evaluateLiveTaskGate } from '@/utils/taskGate'
 import { useCurrentLiveControl } from './useLiveControl'
 
 export type GateReason = 'NOT_CONNECTED' | 'NOT_LIVE' | 'AUTH_LOST' | 'UNKNOWN'
@@ -31,64 +32,22 @@ export function useLiveFeatureGate(): LiveFeatureGate {
 
   return useMemo(() => {
     const connectionStatus = connectState.status
-    const isConnected = connectionStatus === 'connected'
-    const isLive = streamState === 'live'
 
     // 记录 Gate 状态计算（用于调试）
     console.log(
-      `[gate] Gate calculation: connectionStatus=${connectionStatus}, streamState=${streamState}, isConnected=${isConnected}, isLive=${isLive}`,
+      `[gate] Gate calculation: connectionStatus=${connectionStatus}, streamState=${streamState}`,
     )
 
-    // 检查前置条件
-    let reason: GateReason | null = null
-    let message = ''
-    let action: GateAction = null
+    const evaluation = evaluateLiveTaskGate({
+      status: connectionStatus,
+      streamState,
+    })
 
-    // 前置条件1：中控台必须已连接
-    if (!isConnected) {
-      if (connectionStatus === 'disconnected') {
-        reason = 'NOT_CONNECTED'
-        message = '请先连接直播中控台'
-        action = 'CONNECT'
-      } else if (connectionStatus === 'connecting') {
-        reason = 'NOT_CONNECTED'
-        message = '正在连接中控台，请稍候'
-        action = 'CONNECT'
-      } else {
-        reason = 'NOT_CONNECTED'
-        message = '中控台连接异常，请重新连接'
-        action = 'CONNECT'
-      }
-    }
-    // 前置条件2：必须已开播
-    else if (!isLive) {
-      if (streamState === 'unknown') {
-        reason = 'NOT_LIVE'
-        message = '当前未开播，请先开始直播后再启用该功能'
-        action = 'GO_LIVE'
-      } else if (streamState === 'offline') {
-        reason = 'NOT_LIVE'
-        message = '当前未开播，请先开始直播后再启用该功能'
-        action = 'GO_LIVE'
-      } else if (streamState === 'ended') {
-        reason = 'NOT_LIVE'
-        message = '直播已结束，请重新开播后再启用该功能'
-        action = 'GO_LIVE'
-      } else {
-        reason = 'NOT_LIVE'
-        message = '当前未开播，请先开始直播后再启用该功能'
-        action = 'GO_LIVE'
-      }
-    }
-    // 前置条件2已完成：直播状态检查
-    // TODO: 前置条件3：登录状态检查（authState !== 'invalid'）
-    // else if (authState === 'invalid') {
-    //   reason = 'AUTH_LOST'
-    //   message = '登录已失效，请重新扫码登录'
-    //   action = 'RELOGIN'
-    // }
+    let reason: GateReason | null = evaluation.ok ? null : (evaluation.reason as GateReason)
+    let message = evaluation.message
+    const action: GateAction = evaluation.ok ? null : (evaluation.action ?? null)
 
-    const canUse = isConnected && isLive && reason === null
+    const canUse = evaluation.ok
     const disabled = !canUse
 
     // 如果没有特定原因，但不可用，则设为 UNKNOWN

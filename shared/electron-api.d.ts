@@ -1,5 +1,6 @@
 import type { LogMessage } from 'electron-log'
 import type { ProgressInfo, UpdateDownloadedEvent } from 'electron-updater'
+import type { PlanType } from 'shared/planRules'
 import type { providers } from 'shared/providers'
 
 import { IPC_CHANNELS } from './ipcChannels'
@@ -59,6 +60,12 @@ export interface IpcChannels {
     user?: { id: string; username: string; email?: string; phone?: string; status?: string }
     token?: string
   }
+  [IPC_CHANNELS.auth.refreshSession]: () => {
+    success: boolean
+    token?: string
+    refreshToken?: string | null
+    error?: string
+  }
   [IPC_CHANNELS.auth.getAuthSummary]: () => { isAuthenticated: boolean; hasToken: boolean }
   [IPC_CHANNELS.auth.proxyRequest]: (requestConfig: {
     endpoint: string
@@ -71,12 +78,13 @@ export interface IpcChannels {
     token: string,
     feature: string,
   ) => {
-    canAccess: boolean
-    requiresAuth: boolean
-    requiredPlan: string
+    featureAccess: {
+      can_access: boolean
+      requires_auth: boolean
+      required_plan: PlanType
+    }
     user: { id: string; username: string; email?: string; phone?: string; status?: string } | null
   }
-  [IPC_CHANNELS.auth.requiresAuthentication]: (feature: string) => boolean
   [IPC_CHANNELS.auth.updateUserProfile]: (
     token: string,
     data: { username?: string; email?: string },
@@ -155,20 +163,22 @@ export interface IpcChannels {
   ) => void
   [IPC_CHANNELS.tasks.autoPopUp.unregisterShortcuts]: () => void
 
-  // AutoReply
-  [IPC_CHANNELS.tasks.autoReply.startCommentListener]: (
+  // CommentListener
+  [IPC_CHANNELS.tasks.commentListener.start]: (
     accountId: string,
     config: CommentListenerConfig,
   ) => boolean
-  [IPC_CHANNELS.tasks.autoReply.stopCommentListener]: (accountId: string) => void
-  [IPC_CHANNELS.tasks.autoReply.sendReply]: (accountId: string, replyContent: string) => void
-  [IPC_CHANNELS.tasks.autoReply.listenerStopped]: (accountId: string) => void
+  [IPC_CHANNELS.tasks.commentListener.stop]: (accountId: string) => void
+  [IPC_CHANNELS.tasks.commentListener.stopped]: (accountId: string) => void
   /** 账号隔离的监听器停止事件 */
-  [key: `tasks:autoReply:listenerStopped:${string}`]: (accountId: string) => void
-  [IPC_CHANNELS.tasks.autoReply.showComment]: (data: {
+  [key: `tasks:commentListener:stopped:${string}`]: (accountId: string) => void
+  [IPC_CHANNELS.tasks.commentListener.showComment]: (data: {
     comment: LiveMessage
     accountId: string
   }) => void
+
+  // AutoReply
+  [IPC_CHANNELS.tasks.autoReply.sendReply]: (accountId: string, replyContent: string) => void
 
   // AIChat
   [IPC_CHANNELS.tasks.aiChat.normalChat]: (params: {

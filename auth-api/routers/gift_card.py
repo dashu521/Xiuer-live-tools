@@ -27,6 +27,14 @@ from schemas import (
     RedeemGiftCardBody,
     RedeemResultOut,
 )
+from subscription_rules import (
+    TIER_BENEFITS,
+    get_tier_benefits,
+    infer_tier_from_membership_type,
+    is_upgrade_allowed,
+    normalize_plan,
+    normalize_tier,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -63,40 +71,6 @@ def _card_to_out(card: GiftCard) -> GiftCardOut:
         redeemed_at=card.redeemed_at.isoformat() if card.redeemed_at else None,
         redeemed_by=card.redeemed_by,
     )
-
-
-# 档位配置映射
-TIER_BENEFITS = {
-    "pro": {
-        "max_accounts": 1,
-        "features": ["all"],
-        "duration_days": None,
-        "plan": "pro"
-    },
-    "pro_max": {
-        "max_accounts": 3,
-        "features": ["all"],
-        "duration_days": None,
-        "plan": "pro_max"
-    },
-    "ultra": {
-        "max_accounts": -1,  # -1 表示无限制
-        "features": ["all"],
-        "duration_days": None,
-        "plan": "ultra"
-    }
-}
-
-
-def _get_tier_from_membership_type(membership_type: str) -> str:
-    """从membership_type推断tier（兼容旧数据）"""
-    mapping = {
-        "trial": "pro",
-        "pro": "pro",
-        "pro_max": "pro_max",
-        "ultra": "ultra"
-    }
-    return mapping.get(membership_type, "pro")
 
 
 def _req_id(request: Request) -> str:
@@ -150,27 +124,23 @@ def redeem_gift_card(
     except Exception:
         row = None
 
-    previous_plan = getattr(user, "plan", None) or "free"
+    previous_plan = normalize_plan(getattr(user, "plan", None))
     previous_expiry_ts = int(row[1]) if row and row[1] else None
     previous_max_accounts = getattr(user, "max_accounts", 1)
 
     # 确定档位和权益
     # 优先使用tier字段，兼容旧数据使用membership_type
-    tier = card.tier or _get_tier_from_membership_type(card.membership_type or "pro")
-    benefits = card.benefits_json or TIER_BENEFITS.get(tier, TIER_BENEFITS["pro"])
+    tier = normalize_tier(card.tier or infer_tier_from_membership_type(card.membership_type or "pro"))
+    benefits = get_tier_benefits(tier, card.benefits_json)
     
     # 计算新的到期时间
     membership_days = card.membership_days or benefits.get("duration_days") or 0
     extend_secs = membership_days * 86400 if membership_days > 0 else 0
-    new_plan = benefits.get("plan", tier)
+    new_plan = normalize_plan(benefits.get("plan"), default=tier)
     new_max_accounts = benefits.get("max_accounts", 1)
 
     # 检查是否允许升级（不允许降级）
-    tier_order = {"free": 0, "trial": 1, "pro": 2, "pro_max": 3, "ultra": 4}
-    current_tier_level = tier_order.get(previous_plan, 0)
-    new_tier_level = tier_order.get(new_plan, 0)
-    
-    if new_tier_level < current_tier_level:
+    if not is_upgrade_allowed(previous_plan, new_plan):
         return RedeemResultOut(
             success=False, 
             error="DOWNGRADE_NOT_ALLOWED", 
@@ -337,7 +307,7 @@ def admin_create_gift_cards(
     req_id = _req_id(request)
     
     # 验证档位
-    tier = body.tier or "pro"
+    tier = (body.tier or "pro").strip().lower()
     if tier not in TIER_BENEFITS:
         raise HTTPException(status_code=400, detail={"code": "invalid_tier", "message": f"无效的档位: {tier}"})
     
@@ -350,7 +320,7 @@ def admin_create_gift_cards(
             raise HTTPException(status_code=400, detail={"code": "invalid_params", "message": "过期时间格式不正确"})
 
     # 获取档位权益配置
-    benefits = TIER_BENEFITS[tier]
+    benefits = get_tier_benefits(tier)
 
     cards = []
     existing_codes = set()

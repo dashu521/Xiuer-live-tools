@@ -342,7 +342,10 @@ export async function cloudSmsLogin(
     })
     return {
       success: false,
-      error: { code: 'sms_login_failed', message: responseDetail || '验证码登录失败（响应数据不完整）' },
+      error: {
+        code: 'sms_login_failed',
+        message: responseDetail || '验证码登录失败（响应数据不完整）',
+      },
       status,
       responseDetail,
     }

@@ -31,13 +31,11 @@
  * - AccessControl: 权限控制核心，提供统一检查入口
  */
 
-export type { PlanType } from '@/constants/subscription'
 // ===== 类型导出 =====
 export type { AccessContext, AccessDecision } from './AccessContext'
 // ===== 工具函数导出 =====
 export { createEmptyAccessContext } from './AccessContext'
 export type { FeatureType } from './AccessControl'
-
 // ===== 核心函数导出 =====
 export {
   // 上下文构建
@@ -56,7 +54,6 @@ export {
   // Hooks
   useAccessContext,
 } from './AccessControl'
-export type { PlanRule } from './AccessPolicy'
 // ===== 策略函数导出（高级使用） =====
 export {
   canAddMoreLiveAccounts as checkAddMoreLiveAccounts,
@@ -88,3 +85,6 @@ export {
   PLAN_TEXT_MAP,
   VALID_PLANS,
 } from './AccessPolicy'
+export type { GateActionName } from './gateActions'
+export { GATE_ACTIONS, getFeatureTypeForGateAction, isGateActionName } from './gateActions'
+export type { PlanRule, PlanType } from './planRules'

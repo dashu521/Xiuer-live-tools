@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useState } from 'react'
 import { AuthDialog } from '@/components/auth/AuthDialog'
+import { normalizePlan, PLAN_TEXT_MAP } from '@/domain/access'
 import { useAuthStore } from '@/stores/authStore'
 import type { SafeUser } from '@/types/auth'
 
@@ -30,13 +31,15 @@ export function AuthGuard({ children, feature, fallback }: AuthGuardProps) {
 
     try {
       const response = await window.authAPI.checkFeatureAccess(token || '', feature)
+      const { featureAccess } = response
 
-      if (!response.canAccess) {
-        if (response.requiresAuth) {
+      if (!featureAccess.can_access) {
+        if (featureAccess.requires_auth) {
           setShowAuthDialog(true)
         } else {
           // Show license upgrade dialog
-          alert(`此功能需要 ${getLicenseText(response.requiredLicense)} 许可证`)
+          const requiredPlan = normalizePlan(featureAccess.required_plan)
+          alert(`此功能需要 ${PLAN_TEXT_MAP[requiredPlan]} 许可证`)
         }
         return false
       }
@@ -44,22 +47,6 @@ export function AuthGuard({ children, feature, fallback }: AuthGuardProps) {
     } catch (error) {
       console.error('Feature access check failed:', error)
       return false
-    }
-  }
-
-  const getLicenseText = (licenseType: string) => {
-    // 首发版：仅支持标准套餐名称
-    switch (licenseType) {
-      case 'trial':
-        return '试用版'
-      case 'pro':
-        return '专业版'
-      case 'pro_max':
-        return '专业增强版'
-      case 'ultra':
-        return '旗舰版'
-      default:
-        return '免费版'
     }
   }
 
@@ -122,36 +109,33 @@ export function useFeatureAccess() {
   const checkFeatureAccess = async (
     feature: string,
   ): Promise<{
-    canAccess: boolean
-    requiresAuth: boolean
-    requiredLicense: string
+    featureAccess: {
+      can_access: boolean
+      requires_auth: boolean
+      required_plan: string
+    }
     user: SafeUser | null
   }> => {
     try {
       const response = await window.authAPI.checkFeatureAccess(token || '', feature)
       return response as {
-        canAccess: boolean
-        requiresAuth: boolean
-        requiredLicense: string
+        featureAccess: {
+          can_access: boolean
+          requires_auth: boolean
+          required_plan: string
+        }
         user: SafeUser | null
       }
     } catch (error) {
       console.error('Feature access check failed:', error)
       return {
-        canAccess: false,
-        requiresAuth: true,
-        requiredLicense: 'free',
+        featureAccess: {
+          can_access: false,
+          requires_auth: true,
+          required_plan: 'free',
+        },
         user: null,
       }
-    }
-  }
-
-  const requiresAuth = async (feature: string): Promise<boolean> => {
-    try {
-      return await window.authAPI.requiresAuthentication(feature)
-    } catch (error) {
-      console.error('Auth requirement check failed:', error)
-      return true
     }
   }
 
@@ -159,6 +143,5 @@ export function useFeatureAccess() {
     isAuthenticated,
     user,
     checkFeatureAccess,
-    requiresAuth,
   }
 }

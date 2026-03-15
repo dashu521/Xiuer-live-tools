@@ -245,6 +245,25 @@ class TaskStateManager {
       console.log(`${this.logPrefix} All states are consistent`)
     }
   }
+
+  forceResetAllTaskStates(accountId: string): void {
+    console.log(`${this.logPrefix} Force resetting all task states for account ${accountId}`)
+
+    const autoMessageStore = useAutoMessageStore.getState()
+    const autoPopUpStore = useAutoPopUpStore.getState()
+    const autoReplyStore = useAutoReplyStore.getState()
+    const subAccountStore = useSubAccountStore.getState()
+    const liveStatsStore = useLiveStatsStore.getState()
+
+    autoMessageStore.setIsRunning(accountId, false)
+    autoPopUpStore.setIsRunning(accountId, false)
+    autoReplyStore.setIsListening(accountId, 'stopped')
+    autoReplyStore.setIsRunning(accountId, false)
+    subAccountStore.setIsRunning(accountId, false)
+    liveStatsStore.setListening(accountId, false)
+
+    console.log(`${this.logPrefix} All task states reset to stopped`)
+  }
   /**
    * 强制修复状态
    */
@@ -307,7 +326,7 @@ class TaskStateManager {
 
     try {
       // 调用后台IPC停止评论监听器
-      await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.autoReply.stopCommentListener, accountId)
+      await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.commentListener.stop, accountId)
       console.log(`${this.logPrefix} auto-reply: IPC stop invoked`)
 
       // 更新前端状态
@@ -420,3 +439,18 @@ class TaskStateManager {
   }
 }
 export const taskStateManager = TaskStateManager.getInstance()
+
+export async function reconcileTaskStates(accountId: string): Promise<{
+  wasInconsistent: boolean
+  fixedTasks: TaskType[]
+}> {
+  taskStateManager.reconcileAndFix(accountId)
+  return {
+    wasInconsistent: false,
+    fixedTasks: [],
+  }
+}
+
+export function forceResetAllTaskStates(accountId: string): void {
+  taskStateManager.forceResetAllTaskStates(accountId)
+}

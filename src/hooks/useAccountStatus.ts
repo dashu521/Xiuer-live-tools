@@ -6,26 +6,15 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
-import { taskManager } from '@/tasks'
-import type { TaskId } from '@/tasks/types'
 import type {
   AccountStatusMap,
   AccountTaskState,
   ConnectionStatus,
   TaskStatusInfo,
 } from '@/types/account-status'
+import { taskStateManager } from '@/utils/TaskStateManager'
 import { useAccounts } from './useAccounts'
-import { useAutoMessageStore } from './useAutoMessage'
-import { useAutoPopUpStore } from './useAutoPopUp'
-import { useAutoReplyStore } from './useAutoReply'
 import { useLiveControlStore } from './useLiveControl'
-import { useLiveStatsStore } from './useLiveStats'
-
-// 任务名称映射
-const _TASK_NAME_MAP: Record<string, string> = {
-  autoSpeak: '自动发言',
-  autoReply: '自动回复',
-}
 
 /**
  * 账号状态 Store
@@ -78,19 +67,6 @@ const useAccountStatusStore = create<AccountStatusStore>()(
 )
 
 /**
- * 获取任务信息
- */
-function _getTaskInfo(taskId: TaskId, accountId: string) {
-  const status = taskManager.getStatus(taskId, accountId)
-
-  return {
-    taskId,
-    status,
-    // 这里可以扩展更多任务信息
-  }
-}
-
-/**
  * 账号状态管理 Hook
  */
 export function useAccountStatus() {
@@ -126,36 +102,20 @@ export function useAccountStatus() {
         }
       }
 
-      // 获取所有任务状态（从各自的Store获取，而不是TaskManager）
-      const tasks: TaskStatusInfo[] = []
-
-      // 从自动发言Store获取状态
-      const autoMessageContext = useAutoMessageStore.getState().contexts[accountId]
-      tasks.push({
-        taskId: 'autoSpeak',
-        status: autoMessageContext?.isRunning ? 'running' : 'idle',
-      })
-
-      // 从自动弹窗Store获取状态
-      const autoPopUpContext = useAutoPopUpStore.getState().contexts[accountId]
-      tasks.push({
-        taskId: 'autoPopup',
-        status: autoPopUpContext?.isRunning ? 'running' : 'idle',
-      })
-
-      // 从自动回复Store获取状态
-      const autoReplyContext = useAutoReplyStore.getState().contexts[accountId]
-      tasks.push({
-        taskId: 'autoReply',
-        status: autoReplyContext?.isRunning ? 'running' : 'idle',
-      })
-
-      // 从数据监控Store获取状态
-      const liveStatsContext = useLiveStatsStore.getState().contexts[accountId]
-      tasks.push({
-        taskId: 'liveStats',
-        status: liveStatsContext?.isListening ? 'running' : 'idle',
-      })
+      const tasks: TaskStatusInfo[] = taskStateManager
+        .getTaskStates(accountId)
+        .filter(task => task.type !== 'sub-account')
+        .map(task => ({
+          taskId:
+            task.type === 'auto-message'
+              ? 'autoSpeak'
+              : task.type === 'auto-popup'
+                ? 'autoPopup'
+                : task.type === 'auto-reply'
+                  ? 'autoReply'
+                  : 'liveStats',
+          status: task.isRunning ? 'running' : 'idle',
+        }))
 
       updateAccountStatus(accountId, {
         accountId,

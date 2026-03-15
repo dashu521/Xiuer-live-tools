@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { ConnectState } from '@/config/platformConfig'
+import { GATE_ACTIONS } from '@/domain/access/gateActions'
 import { useAccounts } from '@/hooks/useAccounts'
 import { useCurrentChromeConfig, useCurrentChromeConfigActions } from '@/hooks/useChromeConfig'
 import {
@@ -319,7 +320,7 @@ const ConnectToLiveControl = React.memo(() => {
   const guardAction = useGateStore(s => s.guardAction)
 
   const connectLiveControl = useMemoizedFn(async () => {
-    await guardAction('connect-live-control', {
+    await guardAction(GATE_ACTIONS.CONNECT_LIVE_CONTROL, {
       requireSubscription: true,
       action: async () => {
         try {

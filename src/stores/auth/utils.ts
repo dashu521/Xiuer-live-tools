@@ -1,4 +1,4 @@
-import { getEffectivePlan, normalizePlan } from '@/constants/subscription'
+import { getEffectivePlan, normalizePlan } from '@/domain/access/planRules'
 import type { LoginResponseBackend } from '@/services/apiClient'
 import type { SafeUser } from '@/types/auth'
 

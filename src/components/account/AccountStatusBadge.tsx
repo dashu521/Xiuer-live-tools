@@ -7,6 +7,7 @@ import { AlertCircle, Circle, Loader2, Wifi } from 'lucide-react'
 import { memo, useMemo } from 'react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { getTaskDisplayName } from '@/tasks/taskMeta'
 import type { AccountTaskState, StatusDisplayConfig } from '@/types/account-status'
 
 interface AccountStatusBadgeProps {
@@ -153,7 +154,7 @@ export const AccountStatusBadge = memo(function AccountStatusBadge({
           stopped: '已停止',
           error: '出错',
         }
-        const taskName = task.taskId === 'autoSpeak' ? '自动发言' : task.taskId
+        const taskName = getTaskDisplayName(task.taskId)
         lines.push(`  • ${taskName}: ${statusLabels[task.status] || task.status}`)
         if (task.count !== undefined) {
           lines.push(`    已执行: ${task.count} 次`)

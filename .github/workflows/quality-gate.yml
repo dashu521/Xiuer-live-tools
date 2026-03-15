@@ -36,6 +36,10 @@ jobs:
       - name: Run TypeScript check
         run: npx tsc --noEmit
 
+      # 高风险架构边界改动时，必须同步更新架构文档
+      - name: Check architecture doc sync
+        run: node scripts/check-architecture-doc-sync.js
+
       # 测试运行（smoke test）
       - name: Run tests
         run: npm test -- --run

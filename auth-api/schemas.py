@@ -90,6 +90,19 @@ class TrialOut(BaseModel):
     is_expired: bool = False
 
 
+class FeatureAccessOut(BaseModel):
+    requires_auth: bool = False
+    required_plan: str = "free"
+    can_access: bool = False
+
+
+class UserCapabilitiesOut(BaseModel):
+    is_paid_user: bool = False
+    can_use_all_features: bool = False
+    max_live_accounts: int = 1
+    feature_access: dict[str, FeatureAccessOut] = Field(default_factory=dict)
+
+
 class UserStatusResponse(BaseModel):
     username: str
     status: str = "active"
@@ -98,7 +111,9 @@ class UserStatusResponse(BaseModel):
     has_password: bool = True
     created_at: Optional[str] = None
     last_login_at: Optional[str] = None
+    expire_at: Optional[str] = None
     trial: Optional[TrialOut] = None
+    capabilities: Optional[UserCapabilitiesOut] = None
 
 
 # ----- 错误规范 -----

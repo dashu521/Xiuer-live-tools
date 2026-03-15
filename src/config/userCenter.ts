@@ -1,5 +1,5 @@
 import { Check, Crown, Gift, Star, User, Zap } from 'lucide-react'
-import type { PlanType } from '@/constants/subscription'
+import type { PlanType } from '@/domain/access/planRules'
 import type { BenefitItem, PlanColors } from '@/types/userCenter'
 
 // 所有套餐的权益配置

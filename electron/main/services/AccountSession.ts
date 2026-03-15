@@ -484,6 +484,27 @@ export class AccountSession {
   }
 
   public async startTask(task: LiveControlTask): Result.ResultAsync<void, Error> {
+    const existingTask = this.activeTasks.get(task.type)
+    if (existingTask) {
+      if (existingTask.isRunning()) {
+        this.logger.info(
+          `[startTask][${this.account.id}] Task ${task.type} already running, reusing existing instance`,
+        )
+        if (task.config && existingTask.updateConfig) {
+          const updateResult = existingTask.updateConfig(task.config as never)
+          if (Result.isFailure(updateResult)) {
+            return updateResult
+          }
+        }
+        return Result.succeed()
+      }
+
+      this.logger.warn(
+        `[startTask][${this.account.id}] Found stale task instance for ${task.type}, replacing it`,
+      )
+      this.activeTasks.delete(task.type)
+    }
+
     const newTask = makeTask(task, this.platform, this.account, this.logger)
     if (Result.isFailure(newTask)) {
       return newTask
@@ -642,7 +663,9 @@ export class AccountSession {
       // 方法3：从 HTML / 内联脚本中提取真实直播 URL 或网页直播 ID
       const pageContent = `${(await page.content()).replace(/\\\//g, '/')}\n${pageSignals.scriptText}`
 
-      const directLiveUrlMatches = pageContent.match(/https?:\/\/live\.douyin\.com\/[A-Za-z0-9_-]+/g)
+      const directLiveUrlMatches = pageContent.match(
+        /https?:\/\/live\.douyin\.com\/[A-Za-z0-9_-]+/g,
+      )
       directLiveUrlMatches?.forEach(match => pushCandidate(match))
 
       const protocolLessLiveUrlMatches = pageContent.match(
@@ -738,7 +761,7 @@ export class AccountSession {
    */
   private detectCloseReason(source: 'page' | 'browser'): ReconnectReason {
     // 【P0-2 断线自动重连】严格按规范区分用户关闭和异常断开
-    // 
+    //
     // 用户主动关闭浏览器的特征：
     // - page.on('close') 触发（用户关闭标签页或浏览器）
     // - browser.on('disconnected') 触发（浏览器进程退出）
@@ -746,13 +769,13 @@ export class AccountSession {
     // 页面崩溃的特征：
     // - page.on('crash') 触发
     // - 需要通过其他异常检测机制判断
-    
+
     if (source === 'page') {
       // page.on('close') 通常是用户主动关闭标签页
       // 按规范§2.3：用户关闭浏览器应禁止自动重连
       return 'browser_closed'
     }
-    
+
     if (source === 'browser') {
       // browser.on('disconnected') 通常是用户关闭整个浏览器
       return 'browser_closed'

@@ -9,7 +9,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAccounts } from '@/hooks/useAccounts'
-import { useAutoPopUpActions, useCurrentAutoPopUp, type GoodsItemConfig } from '@/hooks/useAutoPopUp'
+import {
+  type GoodsItemConfig,
+  useAutoPopUpActions,
+  useCurrentAutoPopUp,
+} from '@/hooks/useAutoPopUp'
 import { useCurrentPlatform } from '@/hooks/useLiveControl'
 import { useToast } from '@/hooks/useToast'
 import { MOCK_GOODS_IDS, shouldUseMockGoods } from '@/utils/mockGoodsData'
@@ -36,10 +40,14 @@ const GoodsItemEditDialog: React.FC<GoodsItemEditDialogProps> = ({
 
   const [useCustomInterval, setUseCustomInterval] = useState(!!selectedItem.interval)
   const [minInterval, setMinInterval] = useState(
-    selectedItem.interval ? Math.round(selectedItem.interval[0] / 1000) : Math.round(defaultInterval[0] / 1000)
+    selectedItem.interval
+      ? Math.round(selectedItem.interval[0] / 1000)
+      : Math.round(defaultInterval[0] / 1000),
   )
   const [maxInterval, setMaxInterval] = useState(
-    selectedItem.interval ? Math.round(selectedItem.interval[1] / 1000) : Math.round(defaultInterval[1] / 1000)
+    selectedItem.interval
+      ? Math.round(selectedItem.interval[1] / 1000)
+      : Math.round(defaultInterval[1] / 1000),
   )
 
   // 当切换商品时更新状态
@@ -48,8 +56,16 @@ const GoodsItemEditDialog: React.FC<GoodsItemEditDialogProps> = ({
     const newItem = allGoods.find(g => g.id === id)
     if (newItem) {
       setUseCustomInterval(!!newItem.interval)
-      setMinInterval(newItem.interval ? Math.round(newItem.interval[0] / 1000) : Math.round(defaultInterval[0] / 1000))
-      setMaxInterval(newItem.interval ? Math.round(newItem.interval[1] / 1000) : Math.round(defaultInterval[1] / 1000))
+      setMinInterval(
+        newItem.interval
+          ? Math.round(newItem.interval[0] / 1000)
+          : Math.round(defaultInterval[0] / 1000),
+      )
+      setMaxInterval(
+        newItem.interval
+          ? Math.round(newItem.interval[1] / 1000)
+          : Math.round(defaultInterval[1] / 1000),
+      )
     }
   }
 
@@ -127,7 +143,8 @@ const GoodsItemEditDialog: React.FC<GoodsItemEditDialogProps> = ({
 
           {!useCustomInterval && (
             <p className="text-xs text-muted-foreground pl-6">
-              使用全局默认间隔：{Math.round(defaultInterval[0] / 1000)}-{Math.round(defaultInterval[1] / 1000)} 秒
+              使用全局默认间隔：{Math.round(defaultInterval[0] / 1000)}-
+              {Math.round(defaultInterval[1] / 1000)} 秒
             </p>
           )}
         </div>
@@ -360,21 +377,18 @@ const GoodsListCard = React.memo(() => {
                                 className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary/10 text-primary text-sm font-medium cursor-pointer hover:bg-primary/20 transition-colors"
                               >
                                 {item.id}
-                                {item.interval && (
-                                  <Clock className="h-3 w-3 text-primary/70" />
-                                )}
+                                {item.interval && <Clock className="h-3 w-3 text-primary/70" />}
                               </span>
                             </TooltipTrigger>
                             <TooltipContent side="bottom">
                               <p>商品 #{item.id}</p>
                               {item.interval ? (
                                 <p className="text-xs text-muted-foreground">
-                                  间隔: {Math.round(item.interval[0] / 1000)}-{Math.round(item.interval[1] / 1000)}秒
+                                  间隔: {Math.round(item.interval[0] / 1000)}-
+                                  {Math.round(item.interval[1] / 1000)}秒
                                 </p>
                               ) : (
-                                <p className="text-xs text-muted-foreground">
-                                  使用默认间隔
-                                </p>
+                                <p className="text-xs text-muted-foreground">使用默认间隔</p>
                               )}
                               <p className="text-xs text-primary mt-1">点击设置</p>
                             </TooltipContent>
@@ -395,9 +409,7 @@ const GoodsListCard = React.memo(() => {
               {/* 提示信息 */}
               <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
                 <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>
-                  商品序号对应直播中控台中的商品顺序。点击商品标签可设置单独的弹窗间隔。
-                </span>
+                <span>商品序号对应直播中控台中的商品顺序。点击商品标签可设置单独的弹窗间隔。</span>
               </div>
             </div>
           </TabsContent>

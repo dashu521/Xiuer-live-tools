@@ -64,6 +64,38 @@ export function setupAuthHandlers() {
     }
   })
 
+  ipcMain.handle(IPC_CHANNELS.auth.refreshSession, async () => {
+    if (!USE_CLOUD_AUTH) {
+      return { success: false, error: '云鉴权未启用' }
+    }
+
+    const { refresh_token } = await getStoredTokens()
+    if (!refresh_token) {
+      await clearStoredTokens()
+      return { success: false, error: '缺少 refresh token' }
+    }
+
+    const refreshRes = await cloudRefresh(refresh_token)
+    if (!refreshRes.success || !refreshRes.access_token) {
+      await clearStoredTokens()
+      return {
+        success: false,
+        error: refreshRes.error ?? '刷新会话失败',
+      }
+    }
+
+    await setStoredTokens({
+      access_token: refreshRes.access_token,
+      refresh_token,
+    })
+
+    return {
+      success: true,
+      token: refreshRes.access_token,
+      refreshToken: refresh_token,
+    }
+  })
+
   // Register
   ipcMain.handle(IPC_CHANNELS.auth.register, async (_, data: RegisterData) => {
     if (USE_CLOUD_AUTH) {
@@ -274,18 +306,17 @@ export function setupAuthHandlers() {
             : (rawUser as Omit<User, 'passwordHash'>)
       const requiresAuth = AuthService.requiresAuthentication(feature)
       const requiredPlan = AuthService.getRequiredPlan(feature)
+      const featureAccess = {
+        can_access: !requiresAuth || AuthService.hasPlanLevel(user, requiredPlan),
+        requires_auth: requiresAuth,
+        required_plan: requiredPlan,
+      }
       return {
-        canAccess: !requiresAuth || AuthService.hasPlanLevel(user, requiredPlan),
-        requiresAuth,
-        requiredPlan,
+        featureAccess,
         user,
       }
     },
   )
-
-  ipcMain.handle(IPC_CHANNELS.auth.requiresAuthentication, async (_, feature: string) => {
-    return AuthService.requiresAuthentication(feature)
-  })
 
   ipcMain.handle(IPC_CHANNELS.auth.updateUserProfile, async (_, _token: string, _data: unknown) => {
     return { success: false, error: '功能开发中' }

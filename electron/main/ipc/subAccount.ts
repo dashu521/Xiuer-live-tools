@@ -1,10 +1,7 @@
 import { Result } from '@praha/byethrow'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
-import {
-  SUB_ACCOUNT_WORKSPACE_ID,
-  SUB_ACCOUNT_WORKSPACE_NAME,
-} from 'shared/subAccountWorkspace'
 import { isSameSubAccountLiveRoomUrl } from 'shared/subAccountLiveRoom'
+import { SUB_ACCOUNT_WORKSPACE_ID, SUB_ACCOUNT_WORKSPACE_NAME } from 'shared/subAccountWorkspace'
 // 导入验证库（使用已存在的 zod）
 import { z } from 'zod'
 import { createLogger } from '#/logger'
@@ -80,12 +77,16 @@ function setupIpcHandlers() {
 
   // 注册小号状态变更回调，实时同步到前端
   statusChangeCallback = (subAccountId, status, error) => {
-    windowManager.send(IPC_CHANNELS.tasks.subAccount.accountStatusChanged, SUB_ACCOUNT_WORKSPACE_ID, {
-      accountId: subAccountId,
-      status,
-      error,
-      timestamp: Date.now(),
-    })
+    windowManager.send(
+      IPC_CHANNELS.tasks.subAccount.accountStatusChanged,
+      SUB_ACCOUNT_WORKSPACE_ID,
+      {
+        accountId: subAccountId,
+        status,
+        error,
+        timestamp: Date.now(),
+      },
+    )
   }
   subAccountManager.onStatusChange(statusChangeCallback)
 
@@ -164,7 +165,7 @@ function setupIpcHandlers() {
 
   typedIpcMainHandle(
     IPC_CHANNELS.tasks.subAccount.addAccount,
-    async (_, accountId, subAccountConfig) => {
+    async (_, _accountId, subAccountConfig) => {
       const logger = createLogger(SUB_ACCOUNT_WORKSPACE_NAME).scope(TASK_NAME)
       const result = subAccountManager.addAccount(subAccountConfig)
       if (Result.isFailure(result)) {
@@ -178,7 +179,7 @@ function setupIpcHandlers() {
 
   typedIpcMainHandle(
     IPC_CHANNELS.tasks.subAccount.removeAccount,
-    async (_, accountId, subAccountId) => {
+    async (_, _accountId, subAccountId) => {
       const logger = createLogger(SUB_ACCOUNT_WORKSPACE_NAME).scope(TASK_NAME)
       await subAccountManager.removeAccount(subAccountId)
       logger.info(`移除小号: ${subAccountId}`)
@@ -188,7 +189,7 @@ function setupIpcHandlers() {
 
   typedIpcMainHandle(
     IPC_CHANNELS.tasks.subAccount.loginAccount,
-    async (_, accountId, subAccountId) => {
+    async (_, _accountId, subAccountId) => {
       const logger = createLogger(SUB_ACCOUNT_WORKSPACE_NAME).scope(TASK_NAME)
       logger.info(`开始登录小号：${subAccountId}`)
 
@@ -214,7 +215,7 @@ function setupIpcHandlers() {
 
   typedIpcMainHandle(
     IPC_CHANNELS.tasks.subAccount.disconnectAccount,
-    async (_, accountId, subAccountId) => {
+    async (_, _accountId, subAccountId) => {
       const logger = createLogger(SUB_ACCOUNT_WORKSPACE_NAME).scope(TASK_NAME)
       logger.info(`断开小号连接: ${subAccountId}`)
 
@@ -226,7 +227,7 @@ function setupIpcHandlers() {
 
   typedIpcMainHandle(
     IPC_CHANNELS.tasks.subAccount.enterLiveRoom,
-    async (_, accountId, subAccountId, liveRoomUrl) => {
+    async (_, _accountId, subAccountId, liveRoomUrl) => {
       const logger = createLogger(SUB_ACCOUNT_WORKSPACE_NAME).scope(TASK_NAME)
 
       // [SECURITY-FIX] 校验直播间 URL
@@ -474,7 +475,7 @@ function setupIpcHandlers() {
     },
   )
 
-  typedIpcMainHandle(IPC_CHANNELS.tasks.subAccount.getAllAccounts, async (_, accountId) => {
+  typedIpcMainHandle(IPC_CHANNELS.tasks.subAccount.getAllAccounts, async (_, _accountId) => {
     const accounts = subAccountManager.getAllAccounts().map(session => ({
       id: session.id,
       name: session.name,
@@ -582,7 +583,7 @@ function setupIpcHandlers() {
 
   typedIpcMainHandle(
     IPC_CHANNELS.tasks.subAccount.syncAccounts,
-    async (_, accountId, accountConfigs) => {
+    async (_, _accountId, accountConfigs) => {
       const logger = createLogger(SUB_ACCOUNT_WORKSPACE_NAME).scope(TASK_NAME)
       let synced = 0
       for (const acc of accountConfigs) {
