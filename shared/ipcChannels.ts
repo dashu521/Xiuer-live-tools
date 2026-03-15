@@ -1,4 +1,23 @@
 export const IPC_CHANNELS = {
+  auth: {
+    register: 'auth:register',
+    login: 'auth:login',
+    loginWithSms: 'auth:loginWithSms',
+    logout: 'auth:logout',
+    validateToken: 'auth:validateToken',
+    getCurrentUser: 'auth:getCurrentUser',
+    restoreSession: 'auth:restoreSession',
+    getAuthSummary: 'auth:getAuthSummary',
+    proxyRequest: 'auth:proxyRequest',
+    getTokenInternal: 'auth:getTokenInternal',
+    clearTokens: 'auth:clearTokens',
+    checkFeatureAccess: 'auth:checkFeatureAccess',
+    requiresAuthentication: 'auth:requiresAuthentication',
+    updateUserProfile: 'auth:updateUserProfile',
+    changePassword: 'auth:changePassword',
+    stateChanged: 'auth:stateChanged',
+    loginRequired: 'auth:loginRequired',
+  },
   diagnostics: {
     getRuntimeStats: 'diagnostics:getRuntimeStats',
     getAccountTasks: 'diagnostics:getAccountTasks',
@@ -14,6 +33,10 @@ export const IPC_CHANNELS = {
       disconnectedEvent: 'tasks:liveControl:disconnectedEvent',
       streamStateChanged: 'tasks:liveControl:streamStateChanged',
       getLiveRoomUrl: 'tasks:liveControl:getLiveRoomUrl',
+      /** 【P0-2 断线自动重连】重连成功事件 */
+      reconnectedEvent: 'tasks:liveControl:reconnectedEvent',
+      /** 【P0-2 断线自动重连】重连失败事件 */
+      reconnectFailedEvent: 'tasks:liveControl:reconnectFailedEvent',
     },
     autoMessage: {
       start: 'tasks:autoMessage:start',
@@ -74,6 +97,8 @@ export const IPC_CHANNELS = {
       accountStatusChanged: 'tasks:subAccount:accountStatusChanged',
       sendBatch: 'tasks:subAccount:sendBatch',
       batchProgress: 'tasks:subAccount:batchProgress',
+      enterAllLiveRooms: 'tasks:subAccount:enterAllLiveRooms',
+      enterAllProgress: 'tasks:subAccount:enterAllProgress',
       checkHealth: 'tasks:subAccount:checkHealth',
       getAllAccounts: 'tasks:subAccount:getAllAccounts',
       clearStorageState: 'tasks:subAccount:clearStorageState',

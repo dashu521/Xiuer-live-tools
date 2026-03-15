@@ -1,12 +1,27 @@
 import { Result } from '@praha/byethrow'
 import type { Browser, BrowserContext, Page } from 'playwright'
+import { normalizeSubAccountLiveRoomUrl } from 'shared/subAccountLiveRoom'
 import { createLogger } from '#/logger'
 import { browserManager, type StorageState } from '#/managers/BrowserSessionManager'
 import type { IPerformComment, IPlatform } from '#/platforms/IPlatform'
 import { SUB_ACCOUNT_PLATFORM_CONFIGS } from '#/platforms/sub-account/SimpleCommentPlatform'
+import {
+  clearSubAccountStorageState,
+  loadSubAccountStorageState,
+  saveSubAccountStorageState,
+} from '#/services/SubAccountSessionStorage'
 
 const logger = createLogger('SubAccountManager')
 // 版本标记：支持二次验证的登录流程 v2.1 - 添加轮询检测
+
+export class SubAccountVerificationRequiredError extends Error {
+  readonly requiresVerification = true
+
+  constructor(message = '检测到平台安全验证，请先在浏览器完成滑块或验证码，再重新启动任务') {
+    super(message)
+    this.name = 'SubAccountVerificationRequiredError'
+  }
+}
 
 export type SubAccountStatus = 'idle' | 'connecting' | 'connected' | 'error'
 
@@ -31,6 +46,8 @@ export interface SubAccountSession {
   stats: SubAccountStats
   storageState?: string
   liveRoomUrl?: string
+  liveRoomStatus: 'idle' | 'entering' | 'entered' | 'error'
+  lastEnterError?: string
 }
 
 const USER_AGENTS = [
@@ -60,6 +77,8 @@ class SubAccountManager {
   private onStatusChangeCallbacks: Array<
     (accountId: string, status: SubAccountStatus, error?: string) => void
   > = []
+  /** 会话运行态变更回调，用于同步进房等非连接状态 */
+  private onSessionUpdateCallbacks: Array<(accountId: string) => void> = []
   /** 登录轮询定时器追踪，防止内存泄露 */
   private loginPollTimers: Map<string, NodeJS.Timeout> = new Map()
   /** 标记是否已清理，防止重复清理 */
@@ -98,6 +117,10 @@ class SubAccountManager {
     this.onStatusChangeCallbacks.push(callback)
   }
 
+  onSessionUpdate(callback: (accountId: string) => void): void {
+    this.onSessionUpdateCallbacks.push(callback)
+  }
+
   /**
    * 通知状态变更
    */
@@ -109,6 +132,37 @@ class SubAccountManager {
         logger.error('状态变更回调执行失败:', e)
       }
     }
+  }
+
+  private notifySessionUpdate(accountId: string): void {
+    for (const callback of this.onSessionUpdateCallbacks) {
+      try {
+        callback(accountId)
+      } catch (e) {
+        logger.error('会话状态变更回调执行失败:', e)
+      }
+    }
+  }
+
+  private isLikelyLiveRoomPage(currentUrl?: string): boolean {
+    if (!currentUrl) return false
+    return currentUrl.includes('live.douyin.com') || currentUrl.includes('live.kuaishou.com')
+  }
+
+  private setLiveRoomState(
+    session: SubAccountSession,
+    state: SubAccountSession['liveRoomStatus'],
+    options?: { url?: string; error?: string },
+  ) {
+    session.liveRoomStatus = state
+    session.lastEnterError = options?.error
+    session.liveRoomUrl =
+      state === 'entered'
+        ? normalizeSubAccountLiveRoomUrl(options?.url ?? session.page?.url() ?? session.liveRoomUrl) ??
+          options?.url ??
+          session.liveRoomUrl
+        : options?.url
+    this.notifySessionUpdate(session.id)
   }
 
   private startHealthCheck() {
@@ -127,6 +181,8 @@ class SubAccountManager {
           await this.cleanupSession(session)
           session.status = 'error'
           session.error = '页面已关闭'
+          session.liveRoomStatus = 'error'
+          session.lastEnterError = '页面已关闭'
           this.notifyStatusChange(session.id, 'error', '页面已关闭')
           continue
         }
@@ -135,6 +191,8 @@ class SubAccountManager {
         logger.error(`小号 ${session.name} 健康检查失败:`, error)
         session.status = 'error'
         session.error = '连接异常，请重新登录'
+        session.liveRoomStatus = 'error'
+        session.lastEnterError = '连接异常，请重新登录'
         this.notifyStatusChange(session.id, 'error', '连接异常，请重新登录')
         await this.cleanupSession(session)
       }
@@ -163,6 +221,12 @@ class SubAccountManager {
         successCount: 0,
         failCount: 0,
       },
+      liveRoomStatus: 'idle',
+    }
+
+    const persistedStorageState = loadSubAccountStorageState(config.id, config.platform)
+    if (persistedStorageState) {
+      session.storageState = persistedStorageState
     }
 
     this.sessions.set(config.id, session)
@@ -178,11 +242,30 @@ class SubAccountManager {
     this.stopLoginPolling(accountId)
 
     await this.cleanupSession(session)
+    clearSubAccountStorageState(accountId)
     session.status = 'idle'
     session.error = undefined
     this.notifyStatusChange(session.id, 'idle')
     this.sessions.delete(accountId)
     logger.info(`移除小号：${session.name}`)
+  }
+
+  clearStorageState(accountId: string): boolean {
+    const session = this.sessions.get(accountId)
+    if (!session) {
+      return false
+    }
+
+    session.storageState = undefined
+    clearSubAccountStorageState(accountId)
+    return true
+  }
+
+  private persistStorageState(session: SubAccountSession, storageState: StorageState | string): void {
+    const serialized =
+      typeof storageState === 'string' ? storageState : JSON.stringify(storageState)
+    session.storageState = serialized
+    saveSubAccountStorageState(session.id, serialized, session.platform)
   }
 
   private getPlatformConfig(platform: LiveControlPlatform) {
@@ -227,6 +310,9 @@ class SubAccountManager {
 
     session.status = 'connecting'
     session.error = undefined
+    session.liveRoomUrl = undefined
+    session.liveRoomStatus = 'idle'
+    session.lastEnterError = undefined
     this.notifyStatusChange(session.id, 'connecting')
 
     try {
@@ -237,6 +323,8 @@ class SubAccountManager {
           logger.info(`小号 ${session.name} 使用保存的登录状态`)
         } catch {
           logger.warn(`小号 ${session.name} 登录状态解析失败，将重新登录`)
+          session.storageState = undefined
+          clearSubAccountStorageState(session.id)
         }
       }
 
@@ -389,7 +477,7 @@ class SubAccountManager {
 
       try {
         const newStorageState = await context.storageState()
-        session.storageState = JSON.stringify(newStorageState)
+        this.persistStorageState(session, newStorageState)
         logger.info(`小号 ${session.name} 登录状态已保存`)
       } catch (error) {
         logger.warn(`小号 ${session.name} 保存登录状态失败:`, error)
@@ -509,7 +597,9 @@ class SubAccountManager {
             const newStorageState = session.context
               ? await session.context.storageState()
               : undefined
-            if (newStorageState) session.storageState = JSON.stringify(newStorageState)
+            if (newStorageState) {
+              this.persistStorageState(session, newStorageState)
+            }
             logger.info(`小号 ${session.name} 登录状态已保存`)
           } catch (error) {
             logger.warn(`小号 ${session.name} 保存登录状态失败:`, error)
@@ -546,6 +636,9 @@ class SubAccountManager {
     await this.cleanupSession(session)
     session.status = 'idle'
     session.error = undefined
+    session.liveRoomUrl = undefined
+    session.liveRoomStatus = 'idle'
+    session.lastEnterError = undefined
     this.notifyStatusChange(session.id, 'idle')
   }
 
@@ -608,11 +701,18 @@ class SubAccountManager {
       logger.warn(
         `小号 ${session.name} 状态检查失败：status=${session.status}, hasPage=${!!session.page}`,
       )
+      session.liveRoomStatus = 'error'
+      session.lastEnterError = '小号未连接'
+      session.liveRoomUrl = undefined
       return Result.fail(new Error('小号未连接'))
     }
 
     try {
       logger.info(`小号 ${session.name} 正在进入直播间：${liveRoomUrl}`)
+      session.liveRoomUrl = undefined
+      session.liveRoomStatus = 'entering'
+      session.lastEnterError = undefined
+      this.notifySessionUpdate(session.id)
 
       // 导航到直播间页面
       await session.page.goto(liveRoomUrl, {
@@ -620,10 +720,20 @@ class SubAccountManager {
         timeout: 30000,
       })
 
+      const urlAfterGoto = session.page.url()
+      if (this.isLikelyLiveRoomPage(urlAfterGoto)) {
+        this.setLiveRoomState(session, 'entered', { url: urlAfterGoto })
+      }
+
       // 等待页面主体加载完成
       await session.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
         logger.warn(`小号 ${session.name} 页面网络空闲等待超时，继续检测评论框`)
       })
+
+      const urlAfterLoad = session.page.url()
+      if (this.isLikelyLiveRoomPage(urlAfterLoad)) {
+        this.setLiveRoomState(session, 'entered', { url: urlAfterLoad })
+      }
 
       const selectors = this.getLiveRoomSelectors(session.platform)
 
@@ -655,17 +765,21 @@ class SubAccountManager {
       if (!inputFound) {
         // 最后一次尝试：检查是否已经在直播间页面（URL 匹配）
         const currentUrl = session.page.url()
-        if (currentUrl.includes('live.douyin.com') || currentUrl.includes('live.kuaishou.com')) {
+        if (this.isLikelyLiveRoomPage(currentUrl)) {
           logger.info(`小号 ${session.name} 已在直播间页面，跳过评论框检测`)
         } else {
           throw new Error('等待评论输入框超时，可能直播间未开播或页面加载异常')
         }
       }
 
-      session.liveRoomUrl = liveRoomUrl
+      this.setLiveRoomState(session, 'entered', { url: session.page.url() || liveRoomUrl })
       logger.success(`小号 ${session.name} 已进入直播间`)
       return Result.succeed(true)
     } catch (error) {
+      session.liveRoomUrl = undefined
+      session.liveRoomStatus = 'error'
+      session.lastEnterError = error instanceof Error ? error.message : '进入直播间失败'
+      this.notifySessionUpdate(session.id)
       logger.error(`小号 ${session.name} 进入直播间失败`, error)
       return Result.fail(error instanceof Error ? error : new Error('进入直播间失败'))
     }
@@ -744,22 +858,44 @@ class SubAccountManager {
         session.stats.failCount++
         session.stats.lastError = '浏览器页面已关闭'
         session.stats.lastSendTime = Date.now()
+        session.liveRoomStatus = 'error'
+        session.lastEnterError = '浏览器页面已关闭'
+        session.liveRoomUrl = undefined
         return Result.fail(new Error('浏览器页面已关闭'))
       }
 
-      const input = await page.$(selectors.inputSelector)
+      const verificationBeforeSend = await this.detectVerificationRequirement(page)
+      if (verificationBeforeSend) {
+        session.stats.failCount++
+        session.stats.lastError = verificationBeforeSend
+        session.stats.lastSendTime = Date.now()
+        return Result.fail(new SubAccountVerificationRequiredError(verificationBeforeSend))
+      }
+
+      const input = await this.findBestCommentInput(page, selectors.inputSelector)
       if (!input) {
+        const verificationMessage = await this.detectVerificationRequirement(page)
+        if (verificationMessage) {
+          session.stats.failCount++
+          session.stats.lastError = verificationMessage
+          session.stats.lastSendTime = Date.now()
+          return Result.fail(new SubAccountVerificationRequiredError(verificationMessage))
+        }
+
         session.stats.failCount++
         session.stats.lastError = '未找到评论输入框'
         session.stats.lastSendTime = Date.now()
+        session.liveRoomUrl = undefined
+        session.liveRoomStatus = 'error'
+        session.lastEnterError = '未找到评论输入框'
         logger.warn(`小号 ${session.name} 未找到评论输入框，selector=${selectors.inputSelector}`)
         return Result.fail(new Error('未找到评论输入框'))
       }
 
-      await input.fill(message)
+      await this.fillCommentInput(input, message)
 
       if (selectors.sendMethod === 'click') {
-        const sendButton = await page.$(selectors.sendButtonSelector)
+        const sendButton = await this.findBestSendButton(page, selectors.sendButtonSelector)
         if (sendButton) {
           await sendButton.click()
         } else {
@@ -770,6 +906,28 @@ class SubAccountManager {
         }
       } else {
         await input.press('Enter')
+      }
+
+      // 发送后做一次轻量校验：如果输入框内容仍然没变化，回退再尝试一次回车
+      const sent = await this.verifyCommentSubmitted(input, message)
+      if (!sent) {
+        logger.warn(`小号 ${session.name} 首次发送后输入框仍保留原内容，尝试回车补发`)
+        await input.press('Enter').catch(() => {})
+        const retriedSent = await this.verifyCommentSubmitted(input, message)
+        if (!retriedSent) {
+          const verificationMessage = await this.detectVerificationRequirement(page)
+          if (verificationMessage) {
+            session.stats.failCount++
+            session.stats.lastError = verificationMessage
+            session.stats.lastSendTime = Date.now()
+            return Result.fail(new SubAccountVerificationRequiredError(verificationMessage))
+          }
+
+          session.stats.failCount++
+          session.stats.lastError = '评论疑似未实际发出'
+          session.stats.lastSendTime = Date.now()
+          return Result.fail(new Error('评论疑似未实际发出'))
+        }
       }
 
       session.stats.successCount++
@@ -784,6 +942,194 @@ class SubAccountManager {
       session.stats.lastSendTime = Date.now()
       logger.error(`小号 ${session.name} 发送评论失败`, error)
       return Result.fail(error instanceof Error ? error : new Error('发送失败'))
+    }
+  }
+
+  private async findBestCommentInput(page: Page, selector: string) {
+    const candidates = await page.$$(selector)
+    const scored: Array<{
+      handle: Awaited<ReturnType<Page['$']>>
+      score: number
+    }> = []
+
+    for (const handle of candidates) {
+      try {
+        const visible = await handle.isVisible()
+        if (!visible) continue
+
+        const enabled = await handle.isEnabled().catch(() => true)
+        if (!enabled) continue
+
+        const box = await handle.boundingBox()
+        if (!box) continue
+
+        const meta = await handle.evaluate(el => {
+          const input = el as HTMLInputElement | HTMLTextAreaElement | HTMLDivElement
+          return {
+            tagName: input.tagName.toLowerCase(),
+            placeholder: input.getAttribute('placeholder') || '',
+            contentEditable: input.getAttribute('contenteditable') || '',
+          }
+        })
+
+        let score = box.y
+        if (meta.placeholder.includes('发弹幕') || meta.placeholder.includes('说点什么')) score += 2000
+        if (meta.contentEditable === 'true') score += 500
+        if (meta.tagName === 'textarea' || meta.tagName === 'input') score += 200
+
+        scored.push({ handle, score })
+      } catch {
+        // ignore detached/invalid candidate
+      }
+    }
+
+    scored.sort((a, b) => b.score - a.score)
+    return scored[0]?.handle ?? null
+  }
+
+  private async findBestSendButton(page: Page, selector: string) {
+    const candidates = await page.$$(selector)
+    const scored: Array<{
+      handle: Awaited<ReturnType<Page['$']>>
+      score: number
+    }> = []
+
+    for (const handle of candidates) {
+      try {
+        const visible = await handle.isVisible()
+        if (!visible) continue
+
+        const enabled = await handle.isEnabled().catch(() => true)
+        if (!enabled) continue
+
+        const box = await handle.boundingBox()
+        if (!box) continue
+
+        const text = ((await handle.textContent()) || '').trim()
+        let score = box.y
+        if (text.includes('发送')) score += 1500
+        scored.push({ handle, score })
+      } catch {
+        // ignore detached/invalid candidate
+      }
+    }
+
+    scored.sort((a, b) => b.score - a.score)
+    return scored[0]?.handle ?? null
+  }
+
+  private async fillCommentInput(
+    input: NonNullable<Awaited<ReturnType<Page['$']>>>,
+    message: string,
+  ) {
+    await input.click({ delay: 50 }).catch(() => {})
+
+    const meta = await input.evaluate(el => {
+      const node = el as HTMLElement
+      return {
+        tagName: node.tagName.toLowerCase(),
+        isContentEditable: node.isContentEditable,
+      }
+    })
+
+    if (meta.isContentEditable) {
+      await input.evaluate((el, value) => {
+        const node = el as HTMLElement
+        node.focus()
+        node.textContent = ''
+        node.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'deleteContentBackward' }))
+        node.textContent = value
+        node.dispatchEvent(new InputEvent('input', { bubbles: true, data: value, inputType: 'insertText' }))
+      }, message)
+      return
+    }
+
+    if (meta.tagName === 'input' || meta.tagName === 'textarea') {
+      await input.fill(message)
+      return
+    }
+
+    await input.press('Meta+A').catch(() => {})
+    await input.press('Control+A').catch(() => {})
+    await input.type(message, { delay: 30 })
+  }
+
+  private async verifyCommentSubmitted(
+    input: NonNullable<Awaited<ReturnType<Page['$']>>>,
+    message: string,
+  ): Promise<boolean> {
+    await new Promise(resolve => setTimeout(resolve, 400))
+
+    const currentValue = await input
+      .evaluate(el => {
+        const node = el as HTMLInputElement | HTMLTextAreaElement | HTMLElement
+        if ('value' in node && typeof node.value === 'string') return node.value
+        return node.textContent || ''
+      })
+      .catch(() => '')
+
+    return currentValue.trim() !== message.trim()
+  }
+
+  private async detectVerificationRequirement(page: Page): Promise<string | null> {
+    try {
+      const result = await page.evaluate(() => {
+        const bodyText = (document.body?.innerText || '').replace(/\s+/g, ' ').trim()
+        const title = document.title || ''
+        const href = location.href
+        const keywords = [
+          '拖动滑块',
+          '滑块验证',
+          '请完成验证',
+          '安全验证',
+          '行为验证',
+          '请在下方完成验证',
+          '向右拖动滑块',
+          '拼图验证',
+          '验证码',
+        ]
+
+        const matchedKeyword = keywords.find(
+          keyword => bodyText.includes(keyword) || title.includes(keyword),
+        )
+        const riskElement = document.querySelector(
+          [
+            '[class*="captcha"]',
+            '[id*="captcha"]',
+            '[class*="verify"]',
+            '[id*="verify"]',
+            '[class*="secsdk"]',
+            '[id*="secsdk"]',
+            'iframe[src*="captcha"]',
+            'iframe[src*="verify"]',
+            'iframe[src*="secsdk"]',
+          ].join(','),
+        )
+
+        return {
+          matchedKeyword: matchedKeyword || null,
+          hasRiskElement: !!riskElement,
+          href,
+        }
+      })
+
+      const riskyUrl =
+        result.href.includes('captcha') ||
+        result.href.includes('verify') ||
+        result.href.includes('secsdk')
+
+      if (!result.matchedKeyword && !result.hasRiskElement && !riskyUrl) {
+        return null
+      }
+
+      if (result.matchedKeyword) {
+        return `检测到平台安全验证（${result.matchedKeyword}），请先在浏览器完成验证后再重新启动任务`
+      }
+
+      return '检测到平台安全验证，请先在浏览器完成滑块或验证码后再重新启动任务'
+    } catch (error) {
+      logger.debug('检测安全验证状态失败：', error)
+      return null
     }
   }
 

@@ -26,12 +26,11 @@ const TASK_NAME_MAP: Record<string, string> = {
   autoSpeak: '自动发言',
   autoPopup: '自动弹窗',
   autoReply: '自动回复',
-  subAccount: '小号互动',
   liveStats: '数据监控',
 }
 
 // 任务顺序 - 按照侧边栏从上到下排列
-const TASK_ORDER = ['autoSpeak', 'autoPopup', 'autoReply', 'subAccount', 'liveStats']
+const TASK_ORDER = ['autoSpeak', 'autoPopup', 'autoReply', 'liveStats']
 
 interface AccountStatusDockProps {
   /** 是否默认展开 */

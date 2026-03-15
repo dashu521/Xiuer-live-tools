@@ -65,6 +65,8 @@ const ALLOWED_STATIC_CHANNELS: string[] = [
   'tasks:subAccount:checkHealth',
   'tasks:subAccount:clearStorageState',
   'tasks:subAccount:disconnectAccount',
+  'tasks:subAccount:enterAllLiveRooms',
+  'tasks:subAccount:enterAllProgress',
   'tasks:subAccount:enterLiveRoom',
   'tasks:subAccount:exportAccounts',
   'tasks:subAccount:getAllAccounts',
@@ -103,14 +105,14 @@ export function isChannelAllowed(channel: string): boolean {
   if (ALLOWED_STATIC_CHANNELS.includes(channel)) {
     return true
   }
-  
+
   // 再检查动态通道前缀
   for (const prefix of ALLOWED_DYNAMIC_PREFIXES) {
     if (channel.startsWith(prefix)) {
       return true
     }
   }
-  
+
   return false
 }
 

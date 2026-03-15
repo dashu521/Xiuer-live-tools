@@ -1,13 +1,14 @@
 import { useMemoizedFn } from 'ahooks'
 import { useEffect, useMemo, useRef } from 'react'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
+import {
+  SUB_ACCOUNT_STORAGE_KEY,
+  SUB_ACCOUNT_WORKSPACE_ID,
+} from 'shared/subAccountWorkspace'
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { useShallow } from 'zustand/react/shallow'
-import { useAuthStore } from '@/stores/authStore'
-import { EVENTS, eventEmitter } from '@/utils/events'
-import { isolatedStorage, STORAGE_PREFIXES } from '@/utils/storageIsolation'
-import { useAccounts } from './useAccounts'
+import { DEFAULT_PRESET_CATEGORIES } from '@/pages/SubAccount/constants'
 
 export interface SubAccountMessage {
   id: string
@@ -31,6 +32,10 @@ export interface SubAccount {
   error?: string
   stats: SubAccountStats
   group?: string
+  hasStorageState?: boolean
+  liveRoomUrl?: string
+  liveRoomStatus?: 'idle' | 'entering' | 'entered' | 'error'
+  lastEnterError?: string
 }
 
 export interface SubAccountGroup {
@@ -38,6 +43,13 @@ export interface SubAccountGroup {
   name: string
   accountIds: string[]
   enabled: boolean
+}
+
+export interface SubAccountPresetCategory {
+  id: string
+  name: string
+  description: string
+  messages: SubAccountMessage[]
 }
 
 interface SubAccountInteractionConfig {
@@ -58,6 +70,20 @@ interface SubAccountContext {
   accounts: SubAccount[]
   batchCount: number
   liveRoomUrl: string
+  presetCategories: SubAccountPresetCategory[]
+}
+
+function createDefaultPresetCategories(): SubAccountPresetCategory[] {
+  return DEFAULT_PRESET_CATEGORIES.map(category => ({
+    id: category.id,
+    name: category.name,
+    description: category.description,
+    messages: category.messages.map(message => ({
+      id: message.id,
+      content: message.content,
+      weight: message.weight,
+    })),
+  }))
 }
 
 const defaultContext = (): SubAccountContext => ({
@@ -80,6 +106,7 @@ const defaultContext = (): SubAccountContext => ({
   accounts: [],
   batchCount: 5,
   liveRoomUrl: '',
+  presetCategories: createDefaultPresetCategories(),
 })
 
 interface SubAccountStore {
@@ -107,380 +134,340 @@ interface SubAccountStore {
   removeGroup: (accountId: string, groupId: string) => void
   updateGroup: (accountId: string, groupId: string, updates: Partial<SubAccountGroup>) => void
   setAccountGroup: (accountId: string, subAccountId: string, groupId: string | undefined) => void
-  loadUserContexts: (userId: string) => void
+  setPresetCategories: (accountId: string, categories: SubAccountPresetCategory[]) => void
+  loadUserContexts: (_userId: string) => void
   resetAllContexts: () => void
 }
 
-export const useSubAccountStore = create<SubAccountStore>()(
-  immer((set, get) => {
-    eventEmitter.on(EVENTS.ACCOUNT_REMOVED, (accountId: string) => {
-      set(state => {
-        delete state.contexts[accountId]
-        const { currentUserId } = get()
-        if (currentUserId) {
-          try {
-            isolatedStorage.removeAccountItem(STORAGE_PREFIXES.SUB_ACCOUNT, accountId)
-          } catch (e) {
-            console.error('[SubAccount] 删除隔离存储失败:', e)
-          }
-        }
-      })
-    })
+function createPersistedSnapshot(context: SubAccountContext): SubAccountContext {
+  return {
+    ...context,
+    isRunning: false,
+    accounts: context.accounts.map(account => ({
+      ...account,
+      status: 'idle' as const,
+      error: undefined,
+      liveRoomUrl: undefined,
+      liveRoomStatus: 'idle' as const,
+      lastEnterError: undefined,
+    })),
+  }
+}
 
-    eventEmitter.on(EVENTS.ACCOUNT_ADDED, (accountId: string) => {
-      set(state => {
-        state.contexts[accountId] = defaultContext()
-      })
-    })
+function loadPersistedContext(): SubAccountContext {
+  if (typeof window === 'undefined') {
+    return defaultContext()
+  }
 
-    const ensureContext = (state: SubAccountStore, accountId: string) => {
-      if (!state.contexts[accountId]) {
-        state.contexts[accountId] = defaultContext()
-      }
-      return state.contexts[accountId]
+  try {
+    const raw = window.localStorage.getItem(SUB_ACCOUNT_STORAGE_KEY)
+    if (!raw) {
+      return defaultContext()
     }
 
-    const saveToIsolation = (accountId: string, context: SubAccountContext) => {
-      const { currentUserId } = get()
-      if (currentUserId) {
-        try {
-          // 不保存 isRunning 和运行时状态
-          const dataToSave = {
-            ...context,
-            isRunning: false,
-            accounts: context.accounts.map(a => ({
-              ...a,
-              status: 'idle' as const,
-              error: undefined,
-            })),
-          }
-          isolatedStorage.setAccountItem(STORAGE_PREFIXES.SUB_ACCOUNT, accountId, dataToSave)
-        } catch (e) {
-          console.error('[SubAccount] 保存到隔离存储失败:', e)
-        }
+    const parsed = JSON.parse(raw) as Partial<SubAccountContext>
+    return {
+      ...defaultContext(),
+      ...parsed,
+      isRunning: false,
+      config: {
+        ...defaultContext().config,
+        ...parsed.config,
+        scheduler: parsed.config?.scheduler ?? defaultContext().config.scheduler,
+        messages:
+          parsed.config?.messages && parsed.config.messages.length > 0
+            ? parsed.config.messages
+            : defaultContext().config.messages,
+        groups: parsed.config?.groups ?? defaultContext().config.groups,
+      },
+      presetCategories:
+        parsed.presetCategories && parsed.presetCategories.length > 0
+          ? parsed.presetCategories.map(category => ({
+              ...category,
+              messages:
+                category.messages?.map(message => ({
+                  id: message.id || crypto.randomUUID(),
+                  content: message.content,
+                  weight: message.weight || 1,
+                })) ?? [],
+            }))
+          : createDefaultPresetCategories(),
+      accounts: (parsed.accounts ?? []).map(account => ({
+        ...account,
+        status: 'idle' as const,
+        error: undefined,
+        liveRoomUrl: undefined,
+        liveRoomStatus: 'idle' as const,
+        lastEnterError: undefined,
+        stats: account.stats || { totalSent: 0, successCount: 0, failCount: 0 },
+      })),
+    }
+  } catch (error) {
+    console.error('[SubAccount] 读取独立工作区配置失败:', error)
+    return defaultContext()
+  }
+}
+
+function persistContext(context: SubAccountContext) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    window.localStorage.setItem(
+      SUB_ACCOUNT_STORAGE_KEY,
+      JSON.stringify(createPersistedSnapshot(context)),
+    )
+  } catch (error) {
+    console.error('[SubAccount] 保存独立工作区配置失败:', error)
+  }
+}
+
+function resolveWorkspaceId(_accountId?: string) {
+  return SUB_ACCOUNT_WORKSPACE_ID
+}
+
+export const useSubAccountStore = create<SubAccountStore>()(
+  immer(set => {
+    const ensureContext = (state: SubAccountStore) => {
+      const workspaceId = resolveWorkspaceId()
+      if (!state.contexts[workspaceId]) {
+        state.contexts[workspaceId] = loadPersistedContext()
       }
+      return state.contexts[workspaceId]
     }
 
     return {
-      contexts: {},
+      contexts: {
+        [SUB_ACCOUNT_WORKSPACE_ID]: loadPersistedContext(),
+      },
       currentUserId: null,
 
-      setIsRunning: (accountId, running) =>
+      setIsRunning: (_accountId, running) =>
         set(state => {
-          const context = ensureContext(state, accountId)
+          const context = ensureContext(state)
           context.isRunning = running
-          // isRunning 不保存到隔离存储
         }),
 
-      setConfig: (accountId, config) =>
+      setConfig: (_accountId, config) =>
         set(state => {
-          const context = ensureContext(state, accountId)
+          const context = ensureContext(state)
           context.config = {
-            ...state.contexts[accountId].config,
+            ...context.config,
             ...config,
           }
-          saveToIsolation(accountId, context)
+          persistContext(context)
         }),
 
-      setAccounts: (accountId, accounts) =>
+      setAccounts: (_accountId, accounts) =>
         set(state => {
-          const context = ensureContext(state, accountId)
+          const context = ensureContext(state)
           context.accounts = accounts
-          saveToIsolation(accountId, context)
+          persistContext(context)
         }),
 
-      addAccount: (accountId, account) =>
+      addAccount: (_accountId, account) =>
         set(state => {
-          const context = ensureContext(state, accountId)
+          const context = ensureContext(state)
           context.accounts.push(account)
-          saveToIsolation(accountId, context)
+          persistContext(context)
         }),
 
-      removeAccount: (accountId, subAccountId) =>
+      removeAccount: (_accountId, subAccountId) =>
         set(state => {
-          const context = ensureContext(state, accountId)
-          context.accounts = context.accounts.filter(a => a.id !== subAccountId)
-          saveToIsolation(accountId, context)
+          const context = ensureContext(state)
+          context.accounts = context.accounts.filter(account => account.id !== subAccountId)
+          persistContext(context)
         }),
 
-      updateAccountStatus: (accountId, subAccountId, status, error) =>
+      updateAccountStatus: (_accountId, subAccountId, status, error) =>
         set(state => {
-          const context = ensureContext(state, accountId)
-          const account = context.accounts.find(a => a.id === subAccountId)
+          const context = ensureContext(state)
+          const account = context.accounts.find(item => item.id === subAccountId)
           if (account) {
             account.status = status
             account.error = error
           }
-          // 不保存运行时状态到隔离存储
         }),
 
-      updateAccountStats: (accountId, subAccountId, stats) =>
+      updateAccountStats: (_accountId, subAccountId, stats) =>
         set(state => {
-          const context = ensureContext(state, accountId)
-          const account = context.accounts.find(a => a.id === subAccountId)
+          const context = ensureContext(state)
+          const account = context.accounts.find(item => item.id === subAccountId)
           if (account) {
             account.stats = { ...account.stats, ...stats }
           }
-          // 不保存运行时状态到隔离存储
         }),
 
-      setBatchCount: (accountId, batchCount) =>
+      setBatchCount: (_accountId, batchCount) =>
         set(state => {
-          const context = ensureContext(state, accountId)
+          const context = ensureContext(state)
           context.batchCount = batchCount
-          saveToIsolation(accountId, context)
+          persistContext(context)
         }),
 
-      setLiveRoomUrl: (accountId, url) =>
+      setLiveRoomUrl: (_accountId, url) =>
         set(state => {
-          const context = ensureContext(state, accountId)
+          const context = ensureContext(state)
           context.liveRoomUrl = url
-          saveToIsolation(accountId, context)
+          persistContext(context)
         }),
 
-      addGroup: (accountId, group) =>
+      addGroup: (_accountId, group) =>
         set(state => {
-          const context = ensureContext(state, accountId)
-          context.config.groups?.push(group)
-          saveToIsolation(accountId, context)
+          const context = ensureContext(state)
+          context.config.groups.push(group)
+          persistContext(context)
         }),
 
-      removeGroup: (accountId, groupId) =>
+      removeGroup: (_accountId, groupId) =>
         set(state => {
-          const context = ensureContext(state, accountId)
-          // 获取被删除分组中的账号ID列表
-          const removedGroup = context.config.groups?.find(g => g.id === groupId)
+          const context = ensureContext(state)
+          const removedGroup = context.config.groups.find(group => group.id === groupId)
           const affectedAccountIds = removedGroup?.accountIds ?? []
-          // 删除分组
-          context.config.groups = context.config.groups?.filter(g => g.id !== groupId) ?? []
-          // 清理受影响账号的group字段
-          context.accounts?.forEach(account => {
+          context.config.groups = context.config.groups.filter(group => group.id !== groupId)
+          context.accounts.forEach(account => {
             if (affectedAccountIds.includes(account.id)) {
               account.group = undefined
             }
           })
-          saveToIsolation(accountId, context)
+          persistContext(context)
         }),
 
-      updateGroup: (accountId, groupId, updates) =>
+      updateGroup: (_accountId, groupId, updates) =>
         set(state => {
-          const context = ensureContext(state, accountId)
-          const group = context.config.groups?.find(g => g.id === groupId)
+          const context = ensureContext(state)
+          const group = context.config.groups.find(item => item.id === groupId)
           if (group) {
             Object.assign(group, updates)
           }
-          saveToIsolation(accountId, context)
+          persistContext(context)
         }),
 
-      setAccountGroup: (accountId, subAccountId, groupId) =>
+      setAccountGroup: (_accountId, subAccountId, groupId) =>
         set(state => {
-          const context = ensureContext(state, accountId)
-          const account = context.accounts?.find(a => a.id === subAccountId)
+          const context = ensureContext(state)
+          const account = context.accounts.find(item => item.id === subAccountId)
           if (account) {
-            context.config.groups?.forEach(g => {
-              g.accountIds = g.accountIds?.filter(id => id !== subAccountId) ?? []
+            context.config.groups.forEach(group => {
+              group.accountIds = group.accountIds.filter(id => id !== subAccountId)
             })
+
             if (groupId) {
-              const group = context.config.groups?.find(g => g.id === groupId)
-              if (group && !group.accountIds?.includes(subAccountId)) {
-                group.accountIds?.push(subAccountId)
+              const group = context.config.groups.find(item => item.id === groupId)
+              if (group && !group.accountIds.includes(subAccountId)) {
+                group.accountIds.push(subAccountId)
               }
               account.group = group?.name
             } else {
               account.group = undefined
             }
           }
-          saveToIsolation(accountId, context)
+          persistContext(context)
         }),
 
-      loadUserContexts: (userId: string) => {
-        const loadContexts = () => {
-          const { accounts } = useAccounts.getState()
-          if (accounts.length === 0) {
-            return
-          }
+      setPresetCategories: (_accountId, categories) =>
+        set(state => {
+          const context = ensureContext(state)
+          context.presetCategories = categories
+          persistContext(context)
+        }),
 
-          set(state => {
-            state.currentUserId = userId
-            state.contexts = {}
-
-            accounts.forEach(account => {
-              const savedContext = isolatedStorage.getAccountItem<SubAccountContext>(
-                STORAGE_PREFIXES.SUB_ACCOUNT,
-                account.id,
-              )
-              if (savedContext) {
-                state.contexts[account.id] = {
-                  ...savedContext,
-                  isRunning: false,
-                  accounts: savedContext.accounts.map(a => ({
-                    ...a,
-                    status: 'idle' as const,
-                    error: undefined,
-                  })),
-                }
-              }
-            })
-          })
-        }
-
-        const { accounts } = useAccounts.getState()
-        if (accounts.length > 0) {
-          loadContexts()
-        } else {
-          const unsubscribe = useAccounts.subscribe(state => {
-            if (state.accounts.length > 0) {
-              unsubscribe()
-              loadContexts()
-            }
-          })
-        }
-      },
+      loadUserContexts: () =>
+        set(state => {
+          state.contexts[SUB_ACCOUNT_WORKSPACE_ID] = loadPersistedContext()
+        }),
 
       resetAllContexts: () =>
         set(state => {
-          // 保存当前数据到隔离存储
-          const { currentUserId } = state
-          if (currentUserId) {
-            Object.entries(state.contexts).forEach(([accountId, context]) => {
-              try {
-                const dataToSave = {
-                  ...context,
-                  isRunning: false,
-                  accounts: context.accounts.map(a => ({
-                    ...a,
-                    status: 'idle' as const,
-                    error: undefined,
-                  })),
-                }
-                isolatedStorage.setAccountItem(STORAGE_PREFIXES.SUB_ACCOUNT, accountId, dataToSave)
-              } catch (e) {
-                console.error('[SubAccount] 保存配置失败:', e)
-              }
-            })
-          }
-          state.contexts = {}
-          state.currentUserId = null
+          const context = ensureContext(state)
+          persistContext(context)
         }),
     }
   }),
 )
 
 export const useSubAccountActions = () => {
-  const currentAccountId = useAccounts(state => state.currentAccountId)
-
   const updateConfig = useMemoizedFn((newConfig: Partial<SubAccountInteractionConfig>) => {
-    useSubAccountStore.getState().setConfig(currentAccountId, newConfig)
+    useSubAccountStore.getState().setConfig(SUB_ACCOUNT_WORKSPACE_ID, newConfig)
   })
 
   return useMemo(() => {
     const getStore = () => useSubAccountStore.getState()
     return {
-      setIsRunning: (running: boolean) => getStore().setIsRunning(currentAccountId, running),
+      setIsRunning: (running: boolean) => getStore().setIsRunning(SUB_ACCOUNT_WORKSPACE_ID, running),
       setScheduler: (scheduler: SubAccountInteractionConfig['scheduler']) =>
         updateConfig({ scheduler }),
       setMessages: (messages: SubAccountMessage[]) => updateConfig({ messages }),
       setRandom: (random: boolean) => updateConfig({ random }),
       setExtraSpaces: (extraSpaces: boolean) => updateConfig({ extraSpaces }),
       setRotateAccounts: (rotateAccounts: boolean) => updateConfig({ rotateAccounts }),
-      setAccounts: (accounts: SubAccount[]) => getStore().setAccounts(currentAccountId, accounts),
-      addAccount: (account: SubAccount) => getStore().addAccount(currentAccountId, account),
+      setAccounts: (accounts: SubAccount[]) =>
+        getStore().setAccounts(SUB_ACCOUNT_WORKSPACE_ID, accounts),
+      addAccount: (account: SubAccount) => getStore().addAccount(SUB_ACCOUNT_WORKSPACE_ID, account),
       removeAccount: (subAccountId: string) =>
-        getStore().removeAccount(currentAccountId, subAccountId),
+        getStore().removeAccount(SUB_ACCOUNT_WORKSPACE_ID, subAccountId),
       updateAccountStatus: (subAccountId: string, status: SubAccount['status'], error?: string) =>
-        getStore().updateAccountStatus(currentAccountId, subAccountId, status, error),
+        getStore().updateAccountStatus(SUB_ACCOUNT_WORKSPACE_ID, subAccountId, status, error),
       updateAccountStats: (subAccountId: string, stats: Partial<SubAccountStats>) =>
-        getStore().updateAccountStats(currentAccountId, subAccountId, stats),
-      setBatchCount: (count: number) => getStore().setBatchCount(currentAccountId, count),
-      setLiveRoomUrl: (url: string) => getStore().setLiveRoomUrl(currentAccountId, url),
-      addGroup: (group: SubAccountGroup) => getStore().addGroup(currentAccountId, group),
-      removeGroup: (groupId: string) => getStore().removeGroup(currentAccountId, groupId),
+        getStore().updateAccountStats(SUB_ACCOUNT_WORKSPACE_ID, subAccountId, stats),
+      setBatchCount: (count: number) => getStore().setBatchCount(SUB_ACCOUNT_WORKSPACE_ID, count),
+      setLiveRoomUrl: (url: string) => getStore().setLiveRoomUrl(SUB_ACCOUNT_WORKSPACE_ID, url),
+      addGroup: (group: SubAccountGroup) => getStore().addGroup(SUB_ACCOUNT_WORKSPACE_ID, group),
+      removeGroup: (groupId: string) =>
+        getStore().removeGroup(SUB_ACCOUNT_WORKSPACE_ID, groupId),
       updateGroup: (groupId: string, updates: Partial<SubAccountGroup>) =>
-        getStore().updateGroup(currentAccountId, groupId, updates),
+        getStore().updateGroup(SUB_ACCOUNT_WORKSPACE_ID, groupId, updates),
       setAccountGroup: (subAccountId: string, groupId: string | undefined) =>
-        getStore().setAccountGroup(currentAccountId, subAccountId, groupId),
+        getStore().setAccountGroup(SUB_ACCOUNT_WORKSPACE_ID, subAccountId, groupId),
+      setPresetCategories: (categories: SubAccountPresetCategory[]) =>
+        getStore().setPresetCategories(SUB_ACCOUNT_WORKSPACE_ID, categories),
       setRotateGroups: (rotateGroups: boolean) => updateConfig({ rotateGroups }),
     }
-  }, [currentAccountId, updateConfig])
+  }, [updateConfig])
 }
 
 export const useCurrentSubAccount = <T>(getter: (context: SubAccountContext) => T): T => {
-  const currentAccountId = useAccounts(state => state.currentAccountId)
-  const { loadUserContexts } = useSubAccountStore()
-  const { user } = useAuthStore()
-
-  // 当账号切换时，确保配置已加载
-  useEffect(() => {
-    if (currentAccountId && user?.id) {
-      const state = useSubAccountStore.getState()
-      // 如果当前账号的配置不存在，重新加载
-      if (!state.contexts[currentAccountId]) {
-        console.log('[SubAccount] 账号切换，加载配置:', currentAccountId)
-        loadUserContexts(user.id)
-      }
-    }
-  }, [currentAccountId, user?.id, loadUserContexts])
-
   const defaultContextRef = useRef(defaultContext())
+
   return useSubAccountStore(
     useShallow(state => {
-      const context = state.contexts[currentAccountId] ?? defaultContextRef.current
+      const context = state.contexts[SUB_ACCOUNT_WORKSPACE_ID] ?? defaultContextRef.current
       return getter(context)
     }),
   )
 }
 
-// Hook: 自动加载配置
 export function useLoadSubAccountOnLogin() {
-  const { loadUserContexts } = useSubAccountStore()
-  const { isAuthenticated, user } = useAuthStore()
-
   useEffect(() => {
-    if (isAuthenticated && user?.id) {
-      // 延迟加载，确保存储系统已初始化
-      setTimeout(() => {
-        console.log('[SubAccount] 加载用户配置:', user.id)
-        loadUserContexts(user.id)
-      }, 0)
-    }
-  }, [isAuthenticated, user?.id, loadUserContexts])
+    useSubAccountStore.getState().loadUserContexts('')
+  }, [])
 }
 
-/**
- * 应用启动时将前端持久化的小号同步到后端 SubAccountManager
- *
- * 使用 Map 来跟踪每个账号的同步状态，避免：
- * 1. React StrictMode 的双重挂载导致重复同步
- * 2. 账号切换时的重复同步
- */
-const syncedAccounts = new Map<string, boolean>()
-
 export function useSyncSubAccountsOnMount() {
-  const currentAccountId = useAccounts(state => state.currentAccountId)
   const accounts = useCurrentSubAccount(ctx => ctx.accounts)
+  const syncSignature = JSON.stringify(
+    accounts.map(account => ({
+      id: account.id,
+      name: account.name,
+      platform: account.platform,
+    })),
+  )
 
   useEffect(() => {
-    // 检查当前账号是否已同步
-    if (syncedAccounts.get(currentAccountId) || accounts.length === 0) return
-
-    // 标记为已同步
-    syncedAccounts.set(currentAccountId, true)
-
-    const configs = accounts.map(a => ({
-      id: a.id,
-      name: a.name,
-      platform: a.platform,
-    }))
+    const configs = JSON.parse(syncSignature) as Array<{
+      id: string
+      name: string
+      platform: LiveControlPlatform
+    }>
 
     window.ipcRenderer
-      .invoke(IPC_CHANNELS.tasks.subAccount.syncAccounts, currentAccountId, configs)
+      .invoke(IPC_CHANNELS.tasks.subAccount.syncAccounts, SUB_ACCOUNT_WORKSPACE_ID, configs)
       .then(() => {
-        console.log(`[SubAccount] 账号 ${currentAccountId} 的小号同步成功`)
+        console.log('[SubAccount] 独立工作区小号同步成功')
       })
       .catch(error => {
-        console.error(`[SubAccount] 账号 ${currentAccountId} 的小号同步失败:`, error)
-        // 同步失败时重置标记，允许重试
-        syncedAccounts.delete(currentAccountId)
+        console.error('[SubAccount] 独立工作区小号同步失败:', error)
       })
-  }, [currentAccountId, accounts])
+  }, [syncSignature])
 }

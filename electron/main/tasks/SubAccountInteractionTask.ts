@@ -1,9 +1,14 @@
 import { Result } from '@praha/byethrow'
 import { ErrorFactory } from '@praha/error-factory'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
+import { isSameSubAccountLiveRoomUrl } from 'shared/subAccountLiveRoom'
 import { AbortError } from '#/errors/AppError'
 import type { ScopedLogger } from '#/logger'
-import { type SubAccountSession, subAccountManager } from '#/managers/SubAccountManager'
+import {
+  SubAccountVerificationRequiredError,
+  type SubAccountSession,
+  subAccountManager,
+} from '#/managers/SubAccountManager'
 import {
   insertRandomSpaces,
   type MessageTemplateContext,
@@ -89,15 +94,29 @@ export function createSubAccountInteractionTask(
     return messages[currentMessageIndex] ?? messages[0]
   }
 
-  function getNextAccount(depth = 0): SubAccountSession | null {
+  function getEligibleAccounts(targetLiveRoomUrl: string): SubAccountSession[] {
+    const configuredIds = new Set(config.accounts.map(acc => acc.id))
+    const orderById = new Map(config.accounts.map((account, index) => [account.id, index]))
+    return subAccountManager
+      .getConnectedAccounts()
+      .filter(account => configuredIds.has(account.id))
+      .filter(
+        account =>
+          account.liveRoomStatus === 'entered' &&
+          isSameSubAccountLiveRoomUrl(account.liveRoomUrl, targetLiveRoomUrl),
+      )
+      .sort((a, b) => (orderById.get(a.id) ?? 0) - (orderById.get(b.id) ?? 0))
+  }
+
+  function getNextAccount(targetLiveRoomUrl: string, depth = 0): SubAccountSession | null {
     // 防止无限递归导致栈溢出
     if (depth > 10) {
       logger.warn('分组轮换深度过大，返回 null')
       return null
     }
 
-    const allConnected = subAccountManager.getConnectedAccounts()
-    if (allConnected.length === 0) return null
+    const eligibleAccounts = getEligibleAccounts(targetLiveRoomUrl)
+    if (eligibleAccounts.length === 0) return null
 
     const enabledGroups = (config.groups ?? []).filter(g => g.enabled)
     const useGroups = config.rotateGroups && enabledGroups.length > 0
@@ -106,13 +125,13 @@ export function createSubAccountInteractionTask(
     if (useGroups) {
       const group = enabledGroups[currentGroupIndex % enabledGroups.length]
       const orderById = new Map(group.accountIds.map((id, i) => [id, i]))
-      candidates = allConnected
+      candidates = eligibleAccounts
         .filter(a => orderById.has(a.id))
         .sort((a, b) => (orderById.get(a.id) ?? 0) - (orderById.get(b.id) ?? 0))
       if (candidates.length === 0) {
         currentGroupIndex++
         currentAccountIndexInGroup = 0
-        return getNextAccount(depth + 1)
+        return getNextAccount(targetLiveRoomUrl, depth + 1)
       }
       const account = candidates[currentAccountIndexInGroup % candidates.length]
       currentAccountIndexInGroup++
@@ -123,7 +142,7 @@ export function createSubAccountInteractionTask(
       return account
     }
 
-    candidates = allConnected
+    candidates = eligibleAccounts
     if (config.rotateAccounts) {
       currentAccountIndex = (currentAccountIndex + 1) % candidates.length
       return candidates[currentAccountIndex]
@@ -145,6 +164,15 @@ export function createSubAccountInteractionTask(
       if (accounts.length === 0) return '至少添加一个小号'
     }
 
+    const validateLiveRoomUrl = (liveRoomUrl?: string) => {
+      if (!liveRoomUrl?.trim()) return '请先设置直播间地址'
+      try {
+        new URL(liveRoomUrl)
+      } catch {
+        return '直播间地址格式无效'
+      }
+    }
+
     return Result.pipe(
       intervalTask.validateInterval(userConfig.scheduler.interval),
       Result.andThen(() => {
@@ -154,6 +182,11 @@ export function createSubAccountInteractionTask(
       }),
       Result.andThen(() => {
         const errMsg = validateAccounts(userConfig.accounts)
+        if (errMsg) return Result.fail(new AccountValidationError({ description: errMsg }))
+        return Result.succeed()
+      }),
+      Result.andThen(() => {
+        const errMsg = validateLiveRoomUrl(userConfig.liveRoomUrl)
         if (errMsg) return Result.fail(new AccountValidationError({ description: errMsg }))
         return Result.succeed()
       }),
@@ -172,9 +205,14 @@ export function createSubAccountInteractionTask(
           return Result.fail(new AbortError())
         }
 
-        const subAccount = getNextAccount()
+        const targetLiveRoomUrl = config.liveRoomUrl?.trim()
+        if (!targetLiveRoomUrl) {
+          return Result.fail(new Error('直播间地址未配置'))
+        }
+
+        const subAccount = getNextAccount(targetLiveRoomUrl)
         if (!subAccount) {
-          logger.warn('没有可用的小号，跳过本次发送')
+          logger.warn('没有已进入目标直播间的小号，跳过本次发送')
           return Result.succeed()
         }
 
@@ -206,6 +244,19 @@ export function createSubAccountInteractionTask(
         if (success) {
           logger.success(`小号 ${subAccount.name} 发送成功：${content}`)
         } else {
+          if (sendResult.error instanceof SubAccountVerificationRequiredError) {
+            const verificationMessage = sendResult.error.message
+            logger.warn(`小号 ${subAccount.name} 触发平台安全验证，任务将暂停：${verificationMessage}`)
+            windowManager.send(IPC_CHANNELS.tasks.subAccount.accountStatusChanged, account.id, {
+              accountId: subAccount.id,
+              accountName: subAccount.name,
+              verificationRequired: true,
+              verificationMessage,
+              timestamp: Date.now(),
+            })
+            return Result.fail(sendResult.error)
+          }
+
           logger.error(`小号 ${subAccount.name} 发送失败：${sendResult.error.message}`)
         }
 
@@ -233,6 +284,7 @@ export function createSubAccountInteractionTask(
         onRetryError: () => {
           logger.info('发送失败，准备重试...')
         },
+        shouldRetry: err => !(err instanceof SubAccountVerificationRequiredError),
       },
     )
     return result

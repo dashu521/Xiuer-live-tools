@@ -5,6 +5,91 @@ import type { providers } from 'shared/providers'
 import { IPC_CHANNELS } from './ipcChannels'
 
 export interface IpcChannels {
+  // Auth
+  [IPC_CHANNELS.auth.register]: (data: {
+    username: string
+    email: string
+    password: string
+    confirmPassword: string
+  }) => {
+    success: boolean
+    user?: { id: string; username: string; email?: string; phone?: string; status?: string }
+    token?: string
+    refresh_token?: string
+    error?: string
+    status?: number
+    detail?: string
+  }
+  [IPC_CHANNELS.auth.login]: (credentials: {
+    username: string
+    password: string
+    rememberMe?: boolean
+  }) => {
+    success: boolean
+    user?: { id: string; username: string; email?: string; phone?: string; status?: string }
+    token?: string
+    refresh_token?: string
+    error?: string
+    errorType?: string
+    status?: number
+    detail?: string
+  }
+  [IPC_CHANNELS.auth.loginWithSms]: (
+    phone: string,
+    code: string,
+  ) => {
+    success: boolean
+    user?: { id: string; username: string; email?: string; phone?: string; status?: string }
+    token?: string
+    refresh_token?: string
+    needs_password?: boolean
+    error?: string
+    status?: number
+    responseDetail?: string
+  }
+  [IPC_CHANNELS.auth.logout]: (token: string) => boolean
+  [IPC_CHANNELS.auth.validateToken]: (
+    token: string,
+  ) => { id: string; username: string; email?: string; phone?: string; status?: string } | null
+  [IPC_CHANNELS.auth.getCurrentUser]: (
+    token: string,
+  ) => { id: string; username: string; email?: string; phone?: string; status?: string } | null
+  [IPC_CHANNELS.auth.restoreSession]: () => {
+    success: boolean
+    user?: { id: string; username: string; email?: string; phone?: string; status?: string }
+    token?: string
+  }
+  [IPC_CHANNELS.auth.getAuthSummary]: () => { isAuthenticated: boolean; hasToken: boolean }
+  [IPC_CHANNELS.auth.proxyRequest]: (requestConfig: {
+    endpoint: string
+    method?: string
+    body?: object
+  }) => { success: boolean; status?: number; data?: unknown; error?: string }
+  [IPC_CHANNELS.auth.getTokenInternal]: () => { token: string | null; refreshToken: string | null }
+  [IPC_CHANNELS.auth.clearTokens]: () => void
+  [IPC_CHANNELS.auth.checkFeatureAccess]: (
+    token: string,
+    feature: string,
+  ) => {
+    canAccess: boolean
+    requiresAuth: boolean
+    requiredPlan: string
+    user: { id: string; username: string; email?: string; phone?: string; status?: string } | null
+  }
+  [IPC_CHANNELS.auth.requiresAuthentication]: (feature: string) => boolean
+  [IPC_CHANNELS.auth.updateUserProfile]: (
+    token: string,
+    data: { username?: string; email?: string },
+  ) => { success: boolean; error?: string }
+  [IPC_CHANNELS.auth.changePassword]: (
+    token: string,
+    data: { currentPassword: string; newPassword: string },
+  ) => { success: boolean; error?: string }
+  [IPC_CHANNELS.auth.stateChanged]: (
+    user: { id: string; username: string; email?: string; phone?: string; status?: string } | null,
+  ) => void
+  [IPC_CHANNELS.auth.loginRequired]: (feature: string) => void
+
   // LiveControl
   [IPC_CHANNELS.tasks.liveControl.connect]: (params: {
     chromePath?: string
@@ -161,6 +246,10 @@ export interface IpcChannels {
       accountName?: string
       message?: string
       status?: 'idle' | 'connecting' | 'connected' | 'error'
+      liveRoomStatus?: 'idle' | 'entering' | 'entered' | 'error'
+      lastEnterError?: string
+      verificationRequired?: boolean
+      verificationMessage?: string
       error?: string
       timestamp: number
     },
@@ -177,6 +266,30 @@ export interface IpcChannels {
       total: number
       completed: number
       failed: number
+    },
+  ) => void
+  [IPC_CHANNELS.tasks.subAccount.enterAllLiveRooms]: (
+    accountId: string,
+    liveRoomUrl: string,
+    accountIds: string[],
+  ) => Promise<{
+    success: boolean
+    successCount: number
+    failedCount: number
+    results: Array<{ accountId: string; success: boolean; error?: string }>
+    error?: string
+  }>
+  [IPC_CHANNELS.tasks.subAccount.enterAllProgress]: (
+    accountId: string,
+    data: {
+      current: number
+      total: number
+      completed: number
+      failed: number
+      accountId: string
+      accountName: string
+      success: boolean
+      error?: string
     },
   ) => void
   [IPC_CHANNELS.tasks.subAccount.checkHealth]: (
@@ -197,6 +310,8 @@ export interface IpcChannels {
     stats: { totalSent: number; successCount: number; failCount: number }
     hasStorageState: boolean
     liveRoomUrl?: string
+    liveRoomStatus?: 'idle' | 'entering' | 'entered' | 'error'
+    lastEnterError?: string
   }>
   [IPC_CHANNELS.tasks.subAccount.clearStorageState]: (
     accountId: string,
@@ -309,5 +424,14 @@ export interface ElectronAPI {
       channel: Channel,
       listener: (...args: Parameters<IpcChannels[Channel]>) => void,
     ) => () => void
+  }
+}
+
+// 为需要动态 channel 的场景提供宽松类型（如 TaskContext.ipcInvoke）
+export interface LooseElectronAPI {
+  ipcRenderer: {
+    invoke: (channel: string, ...args: unknown[]) => Promise<unknown>
+    send: (channel: string, ...args: unknown[]) => void
+    on: (channel: string, listener: (...args: unknown[]) => void) => () => void
   }
 }

@@ -1,7 +1,13 @@
 import { Result } from '@praha/byethrow'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
+import {
+  SUB_ACCOUNT_WORKSPACE_ID,
+  SUB_ACCOUNT_WORKSPACE_NAME,
+} from 'shared/subAccountWorkspace'
+import { isSameSubAccountLiveRoomUrl } from 'shared/subAccountLiveRoom'
+// 导入验证库（使用已存在的 zod）
+import { z } from 'zod'
 import { createLogger } from '#/logger'
-import { accountManager } from '#/managers/AccountManager'
 import { type SubAccountStatus, subAccountManager } from '#/managers/SubAccountManager'
 import { subAccountTaskManager } from '#/managers/SubAccountTaskManager'
 import {
@@ -11,19 +17,16 @@ import {
   sleep,
   typedIpcMainHandle,
 } from '#/utils'
-import windowManager from '#/windowManager'
 // [SECURITY-FIX] 引入输入校验工具
 import {
+  type SchemaField,
   safeJsonParse,
   validateAccountId,
   validatePlatform,
   validateSchema,
   validateUrl,
-  type SchemaField,
 } from '#/utils/securityValidators'
-
-// 导入验证库（使用已存在的 zod）
-import { z } from 'zod'
+import windowManager from '#/windowManager'
 
 // 子账号导入数据验证 Schema
 const ImportAccountSchema = z.object({
@@ -32,12 +35,23 @@ const ImportAccountSchema = z.object({
   platform: z.enum(['douyin', 'kuaishou', 'taobao', 'xiaohongshu']),
 })
 
-const ImportAccountsArraySchema = z.array(ImportAccountSchema)
+const _ImportAccountsArraySchema = z.array(ImportAccountSchema)
 
 const TASK_NAME = '小号互动'
 
-// 为每个账号维护独立的批量发送控制器
+// 为小号互动独立工作区维护批量发送控制器
 const batchAbortControllers: Map<string, AbortController> = new Map()
+const enterAllAbortControllers: Map<string, AbortController> = new Map()
+
+function emitSubAccountSyncEvent(subAccountId: string) {
+  const session = subAccountManager.getAccount(subAccountId)
+  windowManager.send(IPC_CHANNELS.tasks.subAccount.accountStatusChanged, SUB_ACCOUNT_WORKSPACE_ID, {
+    accountId: subAccountId,
+    liveRoomStatus: session?.liveRoomStatus,
+    lastEnterError: session?.lastEnterError,
+    timestamp: Date.now(),
+  })
+}
 
 // 标记是否已初始化，防止重复注册
 let isInitialized = false
@@ -45,6 +59,7 @@ let isInitialized = false
 let statusChangeCallback:
   | ((accountId: string, status: SubAccountStatus, error?: string) => void)
   | null = null
+let sessionUpdateCallback: ((accountId: string) => void) | null = null
 
 function setupIpcHandlers() {
   // 防止重复初始化
@@ -59,10 +74,13 @@ function setupIpcHandlers() {
     console.log('[SubAccountIPC] 清理旧的状态变更回调')
     // 注意：SubAccountManager 需要实现移除回调的方法
   }
+  if (sessionUpdateCallback) {
+    console.log('[SubAccountIPC] 清理旧的会话更新回调')
+  }
 
   // 注册小号状态变更回调，实时同步到前端
   statusChangeCallback = (subAccountId, status, error) => {
-    windowManager.send(IPC_CHANNELS.tasks.subAccount.accountStatusChanged, subAccountId, {
+    windowManager.send(IPC_CHANNELS.tasks.subAccount.accountStatusChanged, SUB_ACCOUNT_WORKSPACE_ID, {
       accountId: subAccountId,
       status,
       error,
@@ -71,9 +89,30 @@ function setupIpcHandlers() {
   }
   subAccountManager.onStatusChange(statusChangeCallback)
 
+  sessionUpdateCallback = subAccountId => {
+    emitSubAccountSyncEvent(subAccountId)
+  }
+  subAccountManager.onSessionUpdate(sessionUpdateCallback)
+
   typedIpcMainHandle(IPC_CHANNELS.tasks.subAccount.start, async (_, accountId, config) => {
-    const logger = createLogger(`@${accountManager.getAccountName(accountId)}`).scope(TASK_NAME)
+    const logger = createLogger(SUB_ACCOUNT_WORKSPACE_NAME).scope(TASK_NAME)
     try {
+      const targetLiveRoomUrl = config.liveRoomUrl?.trim()
+      const configuredIds = new Set(config.accounts.map(account => account.id))
+      const readyAccounts = subAccountManager
+        .getConnectedAccounts()
+        .filter(session => configuredIds.has(session.id))
+        .filter(
+          session =>
+            session.liveRoomStatus === 'entered' &&
+            isSameSubAccountLiveRoomUrl(session.liveRoomUrl, targetLiveRoomUrl),
+        )
+
+      if (readyAccounts.length === 0) {
+        logger.error('启动任务失败：没有已进入目标直播间的小号')
+        return false
+      }
+
       const ok = await subAccountTaskManager.start(accountId, config)
       if (!ok) {
         logger.error('启动任务失败')
@@ -94,7 +133,12 @@ function setupIpcHandlers() {
       ac.abort()
       batchAbortControllers.delete(accountId)
     }
-    const logger = createLogger(`@${accountManager.getAccountName(accountId)}`).scope(TASK_NAME)
+    const enterAllAc = enterAllAbortControllers.get(accountId)
+    if (enterAllAc) {
+      enterAllAc.abort()
+      enterAllAbortControllers.delete(accountId)
+    }
+    const logger = createLogger(SUB_ACCOUNT_WORKSPACE_NAME).scope(TASK_NAME)
     try {
       subAccountTaskManager.stop(accountId)
       logger.info('小号互动任务已停止')
@@ -108,7 +152,7 @@ function setupIpcHandlers() {
   typedIpcMainHandle(
     IPC_CHANNELS.tasks.subAccount.updateConfig,
     async (_, accountId, newConfig) => {
-      const logger = createLogger(`@${accountManager.getAccountName(accountId)}`).scope(TASK_NAME)
+      const logger = createLogger(SUB_ACCOUNT_WORKSPACE_NAME).scope(TASK_NAME)
       const result = subAccountTaskManager.updateConfig(accountId, newConfig)
       if (Result.isSuccess(result)) {
         logger.info('更新配置成功')
@@ -121,7 +165,7 @@ function setupIpcHandlers() {
   typedIpcMainHandle(
     IPC_CHANNELS.tasks.subAccount.addAccount,
     async (_, accountId, subAccountConfig) => {
-      const logger = createLogger(`@${accountManager.getAccountName(accountId)}`).scope(TASK_NAME)
+      const logger = createLogger(SUB_ACCOUNT_WORKSPACE_NAME).scope(TASK_NAME)
       const result = subAccountManager.addAccount(subAccountConfig)
       if (Result.isFailure(result)) {
         logger.error('添加小号失败：', result.error)
@@ -135,7 +179,7 @@ function setupIpcHandlers() {
   typedIpcMainHandle(
     IPC_CHANNELS.tasks.subAccount.removeAccount,
     async (_, accountId, subAccountId) => {
-      const logger = createLogger(`@${accountManager.getAccountName(accountId)}`).scope(TASK_NAME)
+      const logger = createLogger(SUB_ACCOUNT_WORKSPACE_NAME).scope(TASK_NAME)
       await subAccountManager.removeAccount(subAccountId)
       logger.info(`移除小号: ${subAccountId}`)
       return true
@@ -145,7 +189,7 @@ function setupIpcHandlers() {
   typedIpcMainHandle(
     IPC_CHANNELS.tasks.subAccount.loginAccount,
     async (_, accountId, subAccountId) => {
-      const logger = createLogger(`@${accountManager.getAccountName(accountId)}`).scope(TASK_NAME)
+      const logger = createLogger(SUB_ACCOUNT_WORKSPACE_NAME).scope(TASK_NAME)
       logger.info(`开始登录小号：${subAccountId}`)
 
       const result = await subAccountManager.connectAccount(subAccountId, false)
@@ -171,7 +215,7 @@ function setupIpcHandlers() {
   typedIpcMainHandle(
     IPC_CHANNELS.tasks.subAccount.disconnectAccount,
     async (_, accountId, subAccountId) => {
-      const logger = createLogger(`@${accountManager.getAccountName(accountId)}`).scope(TASK_NAME)
+      const logger = createLogger(SUB_ACCOUNT_WORKSPACE_NAME).scope(TASK_NAME)
       logger.info(`断开小号连接: ${subAccountId}`)
 
       await subAccountManager.disconnectAccount(subAccountId)
@@ -183,7 +227,7 @@ function setupIpcHandlers() {
   typedIpcMainHandle(
     IPC_CHANNELS.tasks.subAccount.enterLiveRoom,
     async (_, accountId, subAccountId, liveRoomUrl) => {
-      const logger = createLogger(`@${accountManager.getAccountName(accountId)}`).scope(TASK_NAME)
+      const logger = createLogger(SUB_ACCOUNT_WORKSPACE_NAME).scope(TASK_NAME)
 
       // [SECURITY-FIX] 校验直播间 URL
       const urlValidation = validateUrl(liveRoomUrl)
@@ -197,25 +241,129 @@ function setupIpcHandlers() {
       const result = await subAccountManager.enterLiveRoom(subAccountId, urlValidation.url!)
       if (Result.isFailure(result)) {
         logger.error('进入直播间失败：', result.error)
+        emitSubAccountSyncEvent(subAccountId)
         return { success: false, error: result.error.message }
       }
 
       logger.success(`小号 ${subAccountId} 已进入直播间`)
+      emitSubAccountSyncEvent(subAccountId)
       return { success: true }
+    },
+  )
+
+  typedIpcMainHandle(
+    IPC_CHANNELS.tasks.subAccount.enterAllLiveRooms,
+    async (_, accountId, liveRoomUrl, accountIds) => {
+      const logger = createLogger(SUB_ACCOUNT_WORKSPACE_NAME).scope(TASK_NAME)
+      const urlValidation = validateUrl(liveRoomUrl)
+      if (!urlValidation.valid) {
+        return {
+          success: false,
+          successCount: 0,
+          failedCount: 0,
+          results: [],
+          error: `Invalid URL: ${urlValidation.error}`,
+        }
+      }
+
+      enterAllAbortControllers.get(accountId)?.abort()
+      const ac = new AbortController()
+      enterAllAbortControllers.set(accountId, ac)
+
+      const candidates = accountIds
+        .map(id => subAccountManager.getAccount(id))
+        .filter((session): session is NonNullable<typeof session> => !!session)
+        .filter(session => session.status === 'connected')
+
+      if (candidates.length === 0) {
+        enterAllAbortControllers.delete(accountId)
+        return {
+          success: false,
+          successCount: 0,
+          failedCount: 0,
+          results: [],
+          error: '没有已连接的小号',
+        }
+      }
+
+      logger.info(`开始轮流进房，共 ${candidates.length} 个小号`)
+
+      const results: Array<{ accountId: string; success: boolean; error?: string }> = []
+      let completed = 0
+      let failed = 0
+
+      try {
+        for (const session of candidates) {
+          if (ac.signal.aborted) break
+
+          const result = await subAccountManager.enterLiveRoom(session.id, urlValidation.url!)
+          const success = Result.isSuccess(result)
+          const errorMessage = Result.isFailure(result) ? result.error.message : undefined
+          if (success) {
+            completed++
+          } else {
+            failed++
+          }
+
+          results.push({
+            accountId: session.id,
+            success,
+            error: errorMessage,
+          })
+
+          emitSubAccountSyncEvent(session.id)
+          windowManager.send(IPC_CHANNELS.tasks.subAccount.enterAllProgress, accountId, {
+            current: results.length,
+            total: candidates.length,
+            completed,
+            failed,
+            accountId: session.id,
+            accountName: session.name,
+            success,
+            error: errorMessage,
+          })
+
+          if (results.length < candidates.length && !ac.signal.aborted) {
+            await sleep(randomInt(3000, 8000))
+          }
+        }
+
+        return {
+          success: failed === 0,
+          successCount: completed,
+          failedCount: failed,
+          results,
+        }
+      } catch (error) {
+        logger.error('轮流进房异常：', error)
+        return {
+          success: false,
+          successCount: completed,
+          failedCount: failed,
+          results,
+          error: error instanceof Error ? error.message : '轮流进房失败',
+        }
+      } finally {
+        if (enterAllAbortControllers.get(accountId) === ac) {
+          enterAllAbortControllers.delete(accountId)
+        }
+      }
     },
   )
 
   typedIpcMainHandle(
     IPC_CHANNELS.tasks.subAccount.sendBatch,
     async (_, accountId, count, messages) => {
-      const logger = createLogger(`@${accountManager.getAccountName(accountId)}`).scope(TASK_NAME)
+      const logger = createLogger(SUB_ACCOUNT_WORKSPACE_NAME).scope(TASK_NAME)
 
       // 清理旧的控制器
       batchAbortControllers.get(accountId)?.abort()
 
-      const connectedAccounts = subAccountManager.getConnectedAccounts()
+      const connectedAccounts = subAccountManager
+        .getConnectedAccounts()
+        .filter(session => session.liveRoomStatus === 'entered' && !!session.liveRoomUrl)
       if (connectedAccounts.length === 0) {
-        return { success: false, error: '没有已连接的小号' }
+        return { success: false, error: '没有已进入直播间的小号' }
       }
 
       const msgList: { content: string; weight?: number }[] =
@@ -239,7 +387,9 @@ function setupIpcHandlers() {
           for (let i = 0; i < count; i++) {
             if (ac.signal.aborted) break
 
-            const currentConnected = subAccountManager.getConnectedAccounts()
+            const currentConnected = subAccountManager
+              .getConnectedAccounts()
+              .filter(session => session.liveRoomStatus === 'entered' && !!session.liveRoomUrl)
             for (const subAccount of currentConnected) {
               if (ac.signal.aborted) break
 
@@ -324,7 +474,7 @@ function setupIpcHandlers() {
     },
   )
 
-  typedIpcMainHandle(IPC_CHANNELS.tasks.subAccount.getAllAccounts, async _ => {
+  typedIpcMainHandle(IPC_CHANNELS.tasks.subAccount.getAllAccounts, async (_, accountId) => {
     const accounts = subAccountManager.getAllAccounts().map(session => ({
       id: session.id,
       name: session.name,
@@ -334,6 +484,8 @@ function setupIpcHandlers() {
       stats: session.stats,
       hasStorageState: !!session.storageState,
       liveRoomUrl: session.liveRoomUrl,
+      liveRoomStatus: session.liveRoomStatus,
+      lastEnterError: session.lastEnterError,
     }))
     return accounts
   })
@@ -341,12 +493,7 @@ function setupIpcHandlers() {
   typedIpcMainHandle(
     IPC_CHANNELS.tasks.subAccount.clearStorageState,
     async (_, _accountId, subAccountId) => {
-      const session = subAccountManager.getAccount(subAccountId)
-      if (session) {
-        session.storageState = undefined
-        return true
-      }
-      return false
+      return subAccountManager.clearStorageState(subAccountId)
     },
   )
 
@@ -421,7 +568,9 @@ function setupIpcHandlers() {
             name: acc.name.slice(0, 100), // 限制长度
             platform: platformValidation.platform! as LiveControlPlatform,
           })
-          if (Result.isSuccess(result)) added++
+          if (Result.isSuccess(result)) {
+            added++
+          }
         }
 
         return { success: true, added }
@@ -434,7 +583,7 @@ function setupIpcHandlers() {
   typedIpcMainHandle(
     IPC_CHANNELS.tasks.subAccount.syncAccounts,
     async (_, accountId, accountConfigs) => {
-      const logger = createLogger(`@${accountManager.getAccountName(accountId)}`).scope(TASK_NAME)
+      const logger = createLogger(SUB_ACCOUNT_WORKSPACE_NAME).scope(TASK_NAME)
       let synced = 0
       for (const acc of accountConfigs) {
         if (!subAccountManager.getAccount(acc.id)) {

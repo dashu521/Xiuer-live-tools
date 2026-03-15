@@ -186,15 +186,15 @@ export const useAuthStore = create<AuthStore>()(
             console.log('[AuthStore] Saving tokens to main process...')
             if (typeof window !== 'undefined') {
               const authAPI = (
-              window as unknown as {
-                authAPI?: {
-                  setTokens?: (tokens: {
-                    token: string | null
-                    refreshToken: string | null
-                  }) => Promise<void>
+                window as unknown as {
+                  authAPI?: {
+                    setTokens?: (tokens: {
+                      token: string | null
+                      refreshToken: string | null
+                    }) => Promise<void>
+                  }
                 }
-              }
-            ).authAPI
+              ).authAPI
               console.log('[AuthStore] authAPI exists:', !!authAPI)
               console.log('[AuthStore] setTokens exists:', !!authAPI?.setTokens)
               if (authAPI?.setTokens) {
@@ -255,7 +255,9 @@ export const useAuthStore = create<AuthStore>()(
             return { success: true }
           }
           const status = (response as { status?: number }).status
-          const detail = (response as { detail?: string }).detail ?? response.error ?? ''
+          const errorObj = (response as { error?: { code?: string; message?: string } }).error
+          const detail = errorObj?.message ?? (response as { detail?: string }).detail ?? ''
+          const errorCode = errorObj?.code
           const requestUrl = (response as { requestUrl?: string }).requestUrl
           const errorType = (
             response as {
@@ -267,7 +269,7 @@ export const useAuthStore = create<AuthStore>()(
                 | 'UNKNOWN_ERROR'
             }
           ).errorType
-          const raw = { status, detail, requestUrl, errorType }
+          const raw = { status, detail, requestUrl, errorType, errorCode }
           console.log(`[AuthStore] Login failed [${requestId}]:`, {
             status,
             detail: detail || '(none)',
@@ -409,16 +411,25 @@ export const useAuthStore = create<AuthStore>()(
           }
           // 【步骤B】统一错误处理：展示 status + 后端 detail + requestUrl；status 0 时引导尝试手机验证码注册
           const status = (response as { status?: number }).status
-          const detail =
-            (response as { detail?: string }).detail ?? extractErrorMessage(response, '') ?? ''
+          const errorObj = (response as { error?: { code?: string; message?: string } }).error
+          const detail = errorObj?.message ?? (response as { detail?: string }).detail ?? extractErrorMessage(response, '') ?? ''
+          const errorCode = errorObj?.code
           const requestUrl = (response as { requestUrl?: string }).requestUrl
           const isNetworkError = status === 0 || /fetch failed|network|timeout/i.test(detail || '')
-          const errorMessage = isNetworkError
-            ? '无法连接认证服务器，请检查网络后重试；也可尝试下方「手机验证码注册」。'
-            : typeof status === 'number'
+
+          // 使用 mapAuthError 获取友好的错误提示
+          let errorMessage: string
+          if (isNetworkError) {
+            errorMessage = '无法连接认证服务器，请检查网络后重试；也可尝试下方「手机验证码注册」。'
+          } else if (errorCode) {
+            const { userMessage } = mapAuthError({ status, detail, requestUrl, errorCode })
+            errorMessage = userMessage
+          } else {
+            errorMessage = typeof status === 'number'
               ? `注册失败（${status}）：${detail || '(无详情)'}${typeof requestUrl === 'string' ? `（请求地址：${requestUrl}）` : ''}`
               : (detail || '注册失败') +
                 (typeof requestUrl === 'string' ? ` (请求地址: ${requestUrl})` : '')
+          }
           console.error(`[AuthStore] Register failed [${requestId}]:`, {
             error: errorMessage,
             response: response,
@@ -517,19 +528,6 @@ export const useAuthStore = create<AuthStore>()(
             } catch (e) {
               console.log('[AuthStore] 断开连接失败（可能未连接）:', e)
             }
-          }
-
-          // 停止所有账号的小号互动任务
-          try {
-            const subAccountStore = useSubAccountStore.getState()
-            for (const accountId of Object.keys(subAccountStore.contexts)) {
-              const context = subAccountStore.contexts[accountId]
-              if (context?.isRunning) {
-                await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.subAccount.stop, accountId)
-              }
-            }
-          } catch (e) {
-            console.log('[AuthStore] 停止小号互动失败:', e)
           }
 
           console.log('[AuthStore] 所有任务已停止')
@@ -644,7 +642,10 @@ export const useAuthStore = create<AuthStore>()(
             (
               window as unknown as {
                 authAPI?: {
-                  getTokenInternal?: () => Promise<{ token: string | null; refreshToken: string | null }>
+                  getTokenInternal?: () => Promise<{
+                    token: string | null
+                    refreshToken: string | null
+                  }>
                 }
               }
             ).authAPI?.getTokenInternal
@@ -653,7 +654,10 @@ export const useAuthStore = create<AuthStore>()(
               const tokens = await (
                 window as unknown as {
                   authAPI: {
-                    getTokenInternal: () => Promise<{ token: string | null; refreshToken: string | null }>
+                    getTokenInternal: () => Promise<{
+                      token: string | null
+                      refreshToken: string | null
+                    }>
                   }
                 }
               ).authAPI.getTokenInternal()
@@ -663,7 +667,10 @@ export const useAuthStore = create<AuthStore>()(
               if (mainToken) {
                 set({ token: mainToken, refreshToken: mainRefreshToken })
               }
-              console.log('[AuthStore] checkAuth: got token from main process:', mainToken ? 'exists' : 'null')
+              console.log(
+                '[AuthStore] checkAuth: got token from main process:',
+                mainToken ? 'exists' : 'null',
+              )
             } catch (err) {
               console.error('[AuthStore] Failed to get tokens from main process:', err)
             }

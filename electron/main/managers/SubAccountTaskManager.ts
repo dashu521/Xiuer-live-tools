@@ -1,6 +1,6 @@
 import { Result } from '@praha/byethrow'
+import { SUB_ACCOUNT_WORKSPACE_NAME } from 'shared/subAccountWorkspace'
 import { createLogger } from '#/logger'
-import { accountManager } from '#/managers/AccountManager'
 import type { ITask } from '#/tasks/ITask'
 import { createSubAccountInteractionTask } from '#/tasks/SubAccountInteractionTask'
 
@@ -20,7 +20,7 @@ class SubAccountTaskManager {
 
     const account: Account = {
       id: accountId,
-      name: accountManager.getAccountName(accountId),
+      name: SUB_ACCOUNT_WORKSPACE_NAME,
     }
     const lgr = createLogger(`@${account.name}`)
     const result = createSubAccountInteractionTask(config, account, lgr)

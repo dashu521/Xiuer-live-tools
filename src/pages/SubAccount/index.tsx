@@ -12,7 +12,10 @@ import {
   Users,
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import type { IpcChannels } from 'shared/electron-api'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
+import { isSameSubAccountLiveRoomUrl } from 'shared/subAccountLiveRoom'
+import { SUB_ACCOUNT_WORKSPACE_ID } from 'shared/subAccountWorkspace'
 import { Title } from '@/components/common/Title'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -29,7 +32,7 @@ import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAccounts } from '@/hooks/useAccounts'
 import { useIpcListener } from '@/hooks/useIpc'
-import type { SubAccountGroup } from '@/hooks/useSubAccount'
+import type { SubAccountGroup, SubAccountPresetCategory } from '@/hooks/useSubAccount'
 import {
   type SubAccount as SubAccountItem,
   useCurrentSubAccount,
@@ -37,7 +40,7 @@ import {
   useSyncSubAccountsOnMount,
 } from '@/hooks/useSubAccount'
 import { useToast } from '@/hooks/useToast'
-import { MESSAGE_CATEGORIES, MESSAGE_VARIABLES, PRESET_MESSAGES } from './constants'
+import { MESSAGE_VARIABLES } from './constants'
 
 const viewerPlatforms: Record<string, string> = {
   douyin: '抖音',
@@ -57,6 +60,7 @@ export default function SubAccount() {
   const accounts = useCurrentSubAccount(ctx => ctx.accounts)
   const batchCount = useCurrentSubAccount(ctx => ctx.batchCount)
   const liveRoomUrl = useCurrentSubAccount(ctx => ctx.liveRoomUrl)
+  const presetCategories = useCurrentSubAccount(ctx => ctx.presetCategories)
   const actions = useSubAccountActions()
 
   useSyncSubAccountsOnMount()
@@ -66,6 +70,7 @@ export default function SubAccount() {
     useState<keyof typeof viewerPlatforms>('douyin')
   const [isAdding, setIsAdding] = useState(false)
   const [showPresetLibrary, setShowPresetLibrary] = useState(false)
+  const [selectedPresetCategoryId, setSelectedPresetCategoryId] = useState<string | null>(null)
   const [showGroupManager, setShowGroupManager] = useState(false)
   const [newGroupName, setNewGroupName] = useState('')
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null)
@@ -75,13 +80,61 @@ export default function SubAccount() {
     completed: number
     failed: number
   } | null>(null)
+  const [enterProgress, setEnterProgress] = useState<{
+    current: number
+    total: number
+    completed: number
+    failed: number
+    accountId: string
+    accountName: string
+    success: boolean
+    error?: string
+  } | null>(null)
+  const [verificationNotice, setVerificationNotice] = useState<{
+    accountId: string
+    accountName?: string
+    message: string
+    timestamp: number
+  } | null>(null)
+
+  const syncAccountsFromBackend = useMemoizedFn(async () => {
+    const list = await window.ipcRenderer.invoke(
+      IPC_CHANNELS.tasks.subAccount.getAllAccounts,
+      SUB_ACCOUNT_WORKSPACE_ID,
+    )
+    if (!Array.isArray(list)) return
+
+    const currentGroups = new Map(accounts.map(account => [account.id, account.group]))
+    actions.setAccounts(
+      list.map((account: any) => ({
+        ...account,
+        group: currentGroups.get(account.id),
+        stats: account.stats || { totalSent: 0, successCount: 0, failCount: 0 },
+      })),
+    )
+  })
 
   // 监听批量发送进度
-  useIpcListener(IPC_CHANNELS.tasks.subAccount.batchProgress, (accountId, data) => {
-    if (accountId === currentAccountId) {
+  useIpcListener(IPC_CHANNELS.tasks.subAccount.batchProgress, (workspaceId, data) => {
+    if (workspaceId === SUB_ACCOUNT_WORKSPACE_ID) {
       setBatchProgress(data)
     }
   })
+
+  useIpcListener(IPC_CHANNELS.tasks.subAccount.enterAllProgress, (workspaceId, data) => {
+    if (workspaceId === SUB_ACCOUNT_WORKSPACE_ID) {
+      setEnterProgress(data)
+    }
+  })
+
+  useIpcListener(
+    IPC_CHANNELS.tasks.subAccount.stoppedFor(
+      SUB_ACCOUNT_WORKSPACE_ID,
+    ) as keyof IpcChannels,
+    () => {
+      actions.setIsRunning(false)
+    },
+  )
 
   // 进度完成后自动隐藏
   useEffect(() => {
@@ -91,28 +144,52 @@ export default function SubAccount() {
     }
   }, [batchProgress])
 
-  // 监听小号状态变更事件（实时同步后端状态）
-  useIpcListener(IPC_CHANNELS.tasks.subAccount.accountStatusChanged, (accountId, data) => {
-    if (accountId === currentAccountId && data.status) {
-      console.log('[SubAccount] ✅ 收到状态变更事件:', {
-        accountId: data.accountId,
-        accountName: data.accountName,
-        status: data.status,
-        error: data.error,
-        timestamp: new Date().toISOString(),
-      })
-      actions.updateAccountStatus(data.accountId, data.status, data.error)
+  useEffect(() => {
+    if (enterProgress && enterProgress.current >= enterProgress.total && enterProgress.total > 0) {
+      const timer = setTimeout(() => setEnterProgress(null), 4000)
+      return () => clearTimeout(timer)
+    }
+  }, [enterProgress])
 
-      // 【关键】如果是 connected 状态，显示成功提示
-      if (data.status === 'connected') {
-        console.log(`[SubAccount] ✅ 小号 ${data.accountId} 已连接`)
+  // 监听小号状态和发送事件，由页面自己同步独立工作区状态
+  useIpcListener(IPC_CHANNELS.tasks.subAccount.accountStatusChanged, (workspaceId, data) => {
+    if (workspaceId === SUB_ACCOUNT_WORKSPACE_ID) {
+      if (data.verificationRequired) {
+        const message =
+          data.verificationMessage || '检测到平台安全验证，请先在浏览器完成处理后再重新启动任务'
+        setVerificationNotice({
+          accountId: data.accountId,
+          accountName: data.accountName,
+          message,
+          timestamp: data.timestamp,
+        })
+        actions.setIsRunning(false)
+        toast.error(`${data.accountName || '小号'}触发平台安全验证，请先人工完成验证`)
       }
+
+      if (data.status) {
+        console.log('[SubAccount] ✅ 收到状态变更事件:', {
+          accountId: data.accountId,
+          accountName: data.accountName,
+          status: data.status,
+          error: data.error,
+          timestamp: new Date().toISOString(),
+        })
+      }
+      void syncAccountsFromBackend()
     }
   })
 
+  useEffect(() => {
+    void syncAccountsFromBackend()
+  }, [syncAccountsFromBackend])
+
   // 自动获取直播间 URL
   const fetchLiveRoomUrl = useMemoizedFn(async () => {
-    if (!currentAccountId) return
+    if (!currentAccountId) {
+      toast.info('未选择直播账号时，请手动填写直播间地址')
+      return
+    }
     try {
       const result = await window.ipcRenderer.invoke(
         IPC_CHANNELS.tasks.liveControl.getLiveRoomUrl,
@@ -124,24 +201,40 @@ export default function SubAccount() {
         console.log('[SubAccount] 自动获取直播间 URL 成功:', result.url)
       }
     } catch (error) {
-      // 静默失败，不影响用户体验
       console.debug('获取直播间 URL 失败:', error)
+      toast.info('无法自动获取直播间地址，请手动输入')
     }
   })
 
-  // 组件挂载时和 currentAccountId 变化时尝试获取
-  useEffect(() => {
-    fetchLiveRoomUrl()
-  }, [fetchLiveRoomUrl])
-
   const handleTaskButtonClick = useMemoizedFn(async () => {
     if (!isRunning) {
+      setVerificationNotice(null)
       if (accounts.length === 0) {
         toast.error('请先添加小号')
         return
       }
       if (accounts.filter(a => a.status === 'connected').length === 0) {
         toast.error('请至少登录一个小号')
+        return
+      }
+      if (!liveRoomUrl.trim()) {
+        toast.error('请先输入直播间地址')
+        return
+      }
+      try {
+        new URL(liveRoomUrl.trim())
+      } catch {
+        toast.error('请输入有效的直播间地址（URL 格式）')
+        return
+      }
+      const readyAccounts = accounts.filter(
+        account =>
+          account.status === 'connected' &&
+          account.liveRoomStatus === 'entered' &&
+          isSameSubAccountLiveRoomUrl(account.liveRoomUrl, liveRoomUrl.trim()),
+      )
+      if (readyAccounts.length === 0) {
+        toast.error('请先让至少一个小号成功进入目标直播间')
         return
       }
       // 验证消息内容
@@ -159,9 +252,10 @@ export default function SubAccount() {
       }))
       const result = await window.ipcRenderer.invoke(
         IPC_CHANNELS.tasks.subAccount.start,
-        currentAccountId,
+        SUB_ACCOUNT_WORKSPACE_ID,
         {
           scheduler: config.scheduler,
+          liveRoomUrl: liveRoomUrl.trim(),
           messages: messagesForIPC,
           random: config.random,
           extraSpaces: config.extraSpaces,
@@ -180,7 +274,7 @@ export default function SubAccount() {
     } else {
       const result = await window.ipcRenderer.invoke(
         IPC_CHANNELS.tasks.subAccount.stop,
-        currentAccountId,
+        SUB_ACCOUNT_WORKSPACE_ID,
       )
       if (result) {
         actions.setIsRunning(false)
@@ -200,6 +294,8 @@ export default function SubAccount() {
       name: newAccountName.trim(),
       platform: newAccountPlatform as LiveControlPlatform,
       status: 'idle',
+      hasStorageState: false,
+      liveRoomStatus: 'idle',
       stats: {
         totalSent: 0,
         successCount: 0,
@@ -209,7 +305,7 @@ export default function SubAccount() {
 
     const result = await window.ipcRenderer.invoke(
       IPC_CHANNELS.tasks.subAccount.addAccount,
-      currentAccountId,
+      SUB_ACCOUNT_WORKSPACE_ID,
       {
         id: newAccount.id,
         name: newAccount.name,
@@ -233,7 +329,7 @@ export default function SubAccount() {
 
     await window.ipcRenderer.invoke(
       IPC_CHANNELS.tasks.subAccount.removeAccount,
-      currentAccountId,
+      SUB_ACCOUNT_WORKSPACE_ID,
       accountId,
     )
     actions.removeAccount(accountId)
@@ -249,7 +345,7 @@ export default function SubAccount() {
 
     const result = await window.ipcRenderer.invoke(
       IPC_CHANNELS.tasks.subAccount.loginAccount,
-      currentAccountId,
+      SUB_ACCOUNT_WORKSPACE_ID,
       accountId,
     )
 
@@ -261,27 +357,6 @@ export default function SubAccount() {
 
       if (newStatus === 'connected') {
         toast.success(`小号 ${account.name} 登录成功`)
-
-        // 【新增】登录成功后，如果当前没有设置直播间地址，尝试从主账号获取
-        // 后端会自动检测主账号是否在中控台，并尝试提取直播间链接
-        if (!liveRoomUrl.trim()) {
-          try {
-            const liveRoomResult = await window.ipcRenderer.invoke(
-              IPC_CHANNELS.tasks.liveControl.getLiveRoomUrl,
-              currentAccountId,
-            )
-            if (liveRoomResult.success && liveRoomResult.url) {
-              actions.setLiveRoomUrl(liveRoomResult.url)
-              toast.success('已自动获取直播间地址')
-            } else if (liveRoomResult.error) {
-              // 获取失败时给出提示
-              toast.info('无法自动获取直播间地址，请手动输入')
-              console.log('[SubAccount] 自动获取直播间 URL 失败:', liveRoomResult.error)
-            }
-          } catch (error) {
-            console.debug('自动获取直播间 URL 失败:', error)
-          }
-        }
       } else {
         // 正在等待二次验证
         toast.info(`小号 ${account.name} 正在等待验证，请在浏览器中完成验证`)
@@ -298,7 +373,7 @@ export default function SubAccount() {
 
     const result = await window.ipcRenderer.invoke(
       IPC_CHANNELS.tasks.subAccount.disconnectAccount,
-      currentAccountId,
+      SUB_ACCOUNT_WORKSPACE_ID,
       accountId,
     )
 
@@ -307,6 +382,24 @@ export default function SubAccount() {
       toast.success(`小号 ${account.name} 已断开连接`)
     } else {
       toast.error(`小号 ${account.name} 断开连接失败`)
+    }
+  })
+
+  const handleClearSavedLoginState = useMemoizedFn(async (accountId: string) => {
+    const account = accounts.find(a => a.id === accountId)
+    if (!account) return
+
+    const result = await window.ipcRenderer.invoke(
+      IPC_CHANNELS.tasks.subAccount.clearStorageState,
+      SUB_ACCOUNT_WORKSPACE_ID,
+      accountId,
+    )
+
+    if (result) {
+      await syncAccountsFromBackend()
+      toast.success(`已清除 ${account.name} 的已保存登录态`)
+    } else {
+      toast.error('清除登录态失败')
     }
   })
 
@@ -352,45 +445,20 @@ export default function SubAccount() {
       return
     }
 
-    // 【新增】检查是否为主账号直播间 URL，如果是则提示用户
-    let isMainAccountLiveRoom = false
-    try {
-      const mainLiveRoomResult = await window.ipcRenderer.invoke(
-        IPC_CHANNELS.tasks.liveControl.getLiveRoomUrl,
-        currentAccountId,
-      )
-      if (mainLiveRoomResult.success && mainLiveRoomResult.url) {
-        // 如果当前设置的 URL 与主账号直播间 URL 相同或是其子路径
-        if (
-          liveRoomUrl === mainLiveRoomResult.url ||
-          liveRoomUrl.startsWith(mainLiveRoomResult.url.split('?')[0])
-        ) {
-          isMainAccountLiveRoom = true
-        }
-      }
-    } catch (_error) {
-      // 静默处理，不影响流程
-    }
-
-    if (isMainAccountLiveRoom) {
-      toast.info(`小号 ${account.name} 将进入主账号直播间...`)
-    } else {
-      toast.info(`小号 ${account.name} 正在进入直播间...`)
-    }
+    toast.info(`小号 ${account.name} 正在进入直播间...`)
 
     const result = await window.ipcRenderer.invoke(
       IPC_CHANNELS.tasks.subAccount.enterLiveRoom,
-      currentAccountId,
+      SUB_ACCOUNT_WORKSPACE_ID,
       accountId,
       liveRoomUrl.trim(),
     )
 
     if (result.success) {
+      await syncAccountsFromBackend()
       toast.success(`小号 ${account.name} 已进入直播间`)
-      if (isMainAccountLiveRoom) {
-        toast.success('✓ 主账号直播间')
-      }
     } else {
+      await syncAccountsFromBackend()
       toast.error(`进入直播间失败：${result.error}`)
     }
   })
@@ -433,25 +501,46 @@ export default function SubAccount() {
     }
 
     toast.info(`正在让 ${connected.length} 个小号进入直播间...`)
+    setEnterProgress({
+      current: 0,
+      total: connected.length,
+      completed: 0,
+      failed: 0,
+      accountId: '',
+      accountName: '',
+      success: true,
+    })
 
-    let successCount = 0
-    for (const account of connected) {
-      const result = await window.ipcRenderer.invoke(
-        IPC_CHANNELS.tasks.subAccount.enterLiveRoom,
-        currentAccountId,
-        account.id,
-        liveRoomUrl.trim(),
-      )
-      if (result.success) successCount++
+    const result = await window.ipcRenderer.invoke(
+      IPC_CHANNELS.tasks.subAccount.enterAllLiveRooms,
+      SUB_ACCOUNT_WORKSPACE_ID,
+      liveRoomUrl.trim(),
+      connected.map(account => account.id),
+    )
+
+    await syncAccountsFromBackend()
+
+    if (result.successCount > 0) {
+      toast.success(`${result.successCount}/${connected.length} 个小号已进入直播间`)
     }
-
-    toast.success(`${successCount}/${connected.length} 个小号已进入直播间`)
+    if (result.failedCount > 0) {
+      toast.info(`${result.failedCount} 个小号进入失败，请查看列表状态`)
+    }
+    if (!result.success && result.successCount === 0 && result.error) {
+      toast.error(`全部进入失败：${result.error}`)
+    }
   })
 
-  const handleLoadPreset = useMemoizedFn((categoryKey: keyof typeof PRESET_MESSAGES) => {
-    const presetMessages = PRESET_MESSAGES[categoryKey]
+  const handleLoadPreset = useMemoizedFn((categoryKey: string) => {
+    const category = presetCategories.find(item => item.id === categoryKey)
+    if (!category) {
+      toast.error('未找到对应的话术分类')
+      return
+    }
+    const presetMessages = category.messages
     const existingContents = new Set(config.messages.map(m => m.content.trim().toLowerCase()))
     const newMessages = presetMessages
+      .filter(msg => msg.content.trim().length > 0)
       .filter(msg => !existingContents.has(msg.content.trim().toLowerCase()))
       .map(msg => {
         existingContents.add(msg.content.trim().toLowerCase())
@@ -465,13 +554,61 @@ export default function SubAccount() {
     const mergedMessages = [...config.messages, ...newMessages]
     actions.setMessages(mergedMessages)
 
-    const label = MESSAGE_CATEGORIES.find(c => c.key === categoryKey)?.label ?? '话术'
+    const label = category.name || '话术'
     if (newMessages.length === 0) {
       toast.info(`所选${label}与现有消息重复，未新增`)
     } else {
       toast.success(`已加载 ${newMessages.length} 条${label}话术`)
     }
     setShowPresetLibrary(false)
+  })
+
+  const selectedPresetCategory =
+    presetCategories.find(category => category.id === selectedPresetCategoryId) ??
+    presetCategories[0] ??
+    null
+
+  useEffect(() => {
+    if (!presetCategories.length) {
+      setSelectedPresetCategoryId(null)
+      return
+    }
+    if (!selectedPresetCategoryId || !presetCategories.some(item => item.id === selectedPresetCategoryId)) {
+      setSelectedPresetCategoryId(presetCategories[0].id)
+    }
+  }, [presetCategories, selectedPresetCategoryId])
+
+  const updatePresetCategory = useMemoizedFn(
+    (categoryId: string, updater: (category: SubAccountPresetCategory) => SubAccountPresetCategory) => {
+      actions.setPresetCategories(
+        presetCategories.map(category =>
+          category.id === categoryId ? updater(category) : category,
+        ),
+      )
+    },
+  )
+
+  const handleAddPresetCategory = useMemoizedFn(() => {
+    const newCategory: SubAccountPresetCategory = {
+      id: crypto.randomUUID(),
+      name: `自定义分类${presetCategories.length + 1}`,
+      description: '可编辑的话术分类',
+      messages: [{ id: crypto.randomUUID(), content: '', weight: 1 }],
+    }
+    actions.setPresetCategories([...presetCategories, newCategory])
+    setSelectedPresetCategoryId(newCategory.id)
+  })
+
+  const handleRemovePresetCategory = useMemoizedFn((categoryId: string) => {
+    if (presetCategories.length <= 1) {
+      toast.error('至少保留一个话术分类')
+      return
+    }
+    actions.setPresetCategories(presetCategories.filter(category => category.id !== categoryId))
+    if (selectedPresetCategoryId === categoryId) {
+      const fallback = presetCategories.find(category => category.id !== categoryId)
+      setSelectedPresetCategoryId(fallback?.id ?? null)
+    }
   })
 
   const handleClearMessages = useMemoizedFn(() => {
@@ -481,16 +618,21 @@ export default function SubAccount() {
   })
 
   const handleSendBatch = useMemoizedFn(async () => {
-    const connectedCount = accounts.filter(a => a.status === 'connected').length
-    if (connectedCount === 0) {
-      toast.error('没有已连接的小号')
+    const readyCount = accounts.filter(
+      account =>
+        account.status === 'connected' &&
+        account.liveRoomStatus === 'entered' &&
+        isSameSubAccountLiveRoomUrl(account.liveRoomUrl, liveRoomUrl.trim()),
+    ).length
+    if (readyCount === 0) {
+      toast.error('请先让至少一个小号成功进入目标直播间')
       return
     }
 
     // 重置进度
-    setBatchProgress({ current: 0, total: connectedCount * batchCount, completed: 0, failed: 0 })
+    setBatchProgress({ current: 0, total: readyCount * batchCount, completed: 0, failed: 0 })
 
-    toast.info(`开始批量发送，${connectedCount} 个小号将各发送 ${batchCount} 条消息`)
+    toast.info(`开始批量发送，${readyCount} 个小号将各发送 ${batchCount} 条消息`)
 
     const messagesForIPC = config.messages.map(m => ({
       content: m.content,
@@ -499,7 +641,7 @@ export default function SubAccount() {
 
     const result = await window.ipcRenderer.invoke(
       IPC_CHANNELS.tasks.subAccount.sendBatch,
-      currentAccountId,
+      SUB_ACCOUNT_WORKSPACE_ID,
       batchCount,
       messagesForIPC,
     )
@@ -547,7 +689,7 @@ export default function SubAccount() {
   const handleExportAccounts = useMemoizedFn(async () => {
     const result = await window.ipcRenderer.invoke(
       IPC_CHANNELS.tasks.subAccount.exportAccounts,
-      currentAccountId,
+      SUB_ACCOUNT_WORKSPACE_ID,
     )
     if (result.success && result.data) {
       const blob = new Blob([result.data], { type: 'application/json' })
@@ -571,23 +713,12 @@ export default function SubAccount() {
       const text = await file.text()
       const result = await window.ipcRenderer.invoke(
         IPC_CHANNELS.tasks.subAccount.importAccounts,
-        currentAccountId,
+        SUB_ACCOUNT_WORKSPACE_ID,
         text,
       )
       if (result.success) {
         toast.success(`成功导入 ${result.added} 个小号`)
-        const accountsResult = await window.ipcRenderer.invoke(
-          IPC_CHANNELS.tasks.subAccount.getAllAccounts,
-          currentAccountId,
-        )
-        if (accountsResult) {
-          actions.setAccounts(
-            accountsResult.map((a: any) => ({
-              ...a,
-              stats: a.stats || { totalSent: 0, successCount: 0, failCount: 0 },
-            })),
-          )
-        }
+        await syncAccountsFromBackend()
       } else {
         toast.error(`导入失败: ${result.error}`)
       }
@@ -598,6 +729,51 @@ export default function SubAccount() {
   })
 
   const connectedCount = accounts.filter(a => a.status === 'connected').length
+  const enteredCount = accounts.filter(
+    account =>
+      account.status === 'connected' &&
+      account.liveRoomStatus === 'entered' &&
+      isSameSubAccountLiveRoomUrl(account.liveRoomUrl, liveRoomUrl.trim()),
+  ).length
+  const isEnteringAll =
+    !!enterProgress && enterProgress.total > 0 && enterProgress.current < enterProgress.total
+
+  const getLoginStateBadge = (account: SubAccountItem) => {
+    if (account.status === 'connected') {
+      return {
+        label: account.hasStorageState ? '登录态有效' : '已登录未保存',
+        className: account.hasStorageState
+          ? 'bg-emerald-500/10 text-emerald-700'
+          : 'bg-amber-500/10 text-amber-700',
+      }
+    }
+
+    if (account.hasStorageState && account.status === 'connecting') {
+      return {
+        label: '校验登录态中',
+        className: 'bg-blue-500/10 text-blue-700',
+      }
+    }
+
+    if (account.hasStorageState && account.status === 'error') {
+      return {
+        label: '登录态可能失效',
+        className: 'bg-red-500/10 text-red-700',
+      }
+    }
+
+    if (account.hasStorageState) {
+      return {
+        label: '已保存登录态',
+        className: 'bg-sky-500/10 text-sky-700',
+      }
+    }
+
+    return {
+      label: '未保存登录态',
+      className: 'bg-muted text-muted-foreground',
+    }
+  }
 
   return (
     <div className="w-full py-6 flex flex-col gap-6 min-h-0 overflow-auto">
@@ -644,12 +820,12 @@ export default function SubAccount() {
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleEnterAllLiveRoom}
-                  disabled={connectedCount === 0 || !liveRoomUrl.trim()}
-                >
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleEnterAllLiveRoom}
+                    disabled={connectedCount === 0 || !liveRoomUrl.trim() || isEnteringAll}
+                  >
                   <RefreshCw className="h-4 w-4 mr-1" />
                   全部进入
                 </Button>
@@ -671,16 +847,34 @@ export default function SubAccount() {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-6">
+            {verificationNotice && (
+              <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <p className="font-medium">
+                      {verificationNotice.accountName || '小号'} 需要人工完成平台安全验证
+                    </p>
+                    <p>{verificationNotice.message}</p>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => setVerificationNotice(null)}>
+                    知道了
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between gap-4 flex-wrap">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
                   <MessageSquare className="h-5 w-5 text-primary" />
                 </div>
-                <div>
-                  <div className="text-sm font-medium">{isRunning ? '正在运行' : '已停止'}</div>
-                  <div className="text-xs text-muted-foreground">{connectedCount} 个小号在线</div>
+                  <div>
+                    <div className="text-sm font-medium">{isRunning ? '正在运行' : '已停止'}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {connectedCount} 个小号在线 · {enteredCount} 个已进目标直播间
+                    </div>
+                  </div>
                 </div>
-              </div>
 
               <div className="flex items-center gap-3">
                 <Button
@@ -700,24 +894,28 @@ export default function SubAccount() {
                     min={1}
                     max={50}
                   />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleSendBatch}
-                    disabled={isRunning || connectedCount === 0 || !liveRoomUrl.trim()}
-                  >
-                    一键刷屏
-                  </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSendBatch}
+                      disabled={isRunning || enteredCount === 0 || !liveRoomUrl.trim() || isEnteringAll}
+                    >
+                      一键刷屏
+                    </Button>
                 </div>
                 <Button
                   size="sm"
                   onClick={handleTaskButtonClick}
                   variant={isRunning ? 'destructive' : 'default'}
+                  disabled={isEnteringAll}
                 >
                   {isRunning ? '停止任务' : '开始任务'}
                 </Button>
               </div>
             </div>
+            <p className="mt-4 text-xs text-muted-foreground">
+              开始任务后，仅已进入目标直播间的小号会参与自动发言。
+            </p>
 
             {/* 批量发送进度条 */}
             {batchProgress && (
@@ -743,6 +941,38 @@ export default function SubAccount() {
                     <span className="text-primary ml-auto">发送完成</span>
                   )}
                 </div>
+              </div>
+            )}
+
+            {enterProgress && (
+              <div className="mt-4 pt-4 border-t">
+                <div className="flex items-center justify-between text-sm mb-2">
+                  <span className="text-muted-foreground">
+                    全部进入进度
+                    {enterProgress.accountName ? ` · 当前 ${enterProgress.accountName}` : ''}
+                  </span>
+                  <span className="font-medium">
+                    {enterProgress.current} / {enterProgress.total}
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all duration-300"
+                    style={{
+                      width: `${enterProgress.total > 0 ? (enterProgress.current / enterProgress.total) * 100 : 0}%`,
+                    }}
+                  />
+                </div>
+                <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                  <span className="text-green-600">成功: {enterProgress.completed}</span>
+                  <span className="text-destructive">失败: {enterProgress.failed}</span>
+                  {enterProgress.current >= enterProgress.total && (
+                    <span className="text-primary ml-auto">进入完成</span>
+                  )}
+                </div>
+                {enterProgress.error && (
+                  <div className="mt-2 text-xs text-destructive">{enterProgress.error}</div>
+                )}
               </div>
             )}
           </CardContent>
@@ -920,11 +1150,13 @@ export default function SubAccount() {
                     const group = config.groups?.find(g => g.id === selectedGroup)
                     return group?.accountIds.includes(account.id)
                   })
-                  .map(account => (
-                    <div
-                      key={account.id}
-                      className="flex items-center justify-between p-3 border rounded-lg"
-                    >
+                  .map(account => {
+                    const loginStateBadge = getLoginStateBadge(account)
+                    return (
+                      <div
+                        key={account.id}
+                        className="flex items-center justify-between p-3 border rounded-lg"
+                      >
                       <div className="flex items-center gap-3">
                         <div
                           className={`w-2 h-2 rounded-full ${
@@ -940,6 +1172,11 @@ export default function SubAccount() {
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium">{account.name}</span>
+                            <span
+                              className={`text-[11px] px-1.5 py-0.5 rounded ${loginStateBadge.className}`}
+                            >
+                              {loginStateBadge.label}
+                            </span>
                             {account.group && (
                               <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded">
                                 {account.group}
@@ -955,6 +1192,22 @@ export default function SubAccount() {
                                 : account.status === 'error'
                                   ? `错误: ${account.error}`
                                   : '未连接'}
+                            {account.status === 'connected' && (
+                              <span className="ml-2">
+                                ·{' '}
+                                {account.liveRoomStatus === 'entered' &&
+                                isSameSubAccountLiveRoomUrl(
+                                  account.liveRoomUrl,
+                                  liveRoomUrl.trim(),
+                                )
+                                  ? '已进入目标直播间'
+                                  : account.liveRoomStatus === 'entering'
+                                    ? '进入中'
+                                    : account.liveRoomStatus === 'error'
+                                      ? `进入失败: ${account.lastEnterError || '未知错误'}`
+                                      : '未进入直播间'}
+                              </span>
+                            )}
                             {account.stats.totalSent > 0 && (
                               <span className="ml-2 text-green-600">
                                 发送{account.stats.successCount}/{account.stats.totalSent}
@@ -988,10 +1241,19 @@ export default function SubAccount() {
                               variant="outline"
                               size="sm"
                               onClick={() => handleEnterLiveRoom(account.id)}
-                              disabled={!liveRoomUrl.trim()}
+                              disabled={!liveRoomUrl.trim() || account.liveRoomStatus === 'entering'}
                             >
-                              进入直播间
+                              {account.liveRoomStatus === 'entering' ? '进入中...' : '进入直播间'}
                             </Button>
+                            {account.hasStorageState && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleClearSavedLoginState(account.id)}
+                              >
+                                清除登录态
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"
@@ -1011,6 +1273,15 @@ export default function SubAccount() {
                             {account.status === 'connecting' ? '验证中...' : '登录'}
                           </Button>
                         )}
+                        {account.status !== 'connected' && account.hasStorageState && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleClearSavedLoginState(account.id)}
+                          >
+                            清除登录态
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -1020,7 +1291,8 @@ export default function SubAccount() {
                         </Button>
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
               </div>
             )}
 
@@ -1090,23 +1362,144 @@ export default function SubAccount() {
             </div>
 
             {showPresetLibrary && (
-              <div className="p-3 border rounded-lg space-y-2">
-                <div className="text-xs text-muted-foreground mb-2">选择要加载的话术分类：</div>
+              <div className="p-3 border rounded-lg space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-sm font-medium">自定义话术分类</div>
+                    <div className="text-xs text-muted-foreground">
+                      分类名称、说明和分类内话术都可编辑
+                    </div>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={handleAddPresetCategory}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    新增分类
+                  </Button>
+                </div>
                 <div className="flex flex-wrap gap-2">
-                  {MESSAGE_CATEGORIES.map(category => (
+                  {presetCategories.map(category => (
                     <Button
-                      key={category.key}
-                      variant="secondary"
+                      key={category.id}
+                      variant={selectedPresetCategoryId === category.id ? 'default' : 'secondary'}
                       size="sm"
-                      onClick={() => handleLoadPreset(category.key as keyof typeof PRESET_MESSAGES)}
+                      onClick={() => setSelectedPresetCategoryId(category.id)}
                     >
-                      {category.label}
+                      {category.name}
                     </Button>
                   ))}
                 </div>
-                <div className="text-xs text-muted-foreground mt-2">
-                  提示：加载后会合并到现有消息列表中
-                </div>
+                {selectedPresetCategory && (
+                  <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
+                    <div className="flex items-start gap-2">
+                      <Input
+                        value={selectedPresetCategory.name}
+                        onChange={e =>
+                          updatePresetCategory(selectedPresetCategory.id, category => ({
+                            ...category,
+                            name: e.target.value,
+                          }))
+                        }
+                        placeholder="分类名称"
+                        className="flex-1"
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleLoadPreset(selectedPresetCategory.id)}
+                      >
+                        加载该分类
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemovePresetCategory(selectedPresetCategory.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                    <Input
+                      value={selectedPresetCategory.description}
+                      onChange={e =>
+                        updatePresetCategory(selectedPresetCategory.id, category => ({
+                          ...category,
+                          description: e.target.value,
+                        }))
+                      }
+                      placeholder="分类说明"
+                    />
+                    <div className="space-y-2">
+                      {selectedPresetCategory.messages.map((message, messageIndex) => (
+                        <div key={message.id} className="flex items-center gap-2">
+                          <Input
+                            value={message.content}
+                            onChange={e =>
+                              updatePresetCategory(selectedPresetCategory.id, category => ({
+                                ...category,
+                                messages: category.messages.map(item =>
+                                  item.id === message.id
+                                    ? { ...item, content: e.target.value.slice(0, 50) }
+                                    : item,
+                                ),
+                              }))
+                            }
+                            placeholder={`分类话术 ${messageIndex + 1}`}
+                            className="flex-1"
+                            maxLength={50}
+                          />
+                          <Input
+                            type="number"
+                            value={message.weight}
+                            onChange={e =>
+                              updatePresetCategory(selectedPresetCategory.id, category => ({
+                                ...category,
+                                messages: category.messages.map(item =>
+                                  item.id === message.id
+                                    ? { ...item, weight: Math.max(1, Number(e.target.value) || 1) }
+                                    : item,
+                                ),
+                              }))
+                            }
+                            className="w-16"
+                            min={1}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              updatePresetCategory(selectedPresetCategory.id, category => ({
+                                ...category,
+                                messages:
+                                  category.messages.length <= 1
+                                    ? category.messages
+                                    : category.messages.filter(item => item.id !== message.id),
+                              }))
+                            }
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          updatePresetCategory(selectedPresetCategory.id, category => ({
+                            ...category,
+                            messages: [
+                              ...category.messages,
+                              { id: crypto.randomUUID(), content: '', weight: 1 },
+                            ],
+                          }))
+                        }
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        添加分类话术
+                      </Button>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      提示：加载后会合并到现有消息列表中
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

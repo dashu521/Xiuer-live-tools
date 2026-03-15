@@ -165,15 +165,26 @@ export const DouyinViewerConfig: SimplePlatformConfig = {
   liveRoomUrlTemplate: 'https://live.douyin.com/{roomId}',
   commentInputSelector:
     '[data-e2e="comment-input"] textarea, ' +
+    '[data-e2e="comment-input"] input, ' +
+    '[data-e2e="comment-input"] [contenteditable="true"], ' +
     '.comment-input textarea, ' +
+    '.comment-input input, ' +
+    '.comment-input [contenteditable="true"], ' +
     '[placeholder*="说点什么"], ' +
     '[placeholder*="发弹幕"], ' +
+    '[placeholder*="聊点什么"], ' +
     'textarea[placeholder], ' +
+    'input[placeholder], ' +
     '.chat-input textarea, ' +
+    '.chat-input input, ' +
     '[class*="chat-input"], ' +
     '[class*="ChatInput"] textarea, ' +
+    '[class*="ChatInput"] input, ' +
     '.live-chat-input, ' +
-    'div[class*="input"] textarea',
+    'div[class*="input"] textarea, ' +
+    'div[class*="input"] input, ' +
+    '[role="textbox"], ' +
+    'div[contenteditable="true"]',
   sendButtonSelector:
     '[data-e2e="comment-submit"], .comment-submit, button[class*="send"], [class*="submit-btn"]',
   loggedInSelector: '.avatar img, [data-e2e="user-avatar"], .user-info img, [class*="avatar"]',

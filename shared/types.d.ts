@@ -3,6 +3,7 @@ declare type StreamStatus = 'unknown' | 'offline' | 'live' | 'ended'
 declare type Account = {
   readonly id: string
   name: string
+  platform?: LiveControlPlatform
 }
 
 declare type LiveControlPlatform =
@@ -16,11 +17,21 @@ declare type LiveControlPlatform =
   | 'taobao'
   | 'dev'
 
+/**
+ * 单个商品配置
+ * 支持为每个商品单独设置弹窗间隔
+ */
+declare type GoodsItemConfig = {
+  id: number
+  interval?: [number, number]  // 可选：单独设置间隔（毫秒），未设置则使用全局默认值
+}
+
 declare type AutoPopupConfig = {
   scheduler: {
-    interval: [number, number]
+    interval: [number, number]  // 全局默认间隔（毫秒）
   }
-  goodsIds: number[]
+  goods: GoodsItemConfig[]      // 商品配置列表（替代 goodsIds）
+  goodsIds?: number[]           // 【兼容旧配置】商品ID列表，迁移后移除
   random?: boolean
 }
 
@@ -95,6 +106,7 @@ declare type SubAccountInteractionConfig = {
   scheduler: {
     interval: [number, number] // 发送间隔范围（秒）
   }
+  liveRoomUrl?: string // 小号自动进房使用的直播间地址
   messages: {
     id?: string // 前端需要 ID 字段
     content: string

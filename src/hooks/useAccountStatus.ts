@@ -20,7 +20,6 @@ import { useAutoPopUpStore } from './useAutoPopUp'
 import { useAutoReplyStore } from './useAutoReply'
 import { useLiveControlStore } from './useLiveControl'
 import { useLiveStatsStore } from './useLiveStats'
-import { useSubAccountStore } from './useSubAccount'
 
 // 任务名称映射
 const _TASK_NAME_MAP: Record<string, string> = {
@@ -149,13 +148,6 @@ export function useAccountStatus() {
       tasks.push({
         taskId: 'autoReply',
         status: autoReplyContext?.isRunning ? 'running' : 'idle',
-      })
-
-      // 从小号互动Store获取状态
-      const subAccountContext = useSubAccountStore.getState().contexts[accountId]
-      tasks.push({
-        taskId: 'subAccount',
-        status: subAccountContext?.isRunning ? 'running' : 'idle',
       })
 
       // 从数据监控Store获取状态

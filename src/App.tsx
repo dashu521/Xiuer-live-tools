@@ -44,8 +44,7 @@ import { useLoadAutoReplyConfigOnLogin } from './hooks/useAutoReplyConfig'
 // 加载隔离存储配置
 import { useChromeConfigStore, useLoadChromeConfigOnLogin } from './hooks/useChromeConfig'
 import { useLiveControlStore, useLoadLiveControlOnLogin } from './hooks/useLiveControl'
-import type { SubAccount } from './hooks/useSubAccount'
-import { useLoadSubAccountOnLogin, useSubAccountStore } from './hooks/useSubAccount'
+import { useLoadSubAccountOnLogin } from './hooks/useSubAccount'
 import { useTaskConnectionGuard } from './hooks/useTaskConnectionGuard'
 import { useToast } from './hooks/useToast'
 import { useUpdateConfigStore, useUpdateStore } from './hooks/useUpdate'
@@ -57,8 +56,6 @@ function useGlobalIpcListener() {
   const { setConnectState, setAccountName, setStreamState } = useLiveControlStore()
   const setIsRunningAutoMessage = useAutoMessageStore(s => s.setIsRunning)
   const setIsRunningAutoPopUp = useAutoPopUpStore(s => s.setIsRunning)
-  const setIsRunningSubAccount = useSubAccountStore(s => s.setIsRunning)
-  const setSubAccountAccounts = useSubAccountStore(s => s.setAccounts)
   const setStorageState = useChromeConfigStore(s => s.setStorageState)
   const enableAutoCheckUpdate = useUpdateConfigStore(s => s.enableAutoCheckUpdate)
   const handleUpdate = useUpdateStore.use.handleUpdate()
@@ -98,8 +95,11 @@ function useGlobalIpcListener() {
       phase: 'idle',
       error: reason || '直播中控台已断开连接',
     })
-    console.log(`[renderer][${id}] >>> Step 1 done, new status:`, useLiveControlStore.getState().contexts[id]?.connectState)
-    
+    console.log(
+      `[renderer][${id}] >>> Step 1 done, new status:`,
+      useLiveControlStore.getState().contexts[id]?.connectState,
+    )
+
     if (reason && !reasonStr.includes('用户主动断开')) {
       const friendlyMessage = getFriendlyErrorMessage(reason)
       toast.error(friendlyMessage)
@@ -148,69 +148,6 @@ function useGlobalIpcListener() {
     console.log(`[TaskGate] Auto reply listener stopped event for account ${id}`)
   })
 
-  // 小号互动任务停止事件
-  useIpcListener(IPC_CHANNELS.tasks.subAccount.stoppedEvent, id => {
-    setIsRunningSubAccount(id, false)
-  })
-
-  // 小号互动发送状态变更：从后端拉取最新小号列表并合并前端分组信息
-  useIpcListener(IPC_CHANNELS.tasks.subAccount.accountStatusChanged, async (accountId: string) => {
-    try {
-      const list = await window.ipcRenderer.invoke(
-        IPC_CHANNELS.tasks.subAccount.getAllAccounts,
-        accountId,
-      )
-      if (!Array.isArray(list)) return
-
-      // 获取最新状态，避免使用过时的引用
-      const latestState = useSubAccountStore.getState()
-      const current = latestState.contexts[accountId]?.accounts ?? []
-
-      // 验证状态值的有效性
-      const validStatuses: SubAccount['status'][] = ['idle', 'connecting', 'connected', 'error']
-
-      const merged = list.map(
-        (row: {
-          id: string
-          name: string
-          platform: LiveControlPlatform
-          status: string
-          error?: string
-          stats: {
-            totalSent: number
-            successCount: number
-            failCount: number
-            lastSendTime?: number
-            lastError?: string
-          }
-        }) => {
-          const existing = current.find((a: { id: string }) => a.id === row.id)
-          // 安全地验证状态值
-          const status = validStatuses.includes(row.status as SubAccount['status'])
-            ? (row.status as SubAccount['status'])
-            : 'error'
-
-          if (status === 'error' && row.status !== 'error') {
-            console.warn(`[SubAccount] 收到无效状态值 "${row.status}"，已重置为 error`)
-          }
-
-          return {
-            id: row.id,
-            name: row.name,
-            platform: row.platform,
-            status,
-            error: row.error,
-            stats: row.stats,
-            group: existing?.group,
-          }
-        },
-      )
-      setSubAccountAccounts(accountId, merged)
-    } catch (error) {
-      console.error('[SubAccount] 同步小号状态失败:', error)
-    }
-  })
-
   useIpcListener(IPC_CHANNELS.chrome.saveState, (id, state) => {
     setStorageState(id, state)
   })
@@ -247,7 +184,7 @@ function useGlobalIpcListener() {
       console.log(`[renderer][${accountId}] ==============================================`)
       console.log(
         `[renderer][${accountId}][event] 🌡️ streamStateChanged event received: ${streamState}`,
-        { accountId, streamState, timestamp: new Date().toISOString() }
+        { accountId, streamState, timestamp: new Date().toISOString() },
       )
 
       // 获取之前的状态
@@ -257,7 +194,10 @@ function useGlobalIpcListener() {
       // 更新状态
       console.log(`[renderer][${accountId}] >>> Step 1: setStreamState to ${streamState}`)
       setStreamState(accountId, streamState)
-      console.log(`[renderer][${accountId}] >>> Step 1 done, new store state:`, useLiveControlStore.getState().contexts[accountId]?.streamState)
+      console.log(
+        `[renderer][${accountId}] >>> Step 1 done, new store state:`,
+        useLiveControlStore.getState().contexts[accountId]?.streamState,
+      )
 
       // 如果从 live 变为非 live，只停止该账号的任务，避免误停其他账号的 autoSpeak
       if (prevState === 'live' && streamState !== 'live') {
