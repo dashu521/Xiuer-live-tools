@@ -24,6 +24,8 @@ interface AutoReplyBaseConfig {
       enable: boolean
       prompt: string
       autoSend: boolean
+      /** 【P1-1 AI联动】是否使用AI对话的共享配置 */
+      useSharedConfig?: boolean
     }
   }
   blockList: string[]

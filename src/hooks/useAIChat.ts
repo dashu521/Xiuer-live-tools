@@ -3,6 +3,9 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { immer } from 'zustand/middleware/immer'
 
+// 【P1-1 AI联动】导出 store 类型供 AISharedConfig 使用
+export type { AIChatStore }
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant' | 'system'
@@ -24,6 +27,7 @@ export interface ProviderConfig {
   modelPreferences: {
     [key in AIProvider]: string
   }
+  temperature?: number
 }
 
 type Status = 'ready' | 'waiting' | 'replying'
@@ -34,6 +38,7 @@ interface AIChatStore {
   apiKeys: APIKeys
   config: ProviderConfig
   customBaseURL: string
+  systemPrompt?: string
   setCustomBaseURL: (url: string) => void
   setConfig: (config: Partial<ProviderConfig>) => void
   setApiKey: (provider: AIProvider, key: string) => void

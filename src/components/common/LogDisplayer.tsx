@@ -27,6 +27,31 @@ interface ParsedLog {
 
 const MAX_LOG_MESSAGES = 200 // 仅展示最近的 200 条日志
 
+// [SECURITY] 敏感信息脱敏配置
+const SENSITIVE_PATTERNS = [
+  { pattern: /token[=:]\s*["']?[a-zA-Z0-9_\-.]+["']?/gi, replacement: 'token=***' },
+  { pattern: /password[=:]\s*["']?[^"'\s]+["']?/gi, replacement: 'password=***' },
+  { pattern: /code[=:]\s*["']?\d{4,8}["']?/gi, replacement: 'code=***' },
+  { pattern: /secret[=:]\s*["']?[^"'\s]+["']?/gi, replacement: 'secret=***' },
+  { pattern: /key[=:]\s*["']?[a-zA-Z0-9]{16,}["']?/gi, replacement: 'key=***' },
+  {
+    pattern: /authorization[:\s]+["']?bearer\s+[a-zA-Z0-9_\-.]+["']?/gi,
+    replacement: 'authorization: Bearer ***',
+  },
+  { pattern: /([?&])(token|password|code|secret|key)=[^&]*/gi, replacement: '$1$2=***' },
+]
+
+/**
+ * [SECURITY] 敏感信息脱敏处理
+ */
+function sanitizeLogMessage(message: string): string {
+  let sanitized = message
+  for (const { pattern, replacement } of SENSITIVE_PATTERNS) {
+    sanitized = sanitized.replace(pattern, replacement)
+  }
+  return sanitized
+}
+
 export default function LogDisplayer({
   collapsed = true,
   onToggleCollapsed,
@@ -52,13 +77,16 @@ export default function LogDisplayer({
     if (!log.data || log.data.length === 0) {
       return null
     }
+    const rawMessage = log.data.map(String).join(' ').split('\n')[0]
+    // [SECURITY] 脱敏处理
+    const sanitizedMessage = sanitizeLogMessage(rawMessage)
     return {
       id: crypto.randomUUID(),
       timestamp: log.date.toLocaleString(),
       module: log.scope ?? 'App',
       level: typeof log.level === 'string' ? log.level.toUpperCase() : 'INFO',
-      // 只保留换行符之前的内容
-      message: log.data.map(String).join(' ').split('\n')[0],
+      // [SECURITY] 脱敏后的消息
+      message: sanitizedMessage,
     }
   }
 

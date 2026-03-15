@@ -1,6 +1,7 @@
 import { useMemoizedFn } from 'ahooks'
 import { useMemo } from 'react'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
+import { providers } from 'shared/providers'
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { AUTO_REPLY } from '@/constants'
@@ -263,7 +264,44 @@ const handleKeywordReply = (
 }
 
 /**
+ * 【P1-1 AI联动最小可用】获取 AI 对话的共享配置
+ * 在渲染进程中直接读取 useAIChatStore 的状态
+ */
+function getAISharedConfig() {
+  const store = useAIChatStore.getState()
+  const provider = store.config.provider
+  const providerConfig = providers[provider]
+
+  return {
+    // 基础配置
+    provider,
+    model: store.config.model,
+    apiKey: store.apiKeys[provider] || '',
+    baseURL: store.customBaseURL || providerConfig.baseURL,
+
+    // 生成参数
+    temperature: store.config.temperature ?? 0.7,
+
+    // 系统提示词
+    systemPrompt: store.systemPrompt || '你是一个 helpful assistant',
+
+    // 最近3轮对话上下文（只读）
+    // 取最后6条消息（3轮对话 = 3 user + 3 assistant）
+    recentMessages: store.messages.slice(-6).map(m => ({
+      role: m.role,
+      content: m.content,
+    })),
+  }
+}
+
+/**
  * 处理 AI 回复逻辑
+ *
+ * 【P1-1 AI联动最小可用】支持使用 AI 对话的共享配置
+ * - 共用模型、API Key、BaseURL
+ * - 共用 system prompt
+ * - 共用 temperature
+ * - 读取最近3轮 AI 对话上下文
  */
 const handleAIReply = async (
   accountId: string,
@@ -289,6 +327,41 @@ const handleAIReply = async (
 
   const { prompt, autoSend } = config.comment.aiReply
 
+  // 【P1-1】判断是否使用 AI 对话的共享配置
+  const useSharedConfig = config.comment.aiReply.useSharedConfig ?? false
+
+  let aiConfig: {
+    provider: AIProvider
+    model: string
+    apiKey: string
+    customBaseURL: string
+    temperature?: number
+    systemPrompt?: string
+    recentMessages?: Array<{ role: string; content: string }>
+  }
+
+  if (useSharedConfig) {
+    // 使用 AI 对话的共享配置
+    const sharedConfig = getAISharedConfig()
+    aiConfig = {
+      provider: sharedConfig.provider as AIProvider,
+      model: sharedConfig.model,
+      apiKey: sharedConfig.apiKey,
+      customBaseURL: sharedConfig.baseURL,
+      temperature: sharedConfig.temperature,
+      systemPrompt: sharedConfig.systemPrompt,
+      recentMessages: sharedConfig.recentMessages,
+    }
+  } else {
+    // 使用自动回复的独立配置
+    aiConfig = {
+      provider,
+      model,
+      apiKey,
+      customBaseURL,
+    }
+  }
+
   // 筛选与该用户相关的评论和回复
   const userComments = [comment, ...allComments].filter(
     cmt =>
@@ -301,20 +374,30 @@ const handleAIReply = async (
   const plainMessages = generateAIMessages(userComments, userReplies)
 
   // 构造系统提示
-  const systemPrompt = `你将接收到一个或多个 JSON 字符串，每个字符串代表用户的评论，格式为 {"nickname": "用户昵称", "content": "评论内容"}。请分析所有评论，并根据以下要求生成一个回复：\n${prompt}`
+  const systemPrompt =
+    useSharedConfig && aiConfig.systemPrompt
+      ? `${aiConfig.systemPrompt}\n\n你将接收到一个或多个 JSON 字符串，每个字符串代表用户的评论，格式为 {"nickname": "用户昵称", "content": "评论内容"}。请分析所有评论，并根据以下要求生成一个回复：\n${prompt}`
+      : `你将接收到一个或多个 JSON 字符串，每个字符串代表用户的评论，格式为 {"nickname": "用户昵称", "content": "评论内容"}。请分析所有评论，并根据以下要求生成一个回复：\n${prompt}`
 
-  const messages = [
-    { role: 'system', content: systemPrompt }, // id 和 timestamp 对请求不重要
-    ...plainMessages,
+  // 构建消息列表
+  const messages: Array<{ role: string; content: string }> = [
+    { role: 'system', content: systemPrompt },
   ]
+
+  // 【P1-1】如果使用共享配置，添加最近3轮 AI 对话上下文
+  if (useSharedConfig && aiConfig.recentMessages && aiConfig.recentMessages.length > 0) {
+    messages.push(...aiConfig.recentMessages)
+  }
+
+  messages.push(...plainMessages)
 
   try {
     const replyContent = await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.aiChat.normalChat, {
       messages,
-      provider,
-      model,
-      apiKey,
-      customBaseURL,
+      provider: aiConfig.provider,
+      model: aiConfig.model,
+      apiKey: aiConfig.apiKey,
+      customBaseURL: aiConfig.customBaseURL,
     })
 
     if (replyContent && typeof replyContent === 'string') {

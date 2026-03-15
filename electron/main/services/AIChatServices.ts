@@ -1,6 +1,10 @@
 import OpenAI, { AuthenticationError, NotFoundError } from 'openai'
 import { providers } from 'shared/providers'
 import { createLogger } from '#/logger'
+import type { AIChatStore } from '../../../src/hooks/useAIChat'
+
+// 引入 useAIChat store 类型用于共享配置
+// 注意：这里使用类型导入避免循环依赖，实际获取通过函数参数
 
 type ProviderType = keyof typeof providers
 
@@ -196,6 +200,101 @@ export class AIChatService {
           message: `${data?.error?.message}, CODE: ${data?.error?.code}`,
         }
       }
+    }
+  }
+}
+
+/**
+ * 【P1-1 AI联动最小可用】AI 配置共享类
+ *
+ * 共享范围（严格限制）：
+ * - 模型选择、API Key、BaseURL
+ * - System Prompt
+ * - Temperature
+ * - 最近3轮对话上下文（只读）
+ *
+ * 明确不做：
+ * - 历史写回 AI 对话
+ * - 实时感知直播间评论
+ * - 自动回复风格学习
+ * - 失败回退机制
+ * - 频率限制联动
+ */
+export class AISharedConfig {
+  private static logger = createLogger('AISharedConfig')
+
+  /**
+   * 获取 AI 对话的共享配置
+   * @param getStore 获取 useAIChat store 的函数（避免直接导入导致循环依赖）
+   */
+  static getConfig(getStore: () => AIChatStore) {
+    try {
+      const store = getStore()
+      const provider = store.config.provider
+      const providerConfig = providers[provider]
+
+      const config = {
+        // 基础配置
+        provider,
+        model: store.config.model,
+        apiKey: store.apiKeys[provider] || '',
+        baseURL: store.customBaseURL || providerConfig.baseURL,
+
+        // 生成参数
+        temperature: store.config.temperature ?? 0.7,
+
+        // 系统提示词
+        systemPrompt: store.systemPrompt || '你是一个 helpful assistant',
+
+        // 最近3轮对话上下文（只读）
+        // 取最后6条消息（3轮对话 = 3 user + 3 assistant）
+        recentMessages: store.messages.slice(-6).map(m => ({
+          role: m.role,
+          content: m.content,
+        })),
+      }
+
+      AISharedConfig.logger.debug('[getConfig] 共享配置获取成功', {
+        provider: config.provider,
+        model: config.model,
+        temperature: config.temperature,
+        recentMessagesCount: config.recentMessages.length,
+      })
+
+      return config
+    } catch (error) {
+      AISharedConfig.logger.error('[getConfig] 获取共享配置失败:', error)
+      // 返回默认配置
+      return {
+        provider: 'deepseek' as const,
+        model: providers.deepseek.models[0],
+        apiKey: '',
+        baseURL: providers.deepseek.baseURL,
+        temperature: 0.7,
+        systemPrompt: '你是一个 helpful assistant',
+        recentMessages: [],
+      }
+    }
+  }
+
+  /**
+   * 检查共享配置是否可用
+   * @param getStore 获取 useAIChat store 的函数
+   */
+  static isConfigValid(getStore: () => AIChatStore): boolean {
+    try {
+      const store = getStore()
+      const provider = store.config.provider
+      const apiKey = store.apiKeys[provider]
+
+      const isValid = !!apiKey && apiKey.length > 10
+
+      AISharedConfig.logger.debug('[isConfigValid]', { provider, isValid })
+
+      return isValid
+    } catch (error) {
+      AISharedConfig.logger.error('[isConfigValid] 检查失败:', error)
+      return false
     }
   }
 }

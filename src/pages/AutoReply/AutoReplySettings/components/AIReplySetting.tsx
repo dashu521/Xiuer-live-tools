@@ -4,12 +4,20 @@ import { APIKeyDialog } from '@/components/ai-chat/APIKeyDialog'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import { useAIChatStore } from '@/hooks/useAIChat'
 import { useAutoReplyConfig } from '@/hooks/useAutoReplyConfig'
 
 export function AIReplySetting() {
   const { config, updateAIReplySettings } = useAutoReplyConfig()
   const aiReplyEnabled = config.comment.aiReply.enable
   const autoSend = config.comment.aiReply.autoSend
+  const useSharedConfig = config.comment.aiReply.useSharedConfig ?? false
+
+  // 获取AI对话的配置用于显示
+  const aiChatConfig = useAIChatStore(state => state.config)
+  const aiChatProvider = aiChatConfig.provider
+  const aiChatModel = aiChatConfig.model
+
   // 处理AI自动回复开关
   const handleAiReplyChange = (checked: boolean) => {
     updateAIReplySettings({ enable: checked })
@@ -19,8 +27,14 @@ export function AIReplySetting() {
     updateAIReplySettings({ autoSend: checked })
   }
 
+  // 【P1-1 AI联动】处理使用AI对话配置开关
+  const handleUseSharedConfigChange = (checked: boolean) => {
+    updateAIReplySettings({ useSharedConfig: checked })
+  }
+
   const aiReplyId = useId()
   const autoSendId = useId()
+  const useSharedConfigId = useId()
 
   return (
     <>
@@ -29,6 +43,26 @@ export function AIReplySetting() {
           <Switch id={aiReplyId} checked={aiReplyEnabled} onCheckedChange={handleAiReplyChange} />
           <Label htmlFor={aiReplyId}>启用AI自动回复</Label>
         </div>
+
+        {/* 【P1-1 AI联动】使用AI对话配置开关 */}
+        {aiReplyEnabled && (
+          <div className="flex items-center space-x-2 pl-4 border-l-2 border-primary/20">
+            <Switch
+              id={useSharedConfigId}
+              checked={useSharedConfig}
+              onCheckedChange={handleUseSharedConfigChange}
+            />
+            <div className="flex flex-col">
+              <Label htmlFor={useSharedConfigId}>使用AI对话的配置</Label>
+              <span className="text-xs text-muted-foreground">
+                {useSharedConfig
+                  ? `当前使用：${aiChatProvider} / ${aiChatModel}`
+                  : '使用自动回复的独立配置'}
+              </span>
+            </div>
+          </div>
+        )}
+
         <div>
           <div className="flex items-center space-x-2">
             <Switch id={autoSendId} checked={autoSend} onCheckedChange={handleAutoSendChange} />

@@ -12,7 +12,7 @@ import { app, shell } from 'electron'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { typedIpcMainHandle } from '#/utils'
 // [SECURITY-FIX] 引入安全路径工具
-import { resolveSafePath, validateFileName } from '#/utils/securityValidators'
+import { resolveSafePath } from '#/utils/securityValidators'
 
 // 导出数据结构（与渲染进程保持一致）
 interface LiveStatsExportData {
@@ -184,12 +184,12 @@ function buildUserBehaviorRows(events: LiveStatsExportData['events']): UserBehav
 }
 
 // 安全的文件名清理函数
-function sanitizeFilename(name: string): string {
+function _sanitizeFilename(name: string): string {
   // 替换 Windows 非法字符和路径遍历
   return name
-    .replace(/[<>"/\\|?*]/g, '_')  // Windows 非法字符
-    .replace(/\.{2,}/g, '_')        // 路径遍历 ..
-    .replace(/^\.+/, '_')           // 隐藏文件 .
+    .replace(/[<>"/\\|?*]/g, '_') // Windows 非法字符
+    .replace(/\.{2,}/g, '_') // 路径遍历 ..
+    .replace(/^\.+/, '_') // 隐藏文件 .
 }
 
 // 验证文件路径是否在目标目录内
