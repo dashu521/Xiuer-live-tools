@@ -515,10 +515,46 @@ const stopAllTasks = async () => {
 
 ---
 
-## 11. 版本历史
+## 11. P0-1 直播生命周期状态一致性治理（2026-03-15）
+
+### 11.1 背景
+
+针对 StreamStateDetector 在关播时可能被意外停止的风险，实施三重防护机制。
+
+### 11.2 防护机制
+
+| 防护层级 | 位置 | 作用 |
+|---------|------|------|
+| 防护1 | `stopForStreamEnded` 入口 | 防止重复触发 |
+| 防护2 | `stopForStreamEnded` 前置检查 | 确保 detector 运行，异常时重启 |
+| 防护3 | `stopForStreamEnded` 后置检查 | 确认 detector 仍在运行，异常时重启 |
+
+### 11.3 新增 API
+
+```typescript
+// StreamStateDetector.ts
+get isRunning(): boolean  // 获取 detector 运行状态
+keepAlive(): boolean      // 强制保持/重启 detector
+```
+
+### 11.4 关键代码路径
+
+```
+关播检测 → StreamStateDetector.checkStreamState() 
+        → onStreamEnded('直播已结束')
+        → AccountSession.stopForStreamEnded()
+        → 【防护1/2/3】
+        → stopTasksAndUpdateState(reason, false, false, false)
+        → 任务停止，detector 保持运行
+```
+
+---
+
+## 12. 版本历史
 
 | 版本 | 日期 | 修改内容 |
 |------|------|---------|
 | v1.0 | 2024-03-12 | 初始版本 |
 | v2.0 | 2024-03-13 | 完整七层规范固化 |
 | v2.1 | 2024-03-13 | 补充实现结论、关播不停止检测器规则 |
+| v2.2 | 2026-03-15 | 补充 P0-1 直播生命周期状态一致性治理 |

@@ -1,8 +1,8 @@
 /**
  * 账号会话管理
- * 
+ *
  * @see docs/live-control-lifecycle-spec.md 中控台与直播状态管理总规范
- * 
+ *
  * 核心规则：
  * - 停止所有任务 ≠ 断开中控台连接
  * - 结束直播 ≠ 断开中控台连接
@@ -28,8 +28,10 @@ import {
   isPerformPopup,
   isPinComment,
 } from '#/platforms/IPlatform'
-import { StreamStateDetector } from '#/services/StreamStateDetector'
 import { accountRuntimeManager } from '#/services/AccountScopedRuntimeManager'
+import { type ReconnectReason, reconnectManager } from '#/services/ReconnectManager'
+import { StreamStateDetector } from '#/services/StreamStateDetector'
+import { taskRuntimeMonitor } from '#/services/TaskRuntimeMonitor'
 import { createAutoCommentTask } from '#/tasks/AutoCommentTask'
 import { createAutoPopupTask } from '#/tasks/AutoPopupTask'
 import { createCommentListenerTask } from '#/tasks/CommentListenerTask'
@@ -38,7 +40,6 @@ import { createPinCommentTask } from '#/tasks/PinCommentTask'
 import { createSendBatchMessageTask } from '#/tasks/SendBatchMessageTask'
 import { createSubAccountInteractionTask } from '#/tasks/SubAccountInteractionTask'
 import windowManager from '#/windowManager'
-import { taskRuntimeMonitor } from '#/services/TaskRuntimeMonitor'
 
 export class AccountSession {
   private platform: IPlatform
@@ -76,7 +77,7 @@ export class AccountSession {
   }): Promise<{ needsLogin: boolean }> {
     try {
       const headless = config.headless ?? false
-      console.log(`[BrowserPopup] [AccountSession] connect() called`, {
+      console.log('[BrowserPopup] [AccountSession] connect() called', {
         accountId: this.account.id,
         headless,
         hasStorageState: !!config.storageState,
@@ -88,14 +89,18 @@ export class AccountSession {
         storageState = JSON.parse(config.storageState)
       }
 
-      console.log(`[BrowserPopup] [AccountSession] Calling browserManager.createSession()`)
+      console.log('[BrowserPopup] [AccountSession] Calling browserManager.createSession()')
       this.browserSession = await browserManager.createSession(headless, storageState)
-      console.log(`[BrowserPopup] [AccountSession] createSession() returned, browser exists: ${!!this.browserSession?.browser}`)
+      console.log(
+        `[BrowserPopup] [AccountSession] createSession() returned, browser exists: ${!!this.browserSession?.browser}`,
+      )
       this.streamStateDetector.updateBrowserSession(this.browserSession)
 
-      console.log(`[BrowserPopup] [AccountSession] Calling ensureAuthenticated()`)
+      console.log('[BrowserPopup] [AccountSession] Calling ensureAuthenticated()')
       const needsLogin = await this.ensureAuthenticated(this.browserSession, headless)
-      console.log(`[BrowserPopup] [AccountSession] ensureAuthenticated() returned, needsLogin: ${needsLogin}`)
+      console.log(
+        `[BrowserPopup] [AccountSession] ensureAuthenticated() returned, needsLogin: ${needsLogin}`,
+      )
 
       const state = JSON.stringify(await this.browserSession.context.storageState())
 
@@ -127,8 +132,22 @@ export class AccountSession {
       // 连接成功后，启动直播状态检测轮询
       this.streamStateDetector.start()
 
+      // 【P0-2 场景D】登录态失效检测 - 监听页面导航
+      // 当页面跳转到登录页时，识别为 auth_expired，禁止自动重连
+      this.browserSession.page.on('framenavigated', async frame => {
+        // 只处理主框架
+        if (!frame.parentFrame()) {
+          const url = frame.url()
+          if (this.isAuthExpired(url)) {
+            this.logger.warn(`[auth-check] 检测到登录页跳转，登录态失效，URL: ${url}`)
+            emitter.emit('page-closed', { accountId: this.account.id, reason: 'auth_expired' })
+          }
+        }
+      })
+
       // 【修复】浏览器被外部主动关闭时的处理
       // 添加验证机制，确保只有当前会话有效时才触发断开
+      // 【P0-2】区分用户主动关闭和页面崩溃，触发不同重连策略
       this.browserSession.page.on('close', () => {
         if (this.isDisconnecting || this.isDisconnected) {
           this.logger.info(
@@ -137,8 +156,12 @@ export class AccountSession {
           return
         }
         if (this.browserSession?.page) {
-          this.logger.info(`[page-close] 账号 ${this.account.id} 页面关闭，触发断开连接`)
-          emitter.emit('page-closed', { accountId: this.account.id, reason: 'browser has been closed' })
+          this.logger.info(`[page-close] 账号 ${this.account.id} 页面关闭`)
+          // 【P0-2】判断是用户主动关闭还是异常关闭
+          // 如果是用户主动关闭浏览器窗口，reason = 'browser_closed'（禁止重连）
+          // 如果是页面崩溃/异常，reason = 'page_crash'（允许重连）
+          const closeReason = this.detectCloseReason('page')
+          emitter.emit('page-closed', { accountId: this.account.id, reason: closeReason })
         }
       })
 
@@ -150,7 +173,8 @@ export class AccountSession {
           return
         }
         this.logger.warn(`[browser-disconnected] 账号 ${this.account.id} 浏览器进程已断开`)
-        emitter.emit('page-closed', { accountId: this.account.id, reason: 'browser has been closed' })
+        // 【P0-2】浏览器进程断开通常是崩溃或异常
+        emitter.emit('page-closed', { accountId: this.account.id, reason: 'page_crash' })
       })
       // 【修复】连接成功后进行健康检查，确保直播状态检测可以正常工作
       this.logger.info('[健康检查] 验证直播状态检测功能...')
@@ -215,21 +239,25 @@ export class AccountSession {
    * @param stopDetector 是否停止 StreamStateDetector（关播时 false，断开中控台时 true）
    */
   private stopTasksAndUpdateState(
-    reason: string, 
-    closeBrowser: boolean, 
+    reason: string,
+    closeBrowser: boolean,
     sendDisconnectEvent: boolean,
-    stopDetector: boolean = false
+    stopDetector = false,
   ) {
     const accountId = this.account.id
-    
+
     try {
       // 【关键修复】只有明确要求停止 detector 时才停止（断开中控台时）
       // 关播时必须保持 detector 活跃，以支持后续再次开播检测
       if (stopDetector) {
-        this.logger.info(`[disconnect][${accountId}] >>> Step 1a: stopping streamStateDetector (stopDetector=true)`)
+        this.logger.info(
+          `[disconnect][${accountId}] >>> Step 1a: stopping streamStateDetector (stopDetector=true)`,
+        )
         this.streamStateDetector.stop()
       } else {
-        this.logger.info(`[disconnect][${accountId}] >>> Step 1a: NOT stopping streamStateDetector (stopDetector=false), keeping for re-detection`)
+        this.logger.info(
+          `[disconnect][${accountId}] >>> Step 1a: NOT stopping streamStateDetector (stopDetector=false), keeping for re-detection`,
+        )
       }
       // 只更新状态，不停止 detector
       this.streamStateDetector.setState('offline')
@@ -245,19 +273,25 @@ export class AccountSession {
       }
 
       // 关闭所有任务
-      this.logger.info(`[disconnect][${accountId}] >>> Step 3: stopping ${this.activeTasks.size} active tasks`)
+      this.logger.info(
+        `[disconnect][${accountId}] >>> Step 3: stopping ${this.activeTasks.size} active tasks`,
+      )
       Array.from(this.activeTasks.values()).forEach((task, index) => {
         const taskType = Array.from(this.activeTasks.keys())[index]
-        this.logger.info(`[disconnect][${accountId}] >>> Stopping task ${index + 1}/${this.activeTasks.size}: ${taskType}`)
+        this.logger.info(
+          `[disconnect][${accountId}] >>> Stopping task ${index + 1}/${this.activeTasks.size}: ${taskType}`,
+        )
         try {
           task.stop()
         } catch (e) {
-          this.logger.warn(`[disconnect][${accountId}] >>> Task ${taskType} stop error (ignored):`, e)
+          this.logger.warn(
+            `[disconnect][${accountId}] >>> Task ${taskType} stop error (ignored):`,
+            e,
+          )
         }
       })
       this.activeTasks.clear()
       this.logger.info(`[disconnect][${accountId}] >>> Step 4: activeTasks cleared`)
-
     } catch (error) {
       this.logger.error(`[disconnect][${accountId}] error:`, error)
     }
@@ -273,53 +307,82 @@ export class AccountSession {
       accountRuntimeManager.setDisconnected(accountId)
     } else {
       // 关播：只发送 streamStateChanged
-      this.logger.info(`[disconnect][${accountId}] >>> Step 5: sending streamStateChanged (stream ended, not disconnected)`)
+      this.logger.info(
+        `[disconnect][${accountId}] >>> Step 5: sending streamStateChanged (stream ended, not disconnected)`,
+      )
       windowManager.send(IPC_CHANNELS.tasks.liveControl.streamStateChanged, accountId, 'offline')
     }
   }
 
   /**
    * 关播时调用：只停止任务，不断开中控台，不关闭浏览器，不发送 disconnectedEvent
+   *
+   * 【P0-1 防护机制】三重防护确保 StreamStateDetector 不被意外停止
+   * 符合规范§4.4：关播不停止 StreamStateDetector
    */
   stopForStreamEnded(reason: string) {
     const accountId = this.account.id
+
+    // 【防护1】检查是否已在处理中，防止重复触发
     if (this.isDisconnecting) {
       this.logger.info(`[stopForStreamEnded] 账号 ${accountId} 已在处理中，跳过`)
       return
     }
+
+    // 【防护2】前置检查：确认 detector 正在运行
+    if (!this.streamStateDetector.isRunning) {
+      this.logger.warn('[stopForStreamEnded] Detector 未运行，尝试重启')
+      const restarted = this.streamStateDetector.keepAlive()
+      if (!restarted) {
+        this.logger.error('[stopForStreamEnded] Detector 重启失败，中止关播处理')
+        return
+      }
+    }
+
     this.isDisconnecting = true
-    
     this.logger.warn(`[stopForStreamEnded][${accountId}] START, reason: ${reason}`)
+
     // 【关键】关播时保持 detector 活跃，支持再次开播检测
-    this.stopTasksAndUpdateState(reason, false, false, false) 
-    
+    // 参数：reason, closeBrowser=false, sendDisconnectEvent=false, stopDetector=false
+    this.stopTasksAndUpdateState(reason, false, false, false)
+
+    // 【防护3】后置检查：确认 detector 仍在运行
+    if (!this.streamStateDetector.isRunning) {
+      this.logger.error('[stopForStreamEnded] Detector 意外停止，立即重启')
+      this.streamStateDetector.keepAlive()
+    } else {
+      this.logger.info('[stopForStreamEnded] Detector 运行正常，继续监控直播状态')
+    }
+
     this.isDisconnecting = false
     this.logger.warn(`[stopForStreamEnded][${accountId}] END`)
   }
 
   /**
    * 断开中控台：停止任务，更新状态，发送 disconnectedEvent
-   * 
+   *
    * @param reason 断开原因
    * @param options.closeBrowser 是否关闭浏览器（默认 false，只有浏览器实际关闭时才传 true）
    */
   disconnect(reason?: string, options?: { closeBrowser?: boolean }) {
     const shouldCloseBrowser = options?.closeBrowser ?? false
     const accountId = this.account.id
-    
+
     if (this.isDisconnecting || this.isDisconnected) {
       this.logger.info(`[disconnect] 账号 ${accountId} 已经在断开中或已断开，跳过`)
       return
     }
 
     // 在等待登录阶段，非致命断开不发送 disconnectedEvent
-    const isFatalDisconnect = 
+    const isFatalDisconnect =
       reason?.includes('browser has been closed') ||
       reason?.includes('应用退出') ||
       shouldCloseBrowser
-    
+
     if (this.isWaitingForLogin && !isFatalDisconnect) {
-      this.logger.info(`[disconnect][${accountId}] 等待登录阶段，忽略非致命断开: ${reason || '无原因'}`)
+      this.logger.info(
+        `[disconnect][${accountId}] 等待登录阶段，忽略非致命断开: ${reason || '无原因'}`,
+      )
       this.isWaitingForLogin = false
       return
     }
@@ -328,13 +391,15 @@ export class AccountSession {
     this.isDisconnected = true
     this.isWaitingForLogin = false
     const disconnectReason = reason || '与中控台断开连接'
-    
-    this.logger.warn(`[disconnect][${accountId}] START disconnect, reason: ${disconnectReason}, closeBrowser: ${shouldCloseBrowser}`)
+
+    this.logger.warn(
+      `[disconnect][${accountId}] START disconnect, reason: ${disconnectReason}, closeBrowser: ${shouldCloseBrowser}`,
+    )
     this.logger.warn(`[disconnect][${accountId}] activeTasks count: ${this.activeTasks.size}`)
-    
+
     // 断开中控台时停止 detector
     this.stopTasksAndUpdateState(disconnectReason, shouldCloseBrowser, true, true)
-    
+
     this.isDisconnecting = false
     this.logger.warn(`[disconnect][${accountId}] END`)
   }
@@ -347,8 +412,8 @@ export class AccountSession {
     if (!isConnected) {
       // 【修复】标记正在等待登录
       this.isWaitingForLogin = true
-      this.logger.info(`[ensureAuthenticated] 设置 isWaitingForLogin = true`)
-      
+      this.logger.info('[ensureAuthenticated] 设置 isWaitingForLogin = true')
+
       // 无头模式，需要先关闭原先的无头模式，启用有头模式给用户登录
       if (headless) {
         await this.browserSession.browser.close()
@@ -357,11 +422,11 @@ export class AccountSession {
       }
       // 等待登录
       await this.platform.login(this.browserSession)
-      
+
       // 【修复】登录成功，清除等待登录标记
       this.isWaitingForLogin = false
-      this.logger.info(`[ensureAuthenticated] 设置 isWaitingForLogin = false（登录成功）`)
-      
+      this.logger.info('[ensureAuthenticated] 设置 isWaitingForLogin = false（登录成功）')
+
       // 【修复】登录后 page 可能被替换，需要更新 streamStateDetector
       this.streamStateDetector.updateBrowserSession(this.browserSession)
       // 保存登录状态
@@ -423,10 +488,10 @@ export class AccountSession {
     if (Result.isFailure(newTask)) {
       return newTask
     }
-    
+
     // 注册到运行时监控
     taskRuntimeMonitor.registerTask(this.account.id, task.type)
-    
+
     // 任务停止时从任务列表中移除
     newTask.value.addStopListener(() => {
       this.activeTasks.delete(task.type)
@@ -434,11 +499,13 @@ export class AccountSession {
     })
     await newTask.value.start()
     this.activeTasks.set(task.type, newTask.value)
-    
+
     // 输出当前统计
     const stats = taskRuntimeMonitor.getStatistics()
-    this.logger.info(`[startTask][${this.account.id}] Task ${task.type} started, running tasks: ${stats.runningTasks}, timers: ${stats.activeTimers}, listeners: ${stats.activeListeners}`)
-    
+    this.logger.info(
+      `[startTask][${this.account.id}] Task ${task.type} started, running tasks: ${stats.runningTasks}, timers: ${stats.activeTimers}, listeners: ${stats.activeListeners}`,
+    )
+
     return Result.succeed()
   }
 
@@ -447,10 +514,12 @@ export class AccountSession {
     if (task) {
       this.logger.info(`[stopTask][${this.account.id}] Stopping task ${taskType}...`)
       task.stop()
-      
+
       // 输出清理后的统计
       const stats = taskRuntimeMonitor.getStatistics()
-      this.logger.info(`[stopTask][${this.account.id}] Task ${taskType} stopped, running tasks: ${stats.runningTasks}, timers: ${stats.activeTimers}, listeners: ${stats.activeListeners}`)
+      this.logger.info(
+        `[stopTask][${this.account.id}] Task ${taskType} stopped, running tasks: ${stats.runningTasks}, timers: ${stats.activeTimers}, listeners: ${stats.activeListeners}`,
+      )
     } else {
       this.logger.warn('[stopTask] 无法停止任务：未找到正在运行中的任务')
     }
@@ -497,13 +566,7 @@ export class AccountSession {
       const currentUrl = page.url()
 
       // 1. 如果当前 URL 已经是直播间页面，直接返回
-      const isLiveRoomUrl =
-        (currentUrl.includes('live.douyin.com') ||
-          currentUrl.includes('live.kuaishou.com') ||
-          (currentUrl.includes('/live/') && !currentUrl.includes('dashboard'))) &&
-        !currentUrl.includes('dashboard') &&
-        !currentUrl.includes('control') &&
-        !currentUrl.includes('compass')
+      const isLiveRoomUrl = this.isSupportedLiveRoomUrl(currentUrl)
 
       if (isLiveRoomUrl) {
         this.logger.info(`当前已是直播间页面: ${currentUrl}`)
@@ -519,7 +582,10 @@ export class AccountSession {
         }
       }
 
-      return { success: false, error: '当前不在直播间页面，也无法从中控台提取直播间链接' }
+      return {
+        success: false,
+        error: '当前不在直播间页面，也无法提取到真实可访问的直播间链接',
+      }
     } catch (error) {
       this.logger.error('获取直播间 URL 失败:', error)
       return {
@@ -537,105 +603,290 @@ export class AccountSession {
     page: import('playwright').Page,
   ): Promise<string | null> {
     try {
-      // 方法1：从页面 DOM 中查找直播间链接
-      const liveLink = await page.$('a[href*="live.douyin.com"]')
-      if (liveLink) {
-        const href = await liveLink.getAttribute('href')
-        if (href) {
-          this.logger.info('从页面 DOM 中找到直播间链接')
-          return href
+      const candidateUrls = new Set<string>()
+      const pushCandidate = (value?: string | null) => {
+        const normalized = this.normalizeLiveRoomUrl(value, page.url())
+        if (normalized) {
+          candidateUrls.add(normalized)
         }
       }
 
-      // 方法2：从页面 URL 参数中提取
+      // 方法1：当前 URL / URL 参数里已经有网页直播 ID
       const currentUrl = page.url()
+      pushCandidate(currentUrl)
+
       const urlObj = new URL(currentUrl)
-      const roomIdFromParams =
-        urlObj.searchParams.get('room_id') ||
-        urlObj.searchParams.get('roomId') ||
-        urlObj.searchParams.get('live_room_id')
-      if (roomIdFromParams) {
-        this.logger.info('从 URL 参数中提取到直播间 ID:', roomIdFromParams)
-        return `https://live.douyin.com/${roomIdFromParams}`
+      for (const key of ['web_rid', 'webRid', 'webcast_id', 'webcastId']) {
+        const webcastId = urlObj.searchParams.get(key)
+        if (webcastId) {
+          pushCandidate(this.buildDouyinLiveUrl(webcastId))
+        }
       }
 
-      // 方法3：从页面 JavaScript 变量中提取
-      const roomIdFromJs = await page.evaluate(() => {
-        // 尝试从全局变量中获取
-        const win = window as unknown as Record<string, unknown>
-        const possiblePaths = [
-          '__INITIAL_STATE__?.room?.id',
-          '__INITIAL_STATE__?.roomId',
-          'roomInfo?.roomId',
-          '__NEXT_DATA__?.props?.pageProps?.roomId',
-        ]
-        for (const path of possiblePaths) {
-          try {
-            const value = path.split('.').reduce((obj: unknown, key: string) => {
-              if (obj && typeof obj === 'object') {
-                return (obj as Record<string, unknown>)[key.replace('?', '')]
-              }
-              return undefined
-            }, win)
-            if (typeof value === 'string' || typeof value === 'number') {
-              return String(value)
-            }
-          } catch {
-            // 忽略路径错误
-          }
-        }
-        return null
+      // 方法2：从 DOM 中收集真实链接，优先使用页面上已有的直播间跳转地址
+      const pageSignals = await page.evaluate(() => {
+        const hrefs = Array.from(document.querySelectorAll('a[href]'))
+          .map(anchor => anchor.getAttribute('href') || anchor.getAttribute('data-href') || '')
+          .filter(Boolean)
+
+        const scriptText = Array.from(document.querySelectorAll('script'))
+          .map(script => script.textContent || '')
+          .filter(Boolean)
+          .join('\n')
+
+        return { hrefs, scriptText }
       })
-      if (roomIdFromJs) {
-        this.logger.info('从页面 JS 变量中提取到直播间 ID:', roomIdFromJs)
-        return `https://live.douyin.com/${roomIdFromJs}`
+
+      pageSignals.hrefs.forEach(href => pushCandidate(href))
+
+      // 方法3：从 HTML / 内联脚本中提取真实直播 URL 或网页直播 ID
+      const pageContent = `${(await page.content()).replace(/\\\//g, '/')}\n${pageSignals.scriptText}`
+
+      const directLiveUrlMatches = pageContent.match(/https?:\/\/live\.douyin\.com\/[A-Za-z0-9_-]+/g)
+      directLiveUrlMatches?.forEach(match => pushCandidate(match))
+
+      const protocolLessLiveUrlMatches = pageContent.match(
+        /(?<!https?:\/\/)live\.douyin\.com\/[A-Za-z0-9_-]+/g,
+      )
+      protocolLessLiveUrlMatches?.forEach(match => pushCandidate(match))
+
+      for (const pattern of [
+        /"(?:web_rid|webRid|webcast_id|webcastId)"\s*:\s*"([A-Za-z0-9_-]+)"/g,
+        /(?:web_rid|webRid|webcast_id|webcastId)\s*[:=]\s*"([A-Za-z0-9_-]+)"/g,
+      ]) {
+        for (const match of pageContent.matchAll(pattern)) {
+          pushCandidate(this.buildDouyinLiveUrl(match[1]))
+        }
       }
 
-      // 方法4：监听网络请求获取直播间 ID（等待页面刷新或用户操作）
-      return new Promise(resolve => {
-        let resolved = false
-        const timeout = 3000 // 3秒超时
-
-        const cleanup = () => {
-          if (!resolved) {
-            resolved = true
-            page.off('response', handleResponse)
-            resolve(null)
-          }
+      // 只接受真实可访问的网页直播地址，不再把 room_id 直接拼成 live.douyin.com/{id}
+      for (const candidate of candidateUrls) {
+        if (this.isSupportedLiveRoomUrl(candidate)) {
+          this.logger.info(`识别到直播间链接候选: ${candidate}`)
+          return candidate
         }
+      }
 
-        const handleResponse = async (response: import('playwright').Response) => {
-          if (resolved) return
-
-          const url = response.url()
-          // 监听包含 room_id 的 API 响应
-          if (
-            url.includes('promotions_v2') ||
-            url.includes('room_id') ||
-            url.includes('live/info')
-          ) {
-            try {
-              const data = await response.json()
-              const roomId = data?.data?.room_id || data?.room_id
-              if (roomId) {
-                resolved = true
-                page.off('response', handleResponse)
-                this.logger.info('从网络请求中提取到直播间 ID:', roomId)
-                resolve(`https://live.douyin.com/${roomId}`)
-              }
-            } catch {
-              // 忽略解析错误
-            }
-          }
-        }
-
-        page.on('response', handleResponse)
-        setTimeout(cleanup, timeout)
-      })
+      this.logger.warn(
+        `未从页面中提取到真实直播间 URL；已跳过 room_id 直拼逻辑，候选数=${candidateUrls.size}`,
+      )
+      return null
     } catch (error) {
       this.logger.error('提取直播间 URL 失败:', error)
       return null
     }
+  }
+
+  private buildDouyinLiveUrl(webcastId: string): string {
+    return `https://live.douyin.com/${webcastId}`
+  }
+
+  private normalizeLiveRoomUrl(rawUrl?: string | null, baseUrl?: string): string | null {
+    if (!rawUrl) return null
+
+    let value = rawUrl.trim()
+    if (!value) return null
+
+    if (value.startsWith('//')) {
+      value = `https:${value}`
+    } else if (/^(live\.douyin\.com|live\.kuaishou\.com)\//i.test(value)) {
+      value = `https://${value}`
+    }
+
+    try {
+      const url = baseUrl ? new URL(value, baseUrl) : new URL(value)
+      if (!['http:', 'https:'].includes(url.protocol)) return null
+      url.hash = ''
+      return url.toString()
+    } catch {
+      return null
+    }
+  }
+
+  private isSupportedLiveRoomUrl(rawUrl: string): boolean {
+    try {
+      const url = new URL(rawUrl)
+      const href = url.toString()
+      const host = url.hostname.toLowerCase()
+      const path = url.pathname.replace(/\/+$/, '')
+
+      if (
+        href.includes('dashboard') ||
+        href.includes('control') ||
+        href.includes('compass') ||
+        href.includes('buyin.jinritemai.com')
+      ) {
+        return false
+      }
+
+      if (host === 'live.douyin.com' || host === 'live.kuaishou.com') {
+        return path.length > 1
+      }
+
+      return path.includes('/live/')
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * 【P0-2 断线自动重连】检测页面关闭原因
+   * 区分用户主动关闭和异常关闭
+   *
+   * @param source 关闭来源：'page' | 'browser'
+   * @returns ReconnectReason 重连原因类型
+   */
+  private detectCloseReason(source: 'page' | 'browser'): ReconnectReason {
+    // 【P0-2 断线自动重连】严格按规范区分用户关闭和异常断开
+    // 
+    // 用户主动关闭浏览器的特征：
+    // - page.on('close') 触发（用户关闭标签页或浏览器）
+    // - browser.on('disconnected') 触发（浏览器进程退出）
+    //
+    // 页面崩溃的特征：
+    // - page.on('crash') 触发
+    // - 需要通过其他异常检测机制判断
+    
+    if (source === 'page') {
+      // page.on('close') 通常是用户主动关闭标签页
+      // 按规范§2.3：用户关闭浏览器应禁止自动重连
+      return 'browser_closed'
+    }
+    
+    if (source === 'browser') {
+      // browser.on('disconnected') 通常是用户关闭整个浏览器
+      return 'browser_closed'
+    }
+
+    // 默认情况（不应该发生）
+    return 'page_crash'
+  }
+
+  /**
+   * 【P0-2 断线自动重连】执行重连
+   *
+   * @param reason 重连原因
+   * @returns 是否重连成功
+   */
+  async reconnect(reason: ReconnectReason): Promise<boolean> {
+    const accountId = this.account.id
+
+    this.logger.info(`[reconnect][${accountId}] START, reason=${reason}`)
+
+    // 检查是否允许重连
+    if (!reconnectManager.shouldReconnect(reason)) {
+      this.logger.info(`[reconnect][${accountId}] 不允许重连: ${reason}`)
+      return false
+    }
+
+    // 执行重连
+    const result = await reconnectManager.attemptReconnect(accountId, reason, async () => {
+      try {
+        // 尝试重新连接
+        this.logger.info(`[reconnect][${accountId}] 尝试重新连接...`)
+
+        // 清理现有状态
+        this.isDisconnecting = false
+        this.isDisconnected = false
+
+        // 重新连接（使用已有登录态）
+        const { needsLogin } = await this.connect({ headless: true })
+
+        if (needsLogin) {
+          this.logger.warn(`[reconnect][${accountId}] 需要重新登录，重连失败`)
+          return false
+        }
+
+        this.logger.success(`[reconnect][${accountId}] 重连成功`)
+
+        // 通知前端重连成功
+        windowManager.send(IPC_CHANNELS.tasks.liveControl.reconnectedEvent, accountId, {
+          success: true,
+        })
+
+        return true
+      } catch (error) {
+        this.logger.error(`[reconnect][${accountId}] 重连失败:`, error)
+        return false
+      }
+    })
+
+    this.logger.info(`[reconnect][${accountId}] END, result=${result}`)
+
+    // 如果重连最终失败，通知前端
+    if (result === 'failed') {
+      windowManager.send(IPC_CHANNELS.tasks.liveControl.reconnectFailedEvent, accountId, {
+        reason,
+        message: '自动重连失败，请手动重新连接',
+      })
+    }
+
+    return result === 'success'
+  }
+
+  /**
+   * 【P0-2 场景D】检测登录态是否失效
+   * 通过检测URL是否跳转到登录页来判断
+   *
+   * @param url 当前页面URL
+   * @returns 是否已失效（跳转到登录页）
+   */
+  private isAuthExpired(url: string): boolean {
+    // 各平台登录页特征（基于 platformConfig.ts 中的配置）
+    const loginPatterns: Record<string, RegExp[]> = {
+      douyin: [
+        /passport\.jinritemai\.com/, // 抖音登录域名
+        /fxg\.jinritemai\.com\/login/, // 抖音小店登录页
+      ],
+      buyin: [
+        /passport\.jinritemai\.com/, // 巨量百应登录域名
+        /buyin\.jinritemai\.com\/login/, // 巨量百应登录页
+      ],
+      eos: [
+        /passport\.jinritemai\.com/, // 罗盘登录域名
+        /compass\.jinritemai\.com\/login/, // 罗盘登录页
+      ],
+      xiaohongshu: [
+        /www\.xiaohongshu\.com\/login/, // 小红书主站登录
+        /ark\.xiaohongshu\.com\/login/, // 千帆登录页
+      ],
+      pgy: [
+        /www\.xiaohongshu\.com\/login/, // 小红书主站登录
+        /pgy\.xiaohongshu\.com\/login/, // 蒲公英登录页
+      ],
+      wxchannel: [
+        /channels\.weixin\.qq\.com\/login/, // 视频号登录页
+        /mp\.weixin\.qq\.com\/login/, // 公众号登录页
+      ],
+      kuaishou: [
+        /passport\.kuaishou\.com/, // 快手登录域名
+        /live\.kuaishou\.com\/login/, // 快手直播登录页
+      ],
+      taobao: [
+        /login\.taobao\.com/, // 淘宝登录页
+        /login\.m\.taobao\.com/, // 淘宝移动端登录
+      ],
+    }
+
+    const platform = this.account.platform
+    if (!platform) {
+      this.logger.warn(`[isAuthExpired] 账号 ${this.account.id} 未设置平台`)
+      return false
+    }
+    const patterns = loginPatterns[platform]
+
+    if (!patterns) {
+      this.logger.warn(`[isAuthExpired] 未知平台: ${platform}，无法检测登录态`)
+      return false
+    }
+
+    const isLoginPage = patterns.some((pattern: RegExp) => pattern.test(url))
+
+    if (isLoginPage) {
+      this.logger.info(`[isAuthExpired] 平台 ${platform} 匹配到登录页: ${url}`)
+    }
+
+    return isLoginPage
   }
 }
 

@@ -18,21 +18,25 @@ const ipcRendererApi: ElectronAPI['ipcRenderer'] = {
   ): () => void {
     // 只允许白名单内的通道
     if (!isChannelAllowed(channel as string)) {
-      console.warn(`[Preload][on] ❌ Channel ${channel} is NOT in whitelist, listener NOT registered`)
+      console.warn(
+        `[Preload][on] ❌ Channel ${channel} is NOT in whitelist, listener NOT registered`,
+      )
       return () => {}
     }
 
     console.log(`[Preload][on] ✅ Registered listener for channel: ${String(channel)}`)
-    
+
     const subscription = (_event: IpcRendererEvent, ...args: Parameters<IpcChannels[Channel]>) => {
       const receiveTime = Date.now()
       const accountId = args[0] || 'unknown'
       console.log(`[Preload][on] 📥 Forwarding event: ${String(channel)}`, ...args)
       console.log(`[Preload][on] 📊 Receive time: ${receiveTime}, accountId: ${accountId}`)
       // 通过自定义事件通知 renderer 记录时间
-      window.dispatchEvent(new CustomEvent('ipc-receive', { 
-        detail: { channel: String(channel), accountId, receiveTime } 
-      }))
+      window.dispatchEvent(
+        new CustomEvent('ipc-receive', {
+          detail: { channel: String(channel), accountId, receiveTime },
+        }),
+      )
       listener(...args)
     }
 
@@ -62,7 +66,9 @@ const ipcRendererApi: ElectronAPI['ipcRenderer'] = {
     // 只允许白名单内的通道
     if (!isChannelAllowed(channel as string)) {
       console.warn(`[Preload] Channel ${channel} is not allowed for invoke()`)
-      return Promise.reject(new Error(`Channel ${channel} is not allowed`)) as IpcRendererInvokeReturnType<Channel>
+      return Promise.reject(
+        new Error(`Channel ${channel} is not allowed`),
+      ) as IpcRendererInvokeReturnType<Channel>
     }
     return ipcRenderer.invoke(channel as string, ...args) as IpcRendererInvokeReturnType<Channel>
   },

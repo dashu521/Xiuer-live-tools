@@ -1,17 +1,17 @@
 /**
  * 账号级运行时管理器
- * 
+ *
  * 统一管理所有账号的运行时状态，按 accountId 隔离
  * 职责：streamState、controlState 管理
- * 
+ *
  * 注意：任务创建仍由 AccountSession 处理，此管理器负责状态同步
  */
 
-import { taskRuntimeMonitor } from '#/services/TaskRuntimeMonitor'
+import { EventEmitter } from 'node:events'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { createLogger, type ScopedLogger } from '#/logger'
+import { taskRuntimeMonitor } from '#/services/TaskRuntimeMonitor'
 import windowManager from '#/windowManager'
-import { EventEmitter } from 'events'
 
 export type ControlState = 'connected' | 'disconnected'
 export type StreamState = 'live' | 'offline' | 'unknown'
@@ -44,9 +44,9 @@ export class AccountScopedRuntimeManager extends EventEmitter {
     if (this.runtimes.has(accountId)) {
       this.logger.warn(`[createAccount] 账号 ${accountId} 已存在`)
     }
-    
+
     const logger = createLogger(`@${accountName}`)
-    
+
     const runtime: AccountRuntime = {
       accountId,
       accountName,
@@ -57,10 +57,10 @@ export class AccountScopedRuntimeManager extends EventEmitter {
       isDisconnected: true,
       logger,
     }
-    
+
     this.runtimes.set(accountId, runtime)
     this.logger.info(`[createAccount] 账号 ${accountId} 已创建`)
-    
+
     return runtime
   }
 
@@ -195,7 +195,7 @@ export class AccountScopedRuntimeManager extends EventEmitter {
 
     // 设置为离线
     runtime.streamState = 'offline'
-    
+
     // 发送 streamStateChanged
     windowManager.send(IPC_CHANNELS.tasks.liveControl.streamStateChanged, accountId, 'offline')
 
@@ -219,7 +219,7 @@ export class AccountScopedRuntimeManager extends EventEmitter {
     for (const [accountId, runtime] of this.runtimes) {
       if (runtime.controlState === 'connected') stats.connected++
       else stats.disconnected++
-      
+
       if (runtime.streamState === 'live') stats.live++
       else stats.offline++
 

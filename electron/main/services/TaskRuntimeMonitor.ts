@@ -3,8 +3,6 @@
  * 用于多账号并发测试时的诊断和验证
  */
 
-import type { ITask } from '../tasks/ITask'
-
 export interface TaskRuntimeInfo {
   accountId: string
   taskType: string
@@ -43,15 +41,17 @@ class TaskRuntimeMonitor {
       status: 'running',
     }
     this.taskRegistry.set(taskId, info)
-    
+
     if (!this.accountTasks.has(accountId)) {
       this.accountTasks.set(accountId, new Set())
     }
     this.accountTasks.get(accountId)!.add(taskId)
 
     this.logEvent('TASK_REGISTERED', accountId, { taskId, taskType })
-    console.log(`[RuntimeMonitor][${accountId}] 📝 Task registered: ${taskType}, total: ${this.getStatistics().runningTasks}`)
-    
+    console.log(
+      `[RuntimeMonitor][${accountId}] 📝 Task registered: ${taskType}, total: ${this.getStatistics().runningTasks}`,
+    )
+
     return taskId
   }
 
@@ -60,13 +60,15 @@ class TaskRuntimeMonitor {
     if (info) {
       info.stoppedAt = Date.now()
       info.status = 'stopped'
-      
-      this.logEvent('TASK_UNREGISTERED', info.accountId, { 
-        taskId, 
+
+      this.logEvent('TASK_UNREGISTERED', info.accountId, {
+        taskId,
         taskType: info.taskType,
-        duration: info.stoppedAt - info.startedAt 
+        duration: info.stoppedAt - info.startedAt,
       })
-      console.log(`[RuntimeMonitor][${info.accountId}] 🧹 Task unregistered: ${info.taskType}, remaining: ${this.getStatistics().runningTasks}`)
+      console.log(
+        `[RuntimeMonitor][${info.accountId}] 🧹 Task unregistered: ${info.taskType}, remaining: ${this.getStatistics().runningTasks}`,
+      )
     }
   }
 
@@ -112,12 +114,12 @@ class TaskRuntimeMonitor {
     let runningTasks = 0
     let stoppedTasks = 0
 
-    for (const [taskId, info] of this.taskRegistry) {
+    for (const [_taskId, info] of this.taskRegistry) {
       if (!tasksByAccount.has(info.accountId)) {
         tasksByAccount.set(info.accountId, [])
       }
       tasksByAccount.get(info.accountId)!.push(info)
-      
+
       if (info.status === 'running') {
         runningTasks++
       } else {
@@ -137,7 +139,7 @@ class TaskRuntimeMonitor {
 
   getAccountTasks(accountId: string): TaskRuntimeInfo[] {
     const result: TaskRuntimeInfo[] = []
-    for (const [taskId, info] of this.taskRegistry) {
+    for (const [_taskId, info] of this.taskRegistry) {
       if (info.accountId === accountId) {
         result.push(info)
       }
@@ -146,7 +148,7 @@ class TaskRuntimeMonitor {
   }
 
   getRecentEvents(accountId?: string, limit = 50) {
-    const events = accountId 
+    const events = accountId
       ? this.eventTimestamps.filter(e => e.accountId === accountId)
       : this.eventTimestamps
     return events.slice(-limit)

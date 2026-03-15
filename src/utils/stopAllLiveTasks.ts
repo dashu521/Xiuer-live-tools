@@ -1,9 +1,9 @@
 /**
  * 统一的任务停止机制
  * 当连接断开或直播结束时，强制停止所有直播相关任务
- * 
+ *
  * @see docs/live-control-lifecycle-spec.md 中控台与直播状态管理总规范
- * 
+ *
  * 核心规则：
  * - stopAll 必须幂等
  * - 状态必须按 accountId 隔离
@@ -26,17 +26,17 @@ export async function stopAllLiveTasks(
   showToast = true,
   toastCallback?: (message: string) => void,
 ): Promise<void> {
-  console.log(`[stopAllLiveTasks] Delegating to TaskStateManager for account ${accountId}, reason: ${reason}`)
-  
-  // 映射 TaskStopReason 到 TaskStateManager 的 reason
-  const mappedReason = reason === 'stream_ended' ? 'stream_ended' : 
-                       reason === 'disconnected' ? 'disconnected' : 
-                       'auto_stop'
-  
-  await taskStateManager.stopAllTasksForAccount(
-    accountId,
-    mappedReason,
-    showToast,
-    toastCallback
+  console.log(
+    `[stopAllLiveTasks] Delegating to TaskStateManager for account ${accountId}, reason: ${reason}`,
   )
+
+  // 映射 TaskStopReason 到 TaskStateManager 的 reason
+  const mappedReason =
+    reason === 'stream_ended'
+      ? 'stream_ended'
+      : reason === 'disconnected'
+        ? 'disconnected'
+        : 'auto_stop'
+
+  await taskStateManager.stopAllTasksForAccount(accountId, mappedReason, showToast, toastCallback)
 }

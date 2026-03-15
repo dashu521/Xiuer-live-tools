@@ -38,6 +38,37 @@ export class StreamStateDetector {
   ) {}
 
   /**
+   * 【P0-1 防护机制】获取 detector 是否正在运行
+   * 用于外部检查 detector 状态，确保关播时 detector 不被意外停止
+   */
+  get isRunning(): boolean {
+    return this.isPolling
+  }
+
+  /**
+   * 【P0-1 防护机制】强制保持 detector 运行
+   * 当检测到 detector 意外停止时，立即重启
+   * 符合规范§4.4：关播不停止 StreamStateDetector
+   */
+  keepAlive(): boolean {
+    if (this.isPolling) {
+      this.logger.debug('[keepAlive] Detector is already running')
+      return true
+    }
+
+    this.logger.warn('[keepAlive] Detector was stopped unexpectedly, restarting...')
+
+    // 只有在有 browserSession 的情况下才能重启
+    if (!this.browserSession) {
+      this.logger.error('[keepAlive] Cannot restart: browser session is null')
+      return false
+    }
+
+    this.start()
+    return this.isPolling
+  }
+
+  /**
    * 设置直播结束时的回调（由 AccountSession 调用）
    */
   setOnStreamEndedCallback(callback: (reason: string) => void) {
@@ -138,9 +169,13 @@ export class StreamStateDetector {
         // 【核心修复】当检测到直播结束（从 live 变为 offline）时，自动触发断开连接
         // 解决页面刷新/导航时不触发 page.on('close') 的问题
         if (prevState === 'live' && newState === 'offline' && this.onStreamEnded) {
-          this.logger.info(`[stream][${this.accountId}] Stream ended: ${prevState} -> ${newState}, triggering disconnect...`)
+          this.logger.info(
+            `[stream][${this.accountId}] Stream ended: ${prevState} -> ${newState}, triggering disconnect...`,
+          )
           // 记录完整的证据链
-          this.logger.info(`[stream][${this.accountId}] >>> calling onStreamEnded callback with reason: "直播已结束"`)
+          this.logger.info(
+            `[stream][${this.accountId}] >>> calling onStreamEnded callback with reason: "直播已结束"`,
+          )
           this.onStreamEnded('直播已结束')
           this.logger.info(`[stream][${this.accountId}] >>> onStreamEnded callback completed`)
         }

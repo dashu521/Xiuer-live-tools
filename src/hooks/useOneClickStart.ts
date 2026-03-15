@@ -8,6 +8,7 @@
 
 import { useMemoizedFn } from 'ahooks'
 import { useMemo, useState } from 'react'
+import type { LooseElectronAPI } from 'shared/electron-api'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { taskManager } from '@/tasks'
 import type { TaskContext } from '@/tasks/types'
@@ -125,7 +126,10 @@ export function useOneClickStart(): {
               error: (message: string) => toast.error(message),
             },
             ipcInvoke: async <T = unknown>(channel: string, ...args: unknown[]): Promise<T> => {
-              return (window as any).ipcRenderer.invoke(channel, ...args) as Promise<T>
+              return (window as unknown as LooseElectronAPI).ipcRenderer.invoke(
+                channel,
+                ...args,
+              ) as Promise<T>
             },
           }
           const result = await taskManager.start('autoSpeak', ctx)
@@ -173,15 +177,15 @@ export function useOneClickStart(): {
       currentAccountId,
       'manual',
       true,
-      (message) => {
+      message => {
         if (result.stoppedTasks.length > 0) {
           toast.success('已停止当前账号的自动任务')
         } else if (result.alreadyStopped.length > 0) {
           toast.info(message)
         }
-      }
+      },
     )
-    
+
     // 记录结果
     console.log('[OneClickStart] Stop result:', {
       stopped: result.stoppedTasks,

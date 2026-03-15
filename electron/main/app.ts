@@ -37,7 +37,7 @@ function initLogPaths() {
     STARTUP_LOG_DIR = path.join(app.getPath('userData'), 'logs')
     STARTUP_LOG_PATH = path.join(STARTUP_LOG_DIR, 'startup.log')
     MAIN_LOG_PATH = path.join(STARTUP_LOG_DIR, 'main.log')
-  } catch (e) {
+  } catch (_e) {
     STARTUP_LOG_DIR = FALLBACK_LOG_PATH
     STARTUP_LOG_PATH = path.join(FALLBACK_LOG_PATH, 'startup.log')
     MAIN_LOG_PATH = path.join(FALLBACK_LOG_PATH, 'main.log')
@@ -51,7 +51,7 @@ function ensureLogDir() {
       if (!existsSync(dir)) {
         mkdirSync(dir, { recursive: true })
       }
-    } catch (e) {
+    } catch (_e) {
       // 继续尝试下一个目录
     }
   }
@@ -61,18 +61,18 @@ function writeStartupLog(message: string) {
   ensureLogDir()
   const timestamp = new Date().toISOString()
   const logLine = `[${timestamp}] [STARTUP] [PID:${process.pid}] ${message}\n`
-  
+
   // 尝试写入多个位置，确保至少有一个成功
   const logPaths = [STARTUP_LOG_PATH, MAIN_LOG_PATH, path.join(FALLBACK_LOG_PATH, 'startup.log')]
-  
+
   for (const logPath of logPaths) {
     try {
       appendFileSync(logPath, logLine)
-    } catch (e) {
+    } catch (_e) {
       // 继续尝试下一个路径
     }
   }
-  
+
   console.log(`[STARTUP] ${message}`)
 }
 
@@ -80,13 +80,13 @@ function writeMainLog(level: string, message: string) {
   ensureLogDir()
   const timestamp = new Date().toISOString()
   const logLine = `[${timestamp}] [${level}] [PID:${process.pid}] ${message}\n`
-  
+
   const logPaths = [MAIN_LOG_PATH, path.join(FALLBACK_LOG_PATH, 'main.log')]
-  
+
   for (const logPath of logPaths) {
     try {
       appendFileSync(logPath, logLine)
-    } catch (e) {
+    } catch (_e) {
       // 继续尝试下一个路径
     }
   }
@@ -112,9 +112,7 @@ writeStartupLog(`临时日志目录: ${FALLBACK_LOG_PATH}`)
 function createBoxedString(lines: string[]) {
   const maxLength = Math.max(...lines.map(line => line.length))
   const horizontalLine = `+${'-'.repeat(maxLength + 2)}+`
-  const content = lines
-    .map(line => `| ${line.padEnd(maxLength)} |`)
-    .join('\n')
+  const content = lines.map(line => `| ${line.padEnd(maxLength)} |`).join('\n')
   return `\n${horizontalLine}\n${content}\n${horizontalLine}`
 }
 
@@ -174,33 +172,33 @@ if (!gotTheLock) {
   process.exit(0)
 }
 
-app.on('second-instance', (_event, commandLine, workingDirectory) => {
+app.on('second-instance', (_event, commandLine, _workingDirectory) => {
   writeStartupLog(`second-instance 触发，命令行: ${commandLine.join(' ')}`)
   writeMainLog('INFO', 'second-instance: 检测到第二个实例启动，唤醒主窗口')
 
   // 【修复】增强二次启动唤醒逻辑，确保窗口可见并记录结果
   if (win && !win.isDestroyed()) {
     writeStartupLog('second-instance: 主窗口存在，准备显示')
-    
+
     // 如果窗口被最小化，恢复它
     if (win.isMinimized()) {
       win.restore()
       writeStartupLog('second-instance: 窗口已从最小化恢复')
     }
-    
+
     // 如果窗口不可见，显示它
     if (!win.isVisible()) {
       win.show()
       writeStartupLog('second-instance: 窗口已从隐藏状态显示')
     }
-    
+
     // 确保任务栏显示
     win.setSkipTaskbar(false)
-    
+
     // 聚焦并置顶
     win.focus()
     win.moveTop()
-    
+
     // 【修复】记录唤醒结果
     const result = {
       visible: win.isVisible(),
@@ -208,7 +206,10 @@ app.on('second-instance', (_event, commandLine, workingDirectory) => {
       focused: win.isFocused(),
     }
     writeStartupLog(`second-instance: 主窗口唤醒结果: ${JSON.stringify(result)}`)
-    writeMainLog('INFO', `second-instance: 窗口唤醒成功 - visible=${result.visible}, minimized=${result.minimized}`)
+    writeMainLog(
+      'INFO',
+      `second-instance: 窗口唤醒成功 - visible=${result.visible}, minimized=${result.minimized}`,
+    )
   } else {
     writeStartupLog('second-instance: 主窗口不存在，创建新窗口')
     writeMainLog('WARN', 'second-instance: mainWindow not created yet, creating new window')
@@ -225,10 +226,12 @@ function logWindowDebug(phase: string, w: BrowserWindow | null = win): void {
   const line = `${ts} pid=${process.pid} ${phase} mainWindow=${!!w} visible=${isVisible} minimized=${isMinimized} focused=${isFocused}\n`
   try {
     appendFileSync(XIUER_DEBUG_PATH, line)
-  } catch (e) {
+  } catch (_e) {
     // 忽略
   }
-  writeStartupLog(`[WindowDebug] ${phase} - visible=${isVisible}, minimized=${isMinimized}, focused=${isFocused}`)
+  writeStartupLog(
+    `[WindowDebug] ${phase} - visible=${isVisible}, minimized=${isMinimized}, focused=${isFocused}`,
+  )
 }
 
 /** 开发模式：等待开发服务器可连接 */
@@ -321,7 +324,7 @@ writeStartupLog(`process.cwd(): ${process.cwd()}`)
 // 检查 RENDERER_DIST 目录内容
 try {
   if (existsSync(RENDERER_DIST)) {
-    const files = require('fs').readdirSync(RENDERER_DIST)
+    const files = require('node:fs').readdirSync(RENDERER_DIST)
     writeStartupLog(`RENDERER_DIST 目录内容: ${files.join(', ')}`)
   } else {
     writeStartupLog(`RENDERER_DIST 目录不存在: ${RENDERER_DIST}`)
@@ -400,8 +403,10 @@ async function createWindow() {
   const isDevMode = isDev || !app.isPackaged
   // Windows 打包版强制显示，开发模式强制显示，其他平台按正常流程
   const showOnStart = isDevMode || isWindowsPackaged
-  
-  writeStartupLog(`[窗口显示规则] isWindowsPackaged=${isWindowsPackaged}, isDevMode=${isDevMode}, showOnStart=${showOnStart}`)
+
+  writeStartupLog(
+    `[窗口显示规则] isWindowsPackaged=${isWindowsPackaged}, isDevMode=${isDevMode}, showOnStart=${showOnStart}`,
+  )
 
   try {
     const iconPath = path.join(process.env.VITE_PUBLIC ?? '', 'favicon.png')
@@ -440,7 +445,7 @@ async function createWindow() {
         // 【修复】ready-to-show 时再次确保窗口显示
         win.show()
         writeStartupLog('窗口已显示 (ready-to-show)')
-        
+
         // 开发模式或 Windows 打包版时聚焦窗口
         if (showOnStart) {
           win.focus()
@@ -509,19 +514,24 @@ async function createWindow() {
       console.log('[main] 正在加载页面:', VITE_DEV_SERVER_URL)
       writeStartupLog(`正在加载页面: ${VITE_DEV_SERVER_URL}`)
 
-      win.loadURL(VITE_DEV_SERVER_URL).then(() => {
-        writeStartupLog('loadURL 成功')
-      }).catch(err => {
-        writeStartupLog(`loadURL 失败: ${err.message}`)
-        writeMainLog('ERROR', `loadURL failed: ${err.message}`)
-        logWindowDebug('loadURL failed')
-      })
+      win
+        .loadURL(VITE_DEV_SERVER_URL)
+        .then(() => {
+          writeStartupLog('loadURL 成功')
+        })
+        .catch(err => {
+          writeStartupLog(`loadURL 失败: ${err.message}`)
+          writeMainLog('ERROR', `loadURL failed: ${err.message}`)
+          logWindowDebug('loadURL failed')
+        })
 
       // 开发环境：首次加载失败时自动重试
       win.webContents.on(
         'did-fail-load',
         (_, errorCode, errorDescription, validatedURL, isMainFrame) => {
-          writeStartupLog(`did-fail-load: errorCode=${errorCode}, errorDescription=${errorDescription}`)
+          writeStartupLog(
+            `did-fail-load: errorCode=${errorCode}, errorDescription=${errorDescription}`,
+          )
 
           if (
             !VITE_DEV_SERVER_URL ||
@@ -533,13 +543,19 @@ async function createWindow() {
             return
           }
           if (devLoadRetryCount >= DEV_LOAD_RETRY_MAX) {
-            console.log('[main] 开发页面加载已重试', DEV_LOAD_RETRY_MAX, '次，请检查 Vite 是否已启动')
+            console.log(
+              '[main] 开发页面加载已重试',
+              DEV_LOAD_RETRY_MAX,
+              '次，请检查 Vite 是否已启动',
+            )
             writeStartupLog(`开发页面加载已重试 ${DEV_LOAD_RETRY_MAX} 次，放弃重试`)
             return
           }
           devLoadRetryCount += 1
           console.log('[main] 开发页面加载失败，', DEV_LOAD_RETRY_DELAY_MS / 1000, '秒后重试')
-          writeStartupLog(`开发页面加载失败，${DEV_LOAD_RETRY_DELAY_MS / 1000}秒后重试 (${devLoadRetryCount}/${DEV_LOAD_RETRY_MAX})`)
+          writeStartupLog(
+            `开发页面加载失败，${DEV_LOAD_RETRY_DELAY_MS / 1000}秒后重试 (${devLoadRetryCount}/${DEV_LOAD_RETRY_MAX})`,
+          )
 
           setTimeout(() => {
             if (
@@ -572,7 +588,7 @@ async function createWindow() {
         try {
           const parentDir = path.dirname(indexHtml)
           if (existsSync(parentDir)) {
-            const files = require('fs').readdirSync(parentDir)
+            const files = require('node:fs').readdirSync(parentDir)
             writeStartupLog(`目录 ${parentDir} 内容: ${files.join(', ')}`)
           } else {
             writeStartupLog(`父目录不存在: ${parentDir}`)
@@ -582,27 +598,30 @@ async function createWindow() {
         }
       }
 
-      win.loadFile(indexHtml).then(() => {
-        writeStartupLog('loadFile 成功')
-      }).catch(err => {
-        writeStartupLog(`loadFile 失败: ${err.message}`)
-        writeMainLog('ERROR', `loadFile failed: ${err.message}`)
-        logWindowDebug('loadFile failed')
+      win
+        .loadFile(indexHtml)
+        .then(() => {
+          writeStartupLog('loadFile 成功')
+        })
+        .catch(err => {
+          writeStartupLog(`loadFile 失败: ${err.message}`)
+          writeMainLog('ERROR', `loadFile failed: ${err.message}`)
+          logWindowDebug('loadFile failed')
 
-        // 打包版主页面加载失败时重试
-        if (app.isPackaged && process.platform === 'win32') {
-          writeStartupLog('准备重试加载...')
-          setTimeout(() => {
-            if (win && !win.isDestroyed()) {
-              writeStartupLog('重试加载文件...')
-              win.loadFile(indexHtml).catch(retryErr => {
-                writeStartupLog(`重试失败: ${retryErr.message}`)
-                writeMainLog('ERROR', `loadFile retry failed: ${retryErr.message}`)
-              })
-            }
-          }, 1200)
-        }
-      })
+          // 打包版主页面加载失败时重试
+          if (app.isPackaged && process.platform === 'win32') {
+            writeStartupLog('准备重试加载...')
+            setTimeout(() => {
+              if (win && !win.isDestroyed()) {
+                writeStartupLog('重试加载文件...')
+                win.loadFile(indexHtml).catch(retryErr => {
+                  writeStartupLog(`重试失败: ${retryErr.message}`)
+                  writeMainLog('ERROR', `loadFile retry failed: ${retryErr.message}`)
+                })
+              }
+            }, 1200)
+          }
+        })
     }
 
     // webContents 事件监听
@@ -616,15 +635,23 @@ async function createWindow() {
       }
     })
 
-    win.webContents.on('did-fail-load', (_, errorCode, errorDescription, validatedURL, isMainFrame) => {
-      writeStartupLog(`事件: did-fail-load 触发 - errorCode=${errorCode}, errorDescription=${errorDescription}, isMainFrame=${isMainFrame}`)
-      writeStartupLog(`事件: did-fail-load - validatedURL=${validatedURL}`)
-      writeMainLog('ERROR', `Page failed to load: ${errorDescription} (${errorCode}) at ${validatedURL}`)
+    win.webContents.on(
+      'did-fail-load',
+      (_, errorCode, errorDescription, validatedURL, isMainFrame) => {
+        writeStartupLog(
+          `事件: did-fail-load 触发 - errorCode=${errorCode}, errorDescription=${errorDescription}, isMainFrame=${isMainFrame}`,
+        )
+        writeStartupLog(`事件: did-fail-load - validatedURL=${validatedURL}`)
+        writeMainLog(
+          'ERROR',
+          `Page failed to load: ${errorDescription} (${errorCode}) at ${validatedURL}`,
+        )
 
-      // 打包版加载失败时显示错误信息
-      if (app.isPackaged && win && !win.isDestroyed()) {
-        writeStartupLog('加载失败，尝试显示错误信息')
-        win.webContents.executeJavaScript(`
+        // 打包版加载失败时显示错误信息
+        if (app.isPackaged && win && !win.isDestroyed()) {
+          writeStartupLog('加载失败，尝试显示错误信息')
+          win.webContents
+            .executeJavaScript(`
           document.body.innerHTML = '<div style="padding:20px;font-family:sans-serif;">' +
             '<h1>页面加载失败</h1>' +
             '<p>错误码: ${errorCode}</p>' +
@@ -633,13 +660,17 @@ async function createWindow() {
             '<p>主框架: ${isMainFrame}</p>' +
             '<p>时间: ${new Date().toISOString()}</p>' +
             '</div>';
-        `).catch(() => {})
-        win.show()
-      }
-    })
+        `)
+            .catch(() => {})
+          win.show()
+        }
+      },
+    )
 
     win.webContents.on('render-process-gone', (_, details) => {
-      writeStartupLog(`事件: render-process-gone 触发 - reason=${details.reason}, exitCode=${details.exitCode}`)
+      writeStartupLog(
+        `事件: render-process-gone 触发 - reason=${details.reason}, exitCode=${details.exitCode}`,
+      )
       writeStartupLog(`事件: render-process-gone - details: ${JSON.stringify(details)}`)
       writeMainLog('ERROR', `render-process-gone: ${JSON.stringify(details)}`)
       logWindowDebug(`render-process-gone: ${details.reason}`)
@@ -648,14 +679,16 @@ async function createWindow() {
       if (app.isPackaged && win && !win.isDestroyed()) {
         writeStartupLog('渲染进程崩溃，尝试显示错误信息')
         try {
-          win.webContents.executeJavaScript(`
+          win.webContents
+            .executeJavaScript(`
             document.body.innerHTML = '<div style="padding:20px;font-family:sans-serif;">' +
               '<h1>渲染进程崩溃</h1>' +
               '<p>原因: ${details.reason}</p>' +
               '<p>退出码: ${details.exitCode}</p>' +
               '<p>时间: ${new Date().toISOString()}</p>' +
               '</div>';
-          `).catch(() => {})
+          `)
+            .catch(() => {})
           win.show()
         } catch (e) {
           writeStartupLog(`显示错误信息失败: ${e}`)
@@ -675,7 +708,26 @@ async function createWindow() {
 
     win.webContents.on('console-message', (_event, level, message, line, sourceId) => {
       const levelStr = ['debug', 'info', 'warning', 'error'][level] || 'unknown'
-      writeMainLog('RENDERER', `[${levelStr}] ${message} (${sourceId}:${line})`)
+
+      // [SECURITY] 过滤敏感信息
+      const SENSITIVE_PATTERNS = [
+        /token[=:]\s*["']?[a-zA-Z0-9_\-.]+["']?/gi,
+        /password[=:]\s*["']?[^"'\s]+["']?/gi,
+        /code[=:]\s*["']?\d{4,8}["']?/gi,
+        /secret[=:]\s*["']?[^"'\s]+["']?/gi,
+        /authorization[:\s]+["']?bearer\s+[a-zA-Z0-9_\-.]+["']?/gi,
+        /([?&])(token|password|code|secret)=[^&]*/gi,
+      ]
+
+      let sanitizedMessage = message
+      for (const pattern of SENSITIVE_PATTERNS) {
+        sanitizedMessage = sanitizedMessage.replace(pattern, '[REDACTED]')
+      }
+
+      // [LOG-LEVEL] debug 日志不记录到主日志
+      if (levelStr !== 'debug') {
+        writeMainLog('RENDERER', `[${levelStr}] ${sanitizedMessage} (${sourceId}:${line})`)
+      }
     })
 
     win.webContents.setWindowOpenHandler(({ url }) => {
@@ -687,7 +739,7 @@ async function createWindow() {
     win.on('close', e => {
       writeStartupLog(`事件: close 触发 - isQuitting=${isQuitting}, platform=${process.platform}`)
 
-      if (win && win.isDestroyed()) {
+      if (win?.isDestroyed()) {
         return
       }
 
@@ -819,14 +871,16 @@ app
   })
 
 app.on('window-all-closed', async () => {
-  writeStartupLog(`事件: window-all-closed 触发 - platform=${process.platform}, isQuitting=${isQuitting}`)
+  writeStartupLog(
+    `事件: window-all-closed 触发 - platform=${process.platform}, isQuitting=${isQuitting}`,
+  )
 
   // 【长期方案】所有平台：窗口关闭时应用保持运行（托盘模式）
   // 用户通过托盘菜单的"退出应用"才能彻底退出
   writeStartupLog('窗口全部关闭，应用保持运行（托盘模式）')
 })
 
-app.on('before-quit', (event) => {
+app.on('before-quit', _event => {
   writeStartupLog(`事件: before-quit 触发 - isQuitting=${isQuitting}`)
 
   if (!isQuitting) {
@@ -843,7 +897,7 @@ app.on('before-quit', (event) => {
   }
 })
 
-app.on('will-quit', (event) => {
+app.on('will-quit', _event => {
   writeStartupLog('事件: will-quit 触发')
   writeMainLog('INFO', '应用即将退出，执行最终清理...')
 
@@ -903,7 +957,7 @@ function writeCrashToTemp(tag: string, err: unknown): void {
 process.on('uncaughtException', error => {
   const errorMsg = error instanceof Error ? error.message : String(error)
   const errorStack = error instanceof Error ? error.stack : 'No stack trace'
-  writeStartupLog(`========== uncaughtException ==========`)
+  writeStartupLog('========== uncaughtException ==========')
   writeStartupLog(`uncaughtException 消息: ${errorMsg}`)
   writeStartupLog(`uncaughtException 堆栈: ${errorStack}`)
   writeCrashToTemp('uncaughtException', error)
@@ -914,17 +968,20 @@ process.on('uncaughtException', error => {
 
   if (!isQuitting) {
     try {
-      dialog.showErrorBox('应用程序错误', `发生了一个意外的错误，请联系技术支持：\n${error.message}`)
+      dialog.showErrorBox(
+        '应用程序错误',
+        `发生了一个意外的错误，请联系技术支持：\n${error.message}`,
+      )
     } catch (dialogError) {
       logger.error('显示错误对话框失败:', dialogError)
     }
   }
 })
 
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', (reason, _promise) => {
   const reasonMsg = reason instanceof Error ? reason.message : String(reason)
   const reasonStack = reason instanceof Error ? reason.stack : 'No stack trace'
-  writeStartupLog(`========== unhandledRejection ==========`)
+  writeStartupLog('========== unhandledRejection ==========')
   writeStartupLog(`unhandledRejection 原因: ${reasonMsg}`)
   writeStartupLog(`unhandledRejection 堆栈: ${reasonStack}`)
 

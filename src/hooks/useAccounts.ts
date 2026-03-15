@@ -95,8 +95,7 @@ export const useAccounts = create<AccountsStore>()(
         reason =
           '亲爱哒，免费版只可以添加1个直播账号哦～如果需要添加更多账号，还请您升级会员等级，解锁更多功能吧！'
       } else if (userPlan === 'trial') {
-        reason =
-          '亲爱哒，试用版只可以添加1个直播账号哦～如果觉得好用，可以升级专业版添加更多账号！'
+        reason = '亲爱哒，试用版只可以添加1个直播账号哦～如果觉得好用，可以升级专业版添加更多账号！'
       } else if (userPlan === 'pro') {
         reason =
           '亲爱哒，专业版只可以添加1个直播账号哦～如果需要管理更多直播间，可以升级专业增强版（支持3个账号）或旗舰版（无限制）！'
@@ -104,7 +103,9 @@ export const useAccounts = create<AccountsStore>()(
         reason =
           '亲爱哒，专业增强版只可以添加3个直播账号哦～如果需要无限制添加账号，可以升级旗舰版！'
       } else {
-        reason = decision.reason || `已达到账号数量上限 (${currentCount}/${maxAccounts})，如需添加更多账号，请联系客服升级套餐。`
+        reason =
+          decision.reason ||
+          `已达到账号数量上限 (${currentCount}/${maxAccounts})，如需添加更多账号，请联系客服升级套餐。`
       }
 
       return {
