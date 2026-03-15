@@ -52,11 +52,12 @@ export function validateUrl(input: unknown): { valid: boolean; url?: string; err
 // ============ 文件名/路径校验 ============
 
 // 危险字符：路径遍历、控制字符、空字节
+// biome-ignore lint/suspicious/noControlCharactersInRegex: 故意使用控制字符范围来检测危险字符
 const DANGEROUS_CHARS = /[<>:"/\\|?*\x00-\x1f]/
 // 路径遍历模式
 const PATH_TRAVERSAL = /\.\.(\\|\/)/
 // 只允许字母、数字、中文、常见安全符号
-const SAFE_FILENAME_PATTERN = /^[a-zA-Z0-9\u4e00-\u9fa5._\- ]+$/
+const _SAFE_FILENAME_PATTERN = /^[a-zA-Z0-9\u4e00-\u9fa5._\- ]+$/
 
 /**
  * 校验文件名是否安全
@@ -64,7 +65,11 @@ const SAFE_FILENAME_PATTERN = /^[a-zA-Z0-9\u4e00-\u9fa5._\- ]+$/
  * - 禁止危险字符
  * - 限制长度
  */
-export function validateFileName(input: unknown): { valid: boolean; name?: string; error?: string } {
+export function validateFileName(input: unknown): {
+  valid: boolean
+  name?: string
+  error?: string
+} {
   if (typeof input !== 'string') {
     return { valid: false, error: 'Filename must be a string' }
   }
@@ -139,7 +144,7 @@ export function safeJsonParse(
   try {
     const data = JSON.parse(input)
     return { valid: true, data }
-  } catch (error) {
+  } catch (_error) {
     return { valid: false, error: 'Invalid JSON format' }
   }
 }
@@ -259,7 +264,11 @@ const ALLOWED_PLATFORMS = ['douyin', 'kuaishou', 'taobao', 'xiaohongshu', 'wecha
 /**
  * 校验平台类型
  */
-export function validatePlatform(input: unknown): { valid: boolean; platform?: string; error?: string } {
+export function validatePlatform(input: unknown): {
+  valid: boolean
+  platform?: string
+  error?: string
+} {
   if (typeof input !== 'string') {
     return { valid: false, error: 'Platform must be a string' }
   }

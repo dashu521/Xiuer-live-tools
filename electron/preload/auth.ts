@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import { IPC_CHANNELS } from '../../shared/ipcChannels'
 import type { User } from '../../src/types/auth'
 
 /**
@@ -27,18 +28,21 @@ export const authAPI = {
     confirmPassword: string
   }) => {
     // 使用真实后端（IPC）
-    return await ipcRenderer.invoke('auth:register', data)
+    return await ipcRenderer.invoke(IPC_CHANNELS.auth.register, data)
   },
 
   login: async (credentials: { username: string; password: string; rememberMe?: boolean }) => {
-    return await ipcRenderer.invoke('auth:login', credentials)
+    return await ipcRenderer.invoke(IPC_CHANNELS.auth.login, credentials)
   },
 
   /**
    * 手机验证码登录（内部处理 token 存储）
    * 成功后 token 已写入主进程安全存储
    */
-  loginWithSms: async (phone: string, code: string): Promise<{
+  loginWithSms: async (
+    phone: string,
+    code: string,
+  ): Promise<{
     success: boolean
     user?: { id: string; username: string; email?: string; phone?: string; status?: string }
     token?: string
@@ -48,19 +52,19 @@ export const authAPI = {
     status?: number
     responseDetail?: string
   }> => {
-    return await ipcRenderer.invoke('auth:loginWithSms', phone, code)
+    return await ipcRenderer.invoke(IPC_CHANNELS.auth.loginWithSms, phone, code)
   },
 
   logout: async () => {
-    return ipcRenderer.invoke('auth:logout')
+    return ipcRenderer.invoke(IPC_CHANNELS.auth.logout)
   },
 
   validateToken: async (token: string) => {
-    return ipcRenderer.invoke('auth:validateToken', token)
+    return ipcRenderer.invoke(IPC_CHANNELS.auth.validateToken, token)
   },
 
   getCurrentUser: async (token: string) => {
-    return ipcRenderer.invoke('auth:getCurrentUser', token)
+    return ipcRenderer.invoke(IPC_CHANNELS.auth.getCurrentUser, token)
   },
 
   /** 云鉴权：用主进程存储的 refresh_token 恢复会话（启动时调用） */
@@ -69,7 +73,7 @@ export const authAPI = {
     user?: Omit<User, 'passwordHash'>
     token?: string
   }> => {
-    return await ipcRenderer.invoke('auth:restoreSession')
+    return await ipcRenderer.invoke(IPC_CHANNELS.auth.restoreSession)
   },
 
   // [SECURITY-FIX] Token 管理接口已收紧
@@ -80,7 +84,7 @@ export const authAPI = {
    * 替代 getTokens，不返回完整 token 内容
    */
   getAuthSummary: async (): Promise<{ isAuthenticated: boolean; hasToken: boolean }> => {
-    return await ipcRenderer.invoke('auth:getAuthSummary')
+    return await ipcRenderer.invoke(IPC_CHANNELS.auth.getAuthSummary)
   },
 
   /**
@@ -93,7 +97,7 @@ export const authAPI = {
     method?: string
     body?: object
   }): Promise<{ success: boolean; status?: number; data?: unknown; error?: string }> => {
-    return await ipcRenderer.invoke('auth:proxyRequest', requestConfig)
+    return await ipcRenderer.invoke(IPC_CHANNELS.auth.proxyRequest, requestConfig)
   },
 
   /**
@@ -101,7 +105,7 @@ export const authAPI = {
    * 仅限内部使用，不直接暴露给业务代码
    */
   getTokenInternal: async (): Promise<AuthTokens> => {
-    return await ipcRenderer.invoke('auth:getTokenInternal')
+    return await ipcRenderer.invoke(IPC_CHANNELS.auth.getTokenInternal)
   },
 
   /**
@@ -112,7 +116,9 @@ export const authAPI = {
    * - 发起鉴权请求：使用 proxyRequest()
    */
   getTokens: async (): Promise<AuthTokens> => {
-    console.warn('[SECURITY] authAPI.getTokens() is deprecated and will return nulls. Use getAuthSummary() or proxyRequest() instead.')
+    console.warn(
+      '[SECURITY] authAPI.getTokens() is deprecated and will return nulls. Use getAuthSummary() or proxyRequest() instead.',
+    )
     return { token: null, refreshToken: null }
   },
 
@@ -122,40 +128,42 @@ export const authAPI = {
    * 登录/注册流程内部处理 token 存储
    */
   setTokens: async (_tokens: AuthTokens): Promise<void> => {
-    console.warn('[SECURITY] authAPI.setTokens() is deprecated and has no effect. Token storage is handled internally.')
+    console.warn(
+      '[SECURITY] authAPI.setTokens() is deprecated and has no effect. Token storage is handled internally.',
+    )
     // No-op: token storage is handled internally during login/register
   },
 
   clearTokens: async (): Promise<void> => {
-    return await ipcRenderer.invoke('auth:clearTokens')
+    return await ipcRenderer.invoke(IPC_CHANNELS.auth.clearTokens)
   },
 
   // Feature access
   checkFeatureAccess: (token: string, feature: string) =>
-    ipcRenderer.invoke('auth:checkFeatureAccess', token, feature),
+    ipcRenderer.invoke(IPC_CHANNELS.auth.checkFeatureAccess, token, feature),
 
   requiresAuthentication: (feature: string) =>
-    ipcRenderer.invoke('auth:requiresAuthentication', feature),
+    ipcRenderer.invoke(IPC_CHANNELS.auth.requiresAuthentication, feature),
 
   // User management
   updateUserProfile: (token: string, data: { username?: string; email?: string }) =>
-    ipcRenderer.invoke('auth:updateUserProfile', token, data),
+    ipcRenderer.invoke(IPC_CHANNELS.auth.updateUserProfile, token, data),
 
   changePassword: (token: string, data: { currentPassword: string; newPassword: string }) =>
-    ipcRenderer.invoke('auth:changePassword', token, data),
+    ipcRenderer.invoke(IPC_CHANNELS.auth.changePassword, token, data),
 
   // Events
   onAuthStateChanged: (callback: (user: User | null) => void) => {
-    ipcRenderer.on('auth:stateChanged', (_, user) => callback(user))
+    ipcRenderer.on(IPC_CHANNELS.auth.stateChanged, (_, user) => callback(user))
   },
 
   onLoginRequired: (callback: (feature: string) => void) => {
-    ipcRenderer.on('auth:loginRequired', (_, feature) => callback(feature))
+    ipcRenderer.on(IPC_CHANNELS.auth.loginRequired, (_, feature) => callback(feature))
   },
 
   removeAllListeners: () => {
-    ipcRenderer.removeAllListeners('auth:stateChanged')
-    ipcRenderer.removeAllListeners('auth:loginRequired')
+    ipcRenderer.removeAllListeners(IPC_CHANNELS.auth.stateChanged)
+    ipcRenderer.removeAllListeners(IPC_CHANNELS.auth.loginRequired)
   },
 }
 

@@ -77,9 +77,9 @@ function getSecretKey(): Buffer {
   }
 
   const isProduction = app.isPackaged || process.env.NODE_ENV === 'production'
-  
+
   const keyFilePath = path.join(app.getPath('userData'), 'auth', '.key')
-  
+
   try {
     if (existsSync(keyFilePath)) {
       const storedKey = readFileSync(keyFilePath, 'utf8').trim()
@@ -93,7 +93,7 @@ function getSecretKey(): Buffer {
   }
 
   const newKey = randomBytes(32).toString('hex')
-  
+
   try {
     const keyDir = path.dirname(keyFilePath)
     if (!existsSync(keyDir)) {
@@ -103,7 +103,7 @@ function getSecretKey(): Buffer {
   } catch (err) {
     if (isProduction) {
       throw new Error(
-        '[SECURITY] Failed to generate encryption key: ' + (err instanceof Error ? err.message : String(err))
+        `[SECURITY] Failed to generate encryption key: ${err instanceof Error ? err.message : String(err)}`,
       )
     }
     console.error('[CloudAuthStorage] Failed to store key, using fallback:', err)
@@ -172,10 +172,31 @@ export function setStoredTokens(tokens: StoredTokens): void {
     const plain = JSON.stringify(tokens)
     const encBuf = Buffer.concat([enc.update(plain, 'utf8'), enc.final()])
     const tag = enc.getAuthTag()
-    writeFileSync(filePath, Buffer.concat([salt, iv, encBuf, tag]), { mode: 0o644 })
+    writeFileSync(filePath, Buffer.concat([salt, iv, encBuf, tag]), { mode: 0o600 })
   } catch (err) {
     console.error('[CloudAuthStorage] Failed to store tokens:', err)
     throw err
+  }
+}
+
+/**
+ * 修正已有 token 文件权限
+ * 在应用启动时调用，确保历史文件权限正确
+ */
+export function fixTokenFilePermissions(): void {
+  try {
+    const filePath = getStoragePath()
+    if (existsSync(filePath)) {
+      const fs = require('node:fs')
+      const stats = fs.statSync(filePath)
+      const currentMode = stats.mode & 0o777
+      if (currentMode !== 0o600) {
+        fs.chmodSync(filePath, 0o600)
+        console.log('[CloudAuthStorage] Fixed token file permissions to 0o600')
+      }
+    }
+  } catch (err) {
+    console.warn('[CloudAuthStorage] Failed to fix token file permissions:', err)
   }
 }
 

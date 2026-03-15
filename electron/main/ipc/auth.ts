@@ -1,10 +1,25 @@
 import { ipcMain } from 'electron'
+import { IPC_CHANNELS } from '../../../shared/ipcChannels'
 import type { LoginCredentials, RegisterData, User } from '../../../src/types/auth'
-import { AuthService } from '../services/AuthService'
-import { clearStoredTokens, getStoredTokens, setStoredTokens } from '../services/CloudAuthStorage'
-import { cloudLogin, cloudMe, cloudRefresh, cloudRegister, cloudSmsLogin } from '../services/cloudAuthClient'
-import { cloudUserToSafeUser } from '../services/cloudAuthMappers'
 import { getAuthApiBaseUrl } from '../config/buildTimeConfig'
+import { AuthService } from '../services/AuthService'
+import {
+  clearStoredTokens,
+  fixTokenFilePermissions,
+  getStoredTokens,
+  setStoredTokens,
+} from '../services/CloudAuthStorage'
+import {
+  cloudLogin,
+  cloudMe,
+  cloudRefresh,
+  cloudRegister,
+  cloudSmsLogin,
+} from '../services/cloudAuthClient'
+import { cloudUserToSafeUser } from '../services/cloudAuthMappers'
+
+// 启动时修复已有 token 文件权限
+fixTokenFilePermissions()
 
 const getEffectiveBase = (): string => {
   return getAuthApiBaseUrl()
@@ -23,7 +38,7 @@ function logAuthAuditConfig(): void {
 export function setupAuthHandlers() {
   logAuthAuditConfig()
   // ----- 云鉴权：恢复会话（启动时 refresh -> me） -----
-  ipcMain.handle('auth:restoreSession', async () => {
+  ipcMain.handle(IPC_CHANNELS.auth.restoreSession, async () => {
     if (!USE_CLOUD_AUTH) {
       return { success: false, user: null, token: null }
     }
@@ -50,7 +65,7 @@ export function setupAuthHandlers() {
   })
 
   // Register
-  ipcMain.handle('auth:register', async (_, data: RegisterData) => {
+  ipcMain.handle(IPC_CHANNELS.auth.register, async (_, data: RegisterData) => {
     if (USE_CLOUD_AUTH) {
       const identifier = (data.email || '').trim()
       if (!identifier) {
@@ -84,7 +99,7 @@ export function setupAuthHandlers() {
   })
 
   // Login
-  ipcMain.handle('auth:login', async (_, credentials: LoginCredentials) => {
+  ipcMain.handle(IPC_CHANNELS.auth.login, async (_, credentials: LoginCredentials) => {
     if (USE_CLOUD_AUTH) {
       const identifier = (credentials.username || '').trim()
       if (!identifier) {
@@ -119,19 +134,10 @@ export function setupAuthHandlers() {
 
         console.error('[AUTH-DEBUG] Determined errorType:', errorType)
 
-        // 提取友好的错误消息
-        let errorMessage: string
-        if (typeof res.error === 'string') {
-          errorMessage = res.error
-        } else if (res.error && typeof res.error === 'object' && 'message' in res.error) {
-          errorMessage = (res.error as { message: string }).message
-        } else {
-          errorMessage = res.responseDetail || '登录失败'
-        }
-
+        // 返回完整的错误对象，让前端处理错误提示
         return {
           success: false,
-          error: errorMessage,
+          error: res.error,
           errorType,
           requestUrl: res.requestUrl,
           status: res.status,
@@ -156,14 +162,18 @@ export function setupAuthHandlers() {
   })
 
   // SMS Login - 手机验证码登录（内部处理 token 存储）
-  ipcMain.handle('auth:loginWithSms', async (_, phone: string, code: string) => {
+  ipcMain.handle(IPC_CHANNELS.auth.loginWithSms, async (_, phone: string, code: string) => {
     console.log('[auth:loginWithSms] 收到登录请求, phone末4位:', phone.slice(-4))
     if (!USE_CLOUD_AUTH) {
       console.error('[auth:loginWithSms] 云鉴权未启用')
       return { success: false, error: '云鉴权未启用' }
     }
     const res = await cloudSmsLogin(phone, code)
-    console.log('[auth:loginWithSms] cloudSmsLogin 结果:', { success: res.success, hasToken: !!res.access_token, hasUser: !!res.user })
+    console.log('[auth:loginWithSms] cloudSmsLogin 结果:', {
+      success: res.success,
+      hasToken: !!res.access_token,
+      hasUser: !!res.user,
+    })
     if (!res.success) {
       return {
         success: false,
@@ -182,7 +192,10 @@ export function setupAuthHandlers() {
         })
         // [VERIFY] 写入后立即读取验证
         const verify = getStoredTokens()
-        console.log('[auth:loginWithSms] 存储写入完成, 验证读取:', { hasAccessToken: !!verify.access_token, hasRefreshToken: !!verify.refresh_token })
+        console.log('[auth:loginWithSms] 存储写入完成, 验证读取:', {
+          hasAccessToken: !!verify.access_token,
+          hasRefreshToken: !!verify.refresh_token,
+        })
       } catch (err) {
         console.error('[auth:loginWithSms] 存储写入失败:', err)
         return { success: false, error: 'Token存储失败' }
@@ -201,7 +214,7 @@ export function setupAuthHandlers() {
   })
 
   // Logout
-  ipcMain.handle('auth:logout', async (_, token: string) => {
+  ipcMain.handle(IPC_CHANNELS.auth.logout, async (_, token: string) => {
     if (USE_CLOUD_AUTH) {
       clearStoredTokens()
       return true
@@ -210,7 +223,7 @@ export function setupAuthHandlers() {
   })
 
   // Get current user（401 时自动 refresh 并重试一次）
-  ipcMain.handle('auth:getCurrentUser', async (_, token: string) => {
+  ipcMain.handle(IPC_CHANNELS.auth.getCurrentUser, async (_, token: string) => {
     if (USE_CLOUD_AUTH) {
       if (!token) return null
       let meRes = await cloudMe(token)
@@ -233,7 +246,7 @@ export function setupAuthHandlers() {
   })
 
   // Validate token
-  ipcMain.handle('auth:validateToken', async (_, token: string) => {
+  ipcMain.handle(IPC_CHANNELS.auth.validateToken, async (_, token: string) => {
     if (USE_CLOUD_AUTH) {
       const meRes = await cloudMe(token)
       return meRes.success && meRes.user ? cloudUserToSafeUser(meRes.user) : null
@@ -242,40 +255,43 @@ export function setupAuthHandlers() {
   })
 
   // Check feature access（IPC 只暴露 SafeUser；本地 AuthService 返回 User 时在此映射为 SafeUser）
-  ipcMain.handle('auth:checkFeatureAccess', async (_, token: string, feature: string) => {
-    const rawUser = await (async () => {
-      if (USE_CLOUD_AUTH && token) {
-        const meRes = await cloudMe(token)
-        if (meRes.success && meRes.user) return cloudUserToSafeUser(meRes.user)
+  ipcMain.handle(
+    IPC_CHANNELS.auth.checkFeatureAccess,
+    async (_, token: string, feature: string) => {
+      const rawUser = await (async () => {
+        if (USE_CLOUD_AUTH && token) {
+          const meRes = await cloudMe(token)
+          if (meRes.success && meRes.user) return cloudUserToSafeUser(meRes.user)
+        }
+        if (USE_CLOUD_AUTH) return null
+        return AuthService.getCurrentUser(token)
+      })()
+      const user: Omit<User, 'passwordHash'> | null =
+        rawUser == null
+          ? null
+          : 'passwordHash' in rawUser
+            ? AuthService.sanitizeUser(rawUser as User)
+            : (rawUser as Omit<User, 'passwordHash'>)
+      const requiresAuth = AuthService.requiresAuthentication(feature)
+      const requiredPlan = AuthService.getRequiredPlan(feature)
+      return {
+        canAccess: !requiresAuth || AuthService.hasPlanLevel(user, requiredPlan),
+        requiresAuth,
+        requiredPlan,
+        user,
       }
-      if (USE_CLOUD_AUTH) return null
-      return AuthService.getCurrentUser(token)
-    })()
-    const user: Omit<User, 'passwordHash'> | null =
-      rawUser == null
-        ? null
-        : 'passwordHash' in rawUser
-          ? AuthService.sanitizeUser(rawUser as User)
-          : (rawUser as Omit<User, 'passwordHash'>)
-    const requiresAuth = AuthService.requiresAuthentication(feature)
-    const requiredPlan = AuthService.getRequiredPlan(feature)
-    return {
-      canAccess: !requiresAuth || AuthService.hasPlanLevel(user, requiredPlan),
-      requiresAuth,
-      requiredPlan,
-      user,
-    }
-  })
+    },
+  )
 
-  ipcMain.handle('auth:requiresAuthentication', async (_, feature: string) => {
+  ipcMain.handle(IPC_CHANNELS.auth.requiresAuthentication, async (_, feature: string) => {
     return AuthService.requiresAuthentication(feature)
   })
 
-  ipcMain.handle('auth:updateUserProfile', async (_, _token: string, _data: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.auth.updateUserProfile, async (_, _token: string, _data: unknown) => {
     return { success: false, error: '功能开发中' }
   })
 
-  ipcMain.handle('auth:changePassword', async (_, _token: string, _data: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.auth.changePassword, async (_, _token: string, _data: unknown) => {
     return { success: false, error: '功能开发中' }
   })
 
@@ -286,7 +302,7 @@ export function setupAuthHandlers() {
    * [SECURITY] 获取认证状态摘要（最小必要信息）
    * 替代 auth:getTokens，不返回完整 token
    */
-  ipcMain.handle('auth:getAuthSummary', async () => {
+  ipcMain.handle(IPC_CHANNELS.auth.getAuthSummary, async () => {
     const tokens = await getStoredTokens()
     // 不返回 token 内容，只返回是否存在
     return {
@@ -301,7 +317,7 @@ export function setupAuthHandlers() {
    * 这是替代直接暴露 token 的安全方案
    */
   ipcMain.handle(
-    'auth:proxyRequest',
+    IPC_CHANNELS.auth.proxyRequest,
     async (_, requestConfig: { endpoint: string; method?: string; body?: object }) => {
       const tokens = await getStoredTokens()
       if (!tokens.access_token) {
@@ -348,9 +364,12 @@ export function setupAuthHandlers() {
    * [INTERNAL-SECURITY] 获取 token 用于 apiClient 请求
    * 仅限内部使用，不直接暴露给业务代码
    */
-  ipcMain.handle('auth:getTokenInternal', async () => {
+  ipcMain.handle(IPC_CHANNELS.auth.getTokenInternal, async () => {
     const tokens = await getStoredTokens()
-    console.log('[auth:getTokenInternal] 读取存储:', { hasAccessToken: !!tokens.access_token, hasRefreshToken: !!tokens.refresh_token })
+    console.log('[auth:getTokenInternal] 读取存储:', {
+      hasAccessToken: !!tokens.access_token,
+      hasRefreshToken: !!tokens.refresh_token,
+    })
     return {
       token: tokens.access_token,
       refreshToken: tokens.refresh_token,
@@ -364,7 +383,7 @@ export function setupAuthHandlers() {
    */
   // ipcMain.handle('auth:setTokens', ... ) // REMOVED - 登录流程内部处理
 
-  ipcMain.handle('auth:clearTokens', async () => {
+  ipcMain.handle(IPC_CHANNELS.auth.clearTokens, async () => {
     await clearStoredTokens()
   })
 }

@@ -23,7 +23,7 @@ function getAuthPathPrefix(): string {
   return ''
 }
 
-function maskResponseData(data: unknown): unknown {
+function _maskResponseData(data: unknown): unknown {
   if (data === null || data === undefined) return data
   if (typeof data === 'object' && !Array.isArray(data)) {
     const out: Record<string, unknown> = {}
@@ -37,12 +37,12 @@ function maskResponseData(data: unknown): unknown {
       ) {
         out[k] = '***'
       } else {
-        out[k] = maskResponseData(v)
+        out[k] = _maskResponseData(v)
       }
     }
     return out
   }
-  if (Array.isArray(data)) return data.map(maskResponseData)
+  if (Array.isArray(data)) return data.map(_maskResponseData)
   return data
 }
 
@@ -151,7 +151,7 @@ export async function cloudRegister(
   user?: CloudAuthResponse['user']
   access_token?: string
   refresh_token?: string
-  error?: string
+  error?: CloudErrorDetail
   requestUrl?: string
   status?: number
   responseDetail?: string
@@ -162,7 +162,7 @@ export async function cloudRegister(
   if (error) {
     return {
       success: false,
-      error: error?.message ?? '注册失败',
+      error,
       requestUrl,
       status,
       responseDetail,
@@ -173,7 +173,7 @@ export async function cloudRegister(
   if (!ok) {
     return {
       success: false,
-      error: '注册失败',
+      error: { code: 'register_failed', message: '注册失败' },
       requestUrl,
       status,
       responseDetail,
@@ -197,7 +197,7 @@ export async function cloudLogin(
   user?: CloudAuthResponse['user']
   access_token?: string
   refresh_token?: string
-  error?: string
+  error?: CloudErrorDetail
   requestUrl?: string
   status?: number
   responseDetail?: string
@@ -205,15 +205,14 @@ export async function cloudLogin(
   const { data, status, error, requestUrl, responseDetail } = await request<
     LoginBackendResponse & Partial<CloudAuthResponse>
   >('POST', AUTH_ENDPOINTS.login, { body: { username: identifier, password } })
-  
+
   if (error) {
-    const errorMessage = error?.message ?? responseDetail ?? '登录失败'
     return {
       success: false,
-      error: errorMessage,
+      error,
       requestUrl,
       status,
-      responseDetail: responseDetail || errorMessage,
+      responseDetail: responseDetail || error.message,
     }
   }
   const token =
@@ -224,7 +223,7 @@ export async function cloudLogin(
   if (!ok) {
     return {
       success: false,
-      error: '登录失败',
+      error: { code: 'login_failed', message: '登录失败' },
       requestUrl,
       status,
       responseDetail,
@@ -241,14 +240,14 @@ export async function cloudLogin(
 export async function cloudRefresh(refreshToken: string): Promise<{
   success: boolean
   access_token?: string
-  error?: string
+  error?: CloudErrorDetail
 }> {
   const prefix = getAuthPathPrefix()
   const { data, error } = await request<CloudRefreshResponse>('POST', `${prefix}/refresh`, {
     body: { refresh_token: refreshToken },
   })
   if (error || !data) {
-    return { success: false, error: error?.message ?? 'refresh 失败' }
+    return { success: false, error: error ?? { code: 'refresh_failed', message: 'refresh 失败' } }
   }
   return { success: true, access_token: data.access_token }
 }
@@ -257,7 +256,7 @@ export async function cloudMe(accessToken: string): Promise<{
   success: boolean
   user?: CloudMeResponse['user']
   subscription?: CloudMeResponse['subscription']
-  error?: string
+  error?: CloudErrorDetail
 }> {
   const { data, status, error } = await request<CloudMeResponse>('GET', '/me', {
     accessToken: accessToken,
@@ -265,7 +264,7 @@ export async function cloudMe(accessToken: string): Promise<{
   if (status === 401 || error || !data) {
     return {
       success: false,
-      error: error?.message ?? 'token 失效',
+      error: error ?? { code: 'token_invalid', message: 'token 失效' },
     }
   }
   return {
@@ -289,13 +288,13 @@ export async function cloudSmsLogin(
   access_token?: string
   refresh_token?: string
   needs_password?: boolean
-  error?: string
+  error?: CloudErrorDetail
   status?: number
   responseDetail?: string
 }> {
   const prefix = getAuthPathPrefix()
   const url = `${prefix}/auth/sms/login?phone=${encodeURIComponent(phone)}&code=${encodeURIComponent(code)}`
-  
+
   console.log('[cloudSmsLogin] 开始请求:', {
     action: 'cloudSmsLogin',
     phoneSuffix: phone.slice(-4),
@@ -304,46 +303,53 @@ export async function cloudSmsLogin(
     url: url,
     paramType: 'query',
   })
-  
-  const { data, status, error, requestUrl, responseDetail } = await request<
-    { user: CloudAuthResponse['user']; token: string; refresh_token?: string; needs_password?: boolean }
-  >('POST', url)
-  
+
+  const { data, status, error, responseDetail } = await request<{
+    user: CloudAuthResponse['user']
+    token: string
+    refresh_token?: string
+    needs_password?: boolean
+  }>('POST', url)
+
   console.log('[cloudSmsLogin] 后端响应:', {
     status,
     hasData: !!data,
-    hasToken: !!(data?.token),
-    hasRefreshToken: !!(data?.refresh_token),
-    hasUser: !!(data?.user),
+    hasToken: !!data?.token,
+    hasRefreshToken: !!data?.refresh_token,
+    hasUser: !!data?.user,
     needsPassword: data?.needs_password,
     error: error?.message,
     responseDetail,
   })
-  
+
   if (error) {
     console.error('[cloudSmsLogin] 请求失败:', error?.message, responseDetail)
     return {
       success: false,
-      error: error?.message ?? responseDetail ?? '验证码登录失败',
+      error,
       status,
-      responseDetail: responseDetail || error?.message,
+      responseDetail: responseDetail || error.message,
     }
   }
-  
+
   // [FIX] 后端返回的是 token，不是 access_token
   const ok = status === 200 && data != null && !!data.token
   if (!ok) {
-    console.error('[cloudSmsLogin] 响应数据不完整:', { status, hasData: !!data, hasToken: !!(data?.token) })
+    console.error('[cloudSmsLogin] 响应数据不完整:', {
+      status,
+      hasData: !!data,
+      hasToken: !!data?.token,
+    })
     return {
       success: false,
-      error: responseDetail || '验证码登录失败（响应数据不完整）',
+      error: { code: 'sms_login_failed', message: responseDetail || '验证码登录失败（响应数据不完整）' },
       status,
       responseDetail,
     }
   }
-  
+
   console.log('[cloudSmsLogin] 登录成功, token已获取')
-  
+
   return {
     success: true,
     user: data.user,

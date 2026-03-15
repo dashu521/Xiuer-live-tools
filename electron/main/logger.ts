@@ -10,6 +10,60 @@ export function setAppQuitting(value: boolean) {
   isAppQuitting = value
 }
 
+// [LOG-LEVEL] 日志级别控制
+// 生产环境默认不输出 debug 级日志
+const LOG_LEVEL = process.env.LOG_LEVEL || (app.isPackaged ? 'info' : 'debug')
+const isDebugEnabled = LOG_LEVEL === 'debug' || LOG_LEVEL === 'verbose'
+
+// [SECURITY] 敏感信息脱敏配置
+const SENSITIVE_PATTERNS = [
+  // token / password / code / secret / key
+  { pattern: /token[=:]\s*["']?[a-zA-Z0-9_\-.]+["']?/gi, replacement: 'token=***' },
+  { pattern: /password[=:]\s*["']?[^"'\s]+["']?/gi, replacement: 'password=***' },
+  { pattern: /code[=:]\s*["']?\d{4,8}["']?/gi, replacement: 'code=***' },
+  { pattern: /secret[=:]\s*["']?[^"'\s]+["']?/gi, replacement: 'secret=***' },
+  { pattern: /key[=:]\s*["']?[a-zA-Z0-9]{16,}["']?/gi, replacement: 'key=***' },
+  // Authorization header
+  {
+    pattern: /authorization[:\s]+["']?bearer\s+[a-zA-Z0-9_\-.]+["']?/gi,
+    replacement: 'authorization: Bearer ***',
+  },
+  // cookie with session
+  { pattern: /cookie[:\s]+.*?session[^;]*/gi, replacement: 'cookie: session=***' },
+  // URL with query params containing sensitive data
+  { pattern: /([?&])(token|password|code|secret|key)=[^&]*/gi, replacement: '$1$2=***' },
+]
+
+/**
+ * [SECURITY] 敏感信息脱敏处理
+ * 对日志内容进行脱敏，防止敏感信息泄露
+ */
+function sanitizeLogData(data: unknown[]): unknown[] {
+  return data.map(item => {
+    if (typeof item === 'string') {
+      let sanitized = item
+      for (const { pattern, replacement } of SENSITIVE_PATTERNS) {
+        sanitized = sanitized.replace(pattern, replacement)
+      }
+      return sanitized
+    }
+    // 对于对象，转换为字符串后脱敏
+    if (item && typeof item === 'object') {
+      try {
+        const str = JSON.stringify(item)
+        let sanitized = str
+        for (const { pattern, replacement } of SENSITIVE_PATTERNS) {
+          sanitized = sanitized.replace(pattern, replacement)
+        }
+        return sanitized
+      } catch {
+        return item
+      }
+    }
+    return item
+  })
+}
+
 const appRoot = path.join(app.getAppPath(), path.sep)
 const cleanPathRegex = new RegExp(appRoot.replace(/\\/g, '\\\\').replace(/\//g, '[\\\\/]'), 'gi')
 
@@ -25,11 +79,20 @@ function formatLogData(data: FormatParams['data'], _level: FormatParams['level']
   return data.map(item => (item instanceof Error ? errorMessage(item) : item)).join(' ')
 }
 
+// [LOG-LEVEL] 根据环境控制 debug 日志输出
+// 生产环境默认不输出 debug 级日志到文件和控制台
+if (!isDebugEnabled) {
+  electronLog.transports.file.level = 'info'
+  electronLog.transports.console.level = 'info'
+}
+
 // [2025-02-11 07:30:03.037] [中控台] » INFO         启动中……
 electronLog.transports.console.format = ({ data, level, message }) => {
-  // TODO: error 有可能是：message + Error 的形式，如果带有 Error，要记录堆栈信息
-  const text = formatLogData(data, level)
-  // 不放 hooks 里了，这样少一次 format 计算
+  // [SECURITY] 脱敏处理
+  const sanitizedData = sanitizeLogData(data)
+  const text = formatLogData(sanitizedData, level)
+
+  // [LOG-LEVEL] debug/verbose 日志不发送到 UI
   // 应用退出时不发送日志到渲染进程，避免 "Object has been destroyed" 错误
   if (level !== 'verbose' && level !== 'debug' && !isAppQuitting) {
     try {
@@ -51,8 +114,11 @@ electronLog.transports.console.format = ({ data, level, message }) => {
     `\t${text}`,
   ]
 }
+
 electronLog.transports.file.format = ({ data, level, message }) => {
-  const text = formatLogData(data, level)
+  // [SECURITY] 脱敏处理
+  const sanitizedData = sanitizeLogData(data)
+  const text = formatLogData(sanitizedData, level)
   return [
     `[${message.date.toISOString().replace('T', ' ').slice(0, -1)}]`,
     `[${level.toUpperCase()}]`,
