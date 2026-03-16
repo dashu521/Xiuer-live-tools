@@ -15,6 +15,23 @@ export interface Message {
   pinTop: boolean
 }
 
+export function getEffectiveAutoMessages(messages: Message[]): Message[] {
+  return messages
+    .map(message => ({
+      ...message,
+      content: message.content.trim(),
+    }))
+    .filter(message => message.content.length > 0)
+}
+
+export function getEffectiveAutoMessageContents(messages: Message[]): string[] {
+  return getEffectiveAutoMessages(messages).map(message => message.content)
+}
+
+export function hasEffectiveAutoMessages(messages: Message[]): boolean {
+  return getEffectiveAutoMessages(messages).length > 0
+}
+
 interface AutoMessageConfig {
   scheduler: {
     interval: [number, number] // [最小间隔, 最大间隔]
@@ -127,9 +144,34 @@ export const useAutoMessageStore = create<AutoMessageStore>()(
 
           // 【P1-2 运行时配置热更新】如果任务正在运行，同步更新到主进程
           if (context.isRunning) {
-            window.ipcRenderer
-              .invoke(IPC_CHANNELS.tasks.autoMessage.updateConfig, accountId, config)
-              .catch((err: Error) => console.error('[AutoMessage] 同步配置到主进程失败:', err))
+            const runtimeConfig: Partial<AutoCommentConfig> = {}
+
+            if (config.scheduler) {
+              runtimeConfig.scheduler = config.scheduler
+            }
+            if (config.random !== undefined) {
+              runtimeConfig.random = config.random
+            }
+            if (config.extraSpaces !== undefined) {
+              runtimeConfig.extraSpaces = config.extraSpaces
+            }
+            if (config.messages) {
+              const effectiveMessages = getEffectiveAutoMessages(context.config.messages).map(
+                ({ content, pinTop }) => ({
+                  content,
+                  pinTop,
+                }),
+              )
+              if (effectiveMessages.length > 0) {
+                runtimeConfig.messages = effectiveMessages
+              }
+            }
+
+            if (Object.keys(runtimeConfig).length > 0) {
+              window.ipcRenderer
+                .invoke(IPC_CHANNELS.tasks.autoMessage.updateConfig, accountId, runtimeConfig)
+                .catch((err: Error) => console.error('[AutoMessage] 同步配置到主进程失败:', err))
+            }
           }
         }),
 

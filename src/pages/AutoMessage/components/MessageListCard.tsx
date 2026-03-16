@@ -17,7 +17,11 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { Message } from '@/hooks/useAutoMessage'
-import { useAutoMessageActions, useCurrentAutoMessage } from '@/hooks/useAutoMessage'
+import {
+  getEffectiveAutoMessages,
+  useAutoMessageActions,
+  useCurrentAutoMessage,
+} from '@/hooks/useAutoMessage'
 
 const MessageEditor = ({
   messages,
@@ -101,6 +105,7 @@ const MessageListCard = React.memo(() => {
   const messages = useCurrentAutoMessage(context => context.config.messages)
   const { scheduler, random, extraSpaces } = useCurrentAutoMessage(context => context.config)
   const { setMessages, setScheduler, setRandom, setExtraSpaces } = useAutoMessageActions()
+  const effectiveMessageCount = getEffectiveAutoMessages(messages).length
 
   const handleIntervalChange = useMemoizedFn((index: 0 | 1, value: string) => {
     const numValue = Number(value) * 1000
@@ -127,7 +132,7 @@ const MessageListCard = React.memo(() => {
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <Label className="text-sm">消息内容</Label>
-              <span className="text-xs text-muted-foreground">共 {messages.length} 条</span>
+              <span className="text-xs text-muted-foreground">有效 {effectiveMessageCount} 条</span>
             </div>
 
             {/* 发送设置集成到标题行 */}
@@ -194,18 +199,19 @@ const MessageListCard = React.memo(() => {
             </TooltipProvider>
           </div>
 
-          <p className="text-xs text-muted-foreground">每行一条消息，点击左侧图钉可置顶该消息</p>
+          <p className="text-xs text-muted-foreground">
+            每行一条消息，点击左侧图钉可置顶该消息；空白行会被自动忽略
+          </p>
 
-          {/* 空状态引导 */}
-          {messages.length === 0 || (messages.length === 1 && messages[0].content.trim() === '') ? (
-            <div className="border rounded-lg p-8 text-center space-y-4 bg-muted/20">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-                <MessageSquare className="h-8 w-8 text-primary" />
-              </div>
-              <div className="space-y-2">
-                <h3 className="text-lg font-medium">还没有配置消息</h3>
-                <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                  配置自动发言消息后，系统会按设定的时间间隔自动发送，帮助您活跃直播间气氛
+          {effectiveMessageCount === 0 && (
+            <div className="border rounded-lg p-4 bg-muted/20 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <MessageSquare className="h-4 w-4 text-primary" />
+                  当前还没有有效消息
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  可以直接在下方输入框重新编辑。空行和纯空白内容会自动忽略，不会再打断编辑。
                 </p>
               </div>
               <button
@@ -218,24 +224,20 @@ const MessageListCard = React.memo(() => {
                   }
                   setMessages([newMessage])
                 }}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
               >
                 <Plus className="h-4 w-4" />
-                添加第一条消息
+                填入示例消息
               </button>
-              <p className="text-xs text-muted-foreground">
-                点击左侧图钉可置顶重要消息，使用{' '}
-                <code className="bg-muted px-1 rounded">{'{候选A/候选B}'}</code> 语法可实现随机内容
-              </p>
             </div>
-          ) : (
-            <MessageEditor messages={messages} onChange={setMessages} />
           )}
+
+          <MessageEditor messages={messages} onChange={setMessages} />
         </div>
 
         {/* 变量提示 */}
         <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
-          <Lightbulb className="h-4 w-4 shrink-0 mt-0.5 text-amber-500" />
+          <Lightbulb className="h-4 w-4 shrink-0 mt-0.5 text-amber-300" />
           <div className="space-y-1">
             <p>
               <strong>变量功能：</strong>使用{' '}

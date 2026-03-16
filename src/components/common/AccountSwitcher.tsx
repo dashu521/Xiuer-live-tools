@@ -59,14 +59,13 @@ export const AccountSwitcher = React.memo(() => {
 
   // 检查是否还可以添加账号
   const { canAddAccount } = useAccounts()
-  const checkResult = canAddAccount()
-  const canAdd = checkResult.allowed
 
   // 处理账号切换
   const handleAccountSwitch = useMemoizedFn(async (accountId: string) => {
     // 特殊值：添加账号
     if (accountId === '__add_account__') {
-      if (!canAdd) {
+      const checkResult = canAddAccount()
+      if (!checkResult.allowed) {
         // 达到上限，显示会员等级提示弹窗
         setIsLimitDialogOpen(true)
         return
@@ -81,7 +80,6 @@ export const AccountSwitcher = React.memo(() => {
 
     // 执行切换
     switchAccount(accountId)
-    toast.success('切换账号成功')
   })
 
   // 处理添加账号
@@ -103,10 +101,18 @@ export const AccountSwitcher = React.memo(() => {
     if (result.success) {
       setIsAddDialogOpen(false)
       setNewAccountName('')
-      toast.success('添加账号成功')
+      toast.success({
+        title: '账号已添加',
+        description: `已添加直播账号“${trimmedName}”。`,
+        dedupeKey: `account-added:${trimmedName}`,
+      })
     } else {
       // 显示错误提示（包含套餐限制信息）
-      toast.error(result.error || '添加账号失败')
+      toast.error({
+        title: '添加账号失败',
+        description: result.error || '添加账号失败，请稍后重试。',
+        dedupeKey: 'account-add-failed',
+      })
     }
   })
 
@@ -139,20 +145,25 @@ export const AccountSwitcher = React.memo(() => {
                   <span className="flex-1 truncate">{account.name}</span>
                   <div className="flex items-center gap-1">
                     {isDefault ? (
-                      <span className="px-2 py-0.5 text-[11px] rounded bg-primary/20 text-primary font-medium">
+                      <span className="rounded bg-primary/20 px-2 py-0.5 text-xs font-medium text-primary">
                         默认
                       </span>
                     ) : (
                       <button
                         type="button"
+                        aria-label={`将 ${account.name} 设为默认账号`}
                         onPointerDown={e => e.stopPropagation()}
                         onClick={e => {
                           e.stopPropagation()
                           e.preventDefault()
                           setDefaultAccount(account.id)
-                          toast.success(`已将默认账号设置为：${account.name}`)
+                          toast.info({
+                            title: '默认账号已更新',
+                            description: `当前默认账号为“${account.name}”。`,
+                            dedupeKey: `default-account:${account.id}`,
+                          })
                         }}
-                        className="ml-2 px-2 py-0.5 text-[11px] rounded bg-muted text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-muted-foreground/20 transition-all duration-200"
+                        className="ui-hover-item ml-2 rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground opacity-100 md:opacity-0 md:group-hover:opacity-100"
                       >
                         设为默认
                       </button>
@@ -187,12 +198,18 @@ export const AccountSwitcher = React.memo(() => {
             <DialogTitle>添加新账号</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <Input
-              placeholder="请输入账号名称"
-              value={newAccountName}
-              onChange={e => setNewAccountName(e.target.value)}
-              autoFocus
-            />
+            <div className="space-y-1.5">
+              <label htmlFor="new-account-name" className="text-sm font-medium text-foreground">
+                账号名称
+              </label>
+              <Input
+                id="new-account-name"
+                placeholder="请输入账号名称"
+                value={newAccountName}
+                onChange={e => setNewAccountName(e.target.value)}
+                autoFocus
+              />
+            </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
                 取消

@@ -13,10 +13,17 @@ export function createSendBatchMessageTask(
   _logger: ScopedLogger,
 ) {
   const logger = _logger.scope(TASK_NAME)
+  const messages = config.messages
+    .map(message => message.trim())
+    .filter(message => message.length > 0)
+
+  if (messages.length === 0) {
+    return Result.fail(new Error('必须提供至少一条非空消息'))
+  }
 
   async function execute() {
     try {
-      const { messages, count } = config
+      const { count } = config
       for (let i = 0; i < count; i++) {
         if (!task.isRunning()) {
           break

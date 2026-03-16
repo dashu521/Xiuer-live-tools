@@ -25,7 +25,7 @@ export function createAutoCommentTask(
 ) {
   const logger = lgr.scope(TASK_NAME)
   let arrayIndex = -1
-  let config = { ...taskConfig }
+  let config = normalizeConfig(taskConfig)
 
   const intervalTaskResult = createIntervalTask(execute, {
     interval: config.scheduler.interval,
@@ -63,28 +63,28 @@ export function createAutoCommentTask(
   }
 
   function validateConfig(userConfig: AutoCommentConfig): Result.Result<void, Error> {
+    const normalizedConfig = normalizeConfig(userConfig)
+
     const validateMessage = (messages: AutoCommentConfig['messages']) => {
       const isEmptyArray = messages.length === 0
       const overLengthIndex = messages.findIndex(
         msg => msg.content.length > 50 && maxLength(msg.content) > 50,
       )
-      const emptyContentIndex = messages.findIndex(msg => msg.content.trim().length === 0)
       if (isEmptyArray) return '必须提供至少一条消息'
       if (overLengthIndex >= 0) return `第 ${overLengthIndex + 1} 条消息字数超出 50 字`
-      if (emptyContentIndex >= 0) return `第 ${emptyContentIndex + 1} 条消息为空`
     }
 
     return Result.pipe(
       // 验证 interval
-      intervalTask.validateInterval(userConfig.scheduler.interval),
+      intervalTask.validateInterval(normalizedConfig.scheduler.interval),
       // 验证 messages
       Result.andThen(() => {
-        const errMsg = validateMessage(userConfig.messages)
+        const errMsg = validateMessage(normalizedConfig.messages)
         if (errMsg) return Result.fail(new MessageValidationError({ description: errMsg }))
         return Result.succeed()
       }),
       Result.inspect(_ =>
-        logger.info(`消息配置验证通过，共加载 ${userConfig.messages.length} 条消息`),
+        logger.info(`消息配置验证通过，共加载 ${normalizedConfig.messages.length} 条消息`),
       ),
     )
   }
@@ -135,7 +135,7 @@ export function createAutoCommentTask(
    * - 无（所有配置都支持热更新）
    */
   function updateConfig(newConfig: Partial<AutoCommentConfig>) {
-    const mergedConfig = merge({}, config, newConfig)
+    const mergedConfig = normalizeConfig(merge({}, config, newConfig))
     return Result.pipe(
       validateConfig(mergedConfig),
       Result.andThen(_ => intervalTask.validateInterval(mergedConfig.scheduler.interval)),
@@ -211,3 +211,19 @@ class MessageValidationError extends ErrorFactory({
     description: string
   }>(),
 }) {}
+
+function normalizeConfig(config: AutoCommentConfig): AutoCommentConfig {
+  return {
+    ...config,
+    messages: normalizeMessages(config.messages),
+  }
+}
+
+function normalizeMessages(messages: AutoCommentConfig['messages']): AutoCommentConfig['messages'] {
+  return messages
+    .map(message => ({
+      ...message,
+      content: message.content.trim(),
+    }))
+    .filter(message => message.content.length > 0)
+}

@@ -136,8 +136,8 @@ const MessageSettingsCard = React.memo(() => {
 
           <div className="pl-3">
             <div className="flex items-center gap-4 p-4 border rounded-lg">
-              <div className="h-10 w-10 rounded-lg border border-green-500/30 flex items-center justify-center">
-                <Clock className="h-5 w-5 text-green-600" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-emerald-500/25 bg-emerald-500/10 text-emerald-300">
+                <Clock className="h-5 w-5" />
               </div>
               <div className="flex-1">
                 <div className="text-sm font-medium">发送频率</div>

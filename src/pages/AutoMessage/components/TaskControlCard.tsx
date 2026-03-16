@@ -7,8 +7,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAccounts } from '@/hooks/useAccounts'
-import { useAutoMessageActions, useCurrentAutoMessage } from '@/hooks/useAutoMessage'
+import {
+  getEffectiveAutoMessageContents,
+  useAutoMessageActions,
+  useCurrentAutoMessage,
+} from '@/hooks/useAutoMessage'
 import type { LiveFeatureGate } from '@/hooks/useLiveFeatureGate'
+import { useToast } from '@/hooks/useToast'
 
 interface TaskControlCardProps {
   isRunning: boolean
@@ -23,18 +28,27 @@ export default function TaskControlCard({ isRunning, gate, onStartStop }: TaskCo
   const { setBatchCount } = useAutoMessageActions()
   const messages = useCurrentAutoMessage(ctx => ctx.config.messages)
   const accountId = useAccounts(s => s.currentAccountId)
+  const { toast } = useToast()
 
-  const mappedMessages = useMemo(() => messages.map(msg => msg.content), [messages])
+  const mappedMessages = useMemo(() => getEffectiveAutoMessageContents(messages), [messages])
 
   const handleBatchSend = async () => {
+    if (mappedMessages.length === 0) {
+      toast.error('请至少配置一条非空消息')
+      return
+    }
+
     setIsBatchRunning(true)
-    await window.ipcRenderer.invoke(
-      IPC_CHANNELS.tasks.autoMessage.sendBatchMessages,
-      accountId,
-      mappedMessages,
-      batchCount,
-    )
-    setIsBatchRunning(false)
+    try {
+      await window.ipcRenderer.invoke(
+        IPC_CHANNELS.tasks.autoMessage.sendBatchMessages,
+        accountId,
+        mappedMessages,
+        batchCount,
+      )
+    } finally {
+      setIsBatchRunning(false)
+    }
   }
 
   return (
@@ -49,10 +63,10 @@ export default function TaskControlCard({ isRunning, gate, onStartStop }: TaskCo
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
             <div
-              className={`h-12 w-12 rounded-xl flex items-center justify-center border ${isRunning ? 'border-green-500/30' : 'border-primary/30'}`}
+              className={`flex h-12 w-12 items-center justify-center rounded-xl border ${isRunning ? 'border-emerald-500/25 bg-emerald-500/10' : 'border-primary/30 bg-primary/6'}`}
             >
               {isRunning ? (
-                <div className="h-4 w-4 rounded-full border-2 border-green-500 animate-pulse" />
+                <div className="h-4 w-4 rounded-full border-2 border-emerald-400 animate-pulse" />
               ) : (
                 <Activity className="h-6 w-6 text-primary" />
               )}

@@ -6,8 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAccounts } from '@/hooks/useAccounts'
-import { useAutoMessageActions, useCurrentAutoMessage } from '@/hooks/useAutoMessage'
+import {
+  getEffectiveAutoMessageContents,
+  useAutoMessageActions,
+  useCurrentAutoMessage,
+} from '@/hooks/useAutoMessage'
 import { useLiveFeatureGate } from '@/hooks/useLiveFeatureGate'
+import { useToast } from '@/hooks/useToast'
 
 export function MessageOneKey() {
   const [isRunning, setIsRunning] = useState(false)
@@ -16,18 +21,27 @@ export function MessageOneKey() {
   const messages = useCurrentAutoMessage(ctx => ctx.config.messages)
   const gate = useLiveFeatureGate()
   const accountId = useAccounts(s => s.currentAccountId)
+  const { toast } = useToast()
 
-  const mappedMessages = useMemo(() => messages.map(msg => msg.content), [messages])
+  const mappedMessages = useMemo(() => getEffectiveAutoMessageContents(messages), [messages])
 
   const handleClick = async () => {
+    if (mappedMessages.length === 0) {
+      toast.error('请至少配置一条非空消息')
+      return
+    }
+
     setIsRunning(true)
-    await window.ipcRenderer.invoke(
-      IPC_CHANNELS.tasks.autoMessage.sendBatchMessages,
-      accountId,
-      mappedMessages,
-      batchCount,
-    )
-    setIsRunning(false)
+    try {
+      await window.ipcRenderer.invoke(
+        IPC_CHANNELS.tasks.autoMessage.sendBatchMessages,
+        accountId,
+        mappedMessages,
+        batchCount,
+      )
+    } finally {
+      setIsRunning(false)
+    }
   }
 
   return (
@@ -41,8 +55,8 @@ export function MessageOneKey() {
       <CardContent className="p-6">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-amber-100 flex items-center justify-center">
-              <Send className="h-5 w-5 text-amber-600" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-amber-500/25 bg-amber-500/10 text-amber-300">
+              <Send className="h-5 w-5" />
             </div>
             <div>
               <div className="text-sm font-medium">连续发送多条评论</div>

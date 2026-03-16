@@ -57,8 +57,6 @@ export const AccountSelector = React.memo(({ className }: AccountSelectorProps) 
 
   // 检查是否还可以添加账号
   const { canAddAccount } = useAccounts()
-  const checkResult = canAddAccount()
-  const canAdd = checkResult.allowed
 
   // 处理添加账号
   const handleAddAccount = useMemoizedFn(() => {
@@ -79,11 +77,19 @@ export const AccountSelector = React.memo(({ className }: AccountSelectorProps) 
     if (result.success) {
       setIsAddDialogOpen(false)
       setNewAccountName('')
-      toast.success('添加账号成功')
+      toast.success({
+        title: '账号已添加',
+        description: `已添加直播账号“${trimmedName}”。`,
+        dedupeKey: `account-added:${trimmedName}`,
+      })
       if (DEBUG) console.log('[AccountSelector] 添加账号:', trimmedName)
     } else {
       // 显示错误提示（包含套餐限制信息）
-      toast.error(result.error || '添加账号失败')
+      toast.error({
+        title: '添加账号失败',
+        description: result.error || '添加账号失败，请稍后重试。',
+        dedupeKey: 'account-add-failed',
+      })
     }
   })
 
@@ -91,17 +97,17 @@ export const AccountSelector = React.memo(({ className }: AccountSelectorProps) 
   const handleSwitchAccount = useMemoizedFn((accountId: string) => {
     // 特殊值：添加账号
     if (accountId === '__add_account__') {
-      setIsAddDialogOpen(true)
+      openAddDialog()
       return
     }
     if (accountId === currentAccountId) return
     switchAccount(accountId)
-    toast.success('切换账号成功')
   })
 
   // 打开添加账号对话框（先检查会员等级）
   const openAddDialog = useMemoizedFn(() => {
-    if (!canAdd) {
+    const checkResult = canAddAccount()
+    if (!checkResult.allowed) {
       // 达到上限，显示会员等级提示弹窗
       setIsLimitDialogOpen(true)
       return
@@ -150,15 +156,15 @@ export const AccountSelector = React.memo(({ className }: AccountSelectorProps) 
       <>
         <Card
           className={cn(
-            'flex items-center gap-2 px-3 py-2 cursor-pointer',
-            'border-dashed border-2 border-amber-500/30 hover:border-amber-500/50 hover:bg-amber-500/5',
+            'ui-hover-surface flex items-center gap-2 px-3 py-2 cursor-pointer',
+            'border-dashed border-2 border-amber-500/20 hover:border-amber-500/35 hover:bg-amber-500/10',
             'transition-all duration-300 ease-in-out',
             className,
           )}
           onClick={openAddDialog}
         >
-          <div className="w-7 h-7 rounded-full bg-amber-500/10 flex items-center justify-center flex-shrink-0">
-            <Plus className="h-3.5 w-3.5 text-amber-600" />
+          <div className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border border-amber-500/25 bg-amber-500/10 text-amber-200">
+            <Plus className="h-3.5 w-3.5" />
           </div>
           <div className="flex flex-col min-w-0">
             <span className="text-sm font-medium text-foreground truncate">添加直播账号</span>
@@ -263,7 +269,7 @@ export const AccountSelector = React.memo(({ className }: AccountSelectorProps) 
                         setDefaultAccount(account.id)
                         toast.success(`已将默认账号设置为：${account.name}`)
                       }}
-                      className="ml-2 px-2 py-0.5 text-[11px] rounded bg-muted text-muted-foreground opacity-0 group-hover:opacity-100 hover:bg-muted-foreground/20 transition-all duration-200"
+                      className="ui-hover-item ml-2 rounded bg-muted px-2 py-0.5 text-[11px] text-muted-foreground opacity-0 transition-all duration-200 group-hover:opacity-100"
                     >
                       设为默认
                     </button>

@@ -3,7 +3,7 @@
  */
 
 import { IPC_CHANNELS } from 'shared/ipcChannels'
-import { useAutoMessageStore } from '@/hooks/useAutoMessage'
+import { getEffectiveAutoMessages, useAutoMessageStore } from '@/hooks/useAutoMessage'
 import type { StopReason, TaskContext } from './types'
 import { BaseTask } from './types'
 
@@ -29,12 +29,28 @@ export class AutoSpeakTask extends BaseTask {
       throw new Error('自动发言配置不存在')
     }
 
+    const runtimeMessages = getEffectiveAutoMessages(config.messages).map(
+      ({ content, pinTop }) => ({
+        content,
+        pinTop,
+      }),
+    )
+
+    if (runtimeMessages.length === 0) {
+      ctx.toast.error('请至少配置一条非空消息')
+      this.status = 'error'
+      throw new Error('自动发言缺少有效消息')
+    }
+
     try {
       // 启动任务
       const result = await ctx.ipcInvoke<boolean>(
         IPC_CHANNELS.tasks.autoMessage.start,
         ctx.accountId,
-        config,
+        {
+          ...config,
+          messages: runtimeMessages,
+        },
       )
 
       if (!result) {
