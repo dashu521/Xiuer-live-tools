@@ -424,8 +424,10 @@
     }
 
     async function syncLatestReleaseInfo() {
+      const cacheBuster = `_t=${Date.now()}`;
+
       try {
-        const windowsYmlText = await fetch('https://download.xiuer.work/releases/latest/latest.yml', {
+        const windowsYmlText = await fetch(`https://download.xiuer.work/releases/latest/latest.yml?${cacheBuster}`, {
           cache: 'no-store',
         }).then(res => {
           if (!res.ok) throw new Error(`latest.yml ${res.status}`);
@@ -451,7 +453,7 @@
       }
 
       try {
-        const macYmlText = await fetch('https://download.xiuer.work/releases/latest/latest-mac.yml', {
+        const macYmlText = await fetch(`https://download.xiuer.work/releases/latest/latest-mac.yml?${cacheBuster}`, {
           cache: 'no-store',
         }).then(res => {
           if (!res.ok) throw new Error(`latest-mac.yml ${res.status}`);
