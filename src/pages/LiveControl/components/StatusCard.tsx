@@ -133,20 +133,6 @@ const StatusCardContent = React.memo(
       }
     }
 
-    // 【修复】获取直播状态颜色
-    const getStreamStateColor = () => {
-      switch (streamState) {
-        case 'live':
-          return 'text-emerald-300'
-        case 'offline':
-          return 'text-amber-300'
-        case 'ended':
-          return 'text-muted-foreground'
-        default:
-          return 'text-sky-300 animate-pulse'
-      }
-    }
-
     const statusText =
       connectState.status === 'connected'
         ? `已连接${accountName ? ` (${accountName})` : ''}`
@@ -179,36 +165,28 @@ const StatusCardContent = React.memo(
               <div className="flex min-w-0 items-center gap-4">
                 <div
                   className={`h-14 w-14 rounded-xl flex items-center justify-center border transition-all duration-300 ${
-                    isConnected
-                      ? 'border-emerald-500/25 bg-emerald-500/10'
-                      : isConnecting
-                        ? 'border-amber-500/35 bg-amber-500/12 animate-pulse'
-                        : 'border-primary/30 bg-primary/6'
+                    isConnecting
+                      ? 'border-primary/35 bg-primary/10 animate-pulse'
+                      : 'border-primary/30 bg-primary/8'
                   }`}
                 >
                   {isConnected ? (
-                    <div className="h-6 w-6 rounded-full border-2 border-emerald-400 animate-pulse" />
+                    <div className="h-6 w-6 rounded-full border-2 border-primary animate-pulse" />
                   ) : isConnecting ? (
-                    <Loader2 className="h-7 w-7 text-amber-400 animate-spin" />
+                    <Loader2 className="h-7 w-7 text-primary animate-spin" />
                   ) : (
                     <Monitor className="h-7 w-7 text-primary" />
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div
-                    className={`text-base font-medium transition-colors ${isConnecting ? 'text-amber-200' : ''}`}
-                  >
-                    {statusText}
-                  </div>
+                  <div className="text-base font-medium transition-colors">{statusText}</div>
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                     <span>
                       {connectState.platform
                         ? `${getPlatformName(connectState.platform)}`
                         : '请选择平台并连接'}
                     </span>
-                    {isConnected && (
-                      <span className={getStreamStateColor()}>· {getStreamStateText()}</span>
-                    )}
+                    {isConnected && <span>· {getStreamStateText()}</span>}
                   </div>
                 </div>
               </div>
@@ -216,9 +194,7 @@ const StatusCardContent = React.memo(
               {/* 右侧操作区 */}
               <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end lg:gap-4">
                 {/* 平台选择 */}
-                <div className="flex h-10 w-full min-w-0 items-center rounded-lg border bg-muted/30 px-3 py-2 sm:w-auto sm:min-w-[13rem]">
-                  <PlatformSelect />
-                </div>
+                <PlatformSelect />
 
                 {/* 连接/断开按钮 */}
                 <ConnectToLiveControl />

@@ -20,9 +20,9 @@ export const AUTH_SUBTITLE_CLASSES = 'text-sm text-gray-400'
 
 // 输入框样式
 export const AUTH_INPUT_CLASSES =
-  'h-[2.875rem] rounded-[0.875rem] bg-gray-700/50 border-gray-600 text-white text-[0.9375rem] placeholder:text-gray-500 focus:border-primary focus:ring-2 focus:ring-primary/30'
+  'h-[2.875rem] rounded-[0.875rem] bg-gray-700/50 border-gray-600 text-white text-[0.9375rem] placeholder:text-gray-500 focus:border-primary focus:ring-0'
 export const AUTH_INPUT_WITH_ICON_CLASSES =
-  'h-[2.875rem] rounded-[0.875rem] bg-gray-700/50 border-gray-600 text-white text-[0.9375rem] pr-12 placeholder:text-gray-500 focus:border-primary focus:ring-2 focus:ring-primary/30'
+  'h-[2.875rem] rounded-[0.875rem] bg-gray-700/50 border-gray-600 text-white text-[0.9375rem] pr-12 placeholder:text-gray-500 focus:border-primary focus:ring-0'
 
 // Label 样式
 export const AUTH_LABEL_CLASSES = 'text-sm font-medium text-gray-300'

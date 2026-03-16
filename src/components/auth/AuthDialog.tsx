@@ -272,7 +272,7 @@ export function AuthDialog({ isOpen, onClose, feature }: AuthDialogProps) {
                   value={loginForm.username}
                   onChange={e => setLoginForm(prev => ({ ...prev, username: e.target.value }))}
                   onKeyDown={handleKeyDown}
-                  className="h-10 rounded-lg text-sm pr-12 focus-visible:ring-2 focus-visible:ring-ring/30"
+                  className="h-10 rounded-lg text-sm pr-12 focus-visible:ring-0 focus-visible:ring-offset-0"
                   style={{
                     backgroundColor: 'var(--input-bg)',
                     borderColor: 'var(--input-border)',
@@ -295,7 +295,7 @@ export function AuthDialog({ isOpen, onClose, feature }: AuthDialogProps) {
                     value={loginForm.password}
                     onChange={e => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
                     onKeyDown={handleKeyDown}
-                    className="h-10 rounded-lg text-sm pr-12 focus-visible:ring-2 focus-visible:ring-ring/30"
+                    className="h-10 rounded-lg text-sm pr-12 focus-visible:ring-0 focus-visible:ring-offset-0"
                     style={{
                       backgroundColor: 'var(--input-bg)',
                       borderColor: 'var(--input-border)',

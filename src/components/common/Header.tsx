@@ -51,15 +51,15 @@ export const Header = memo(function Header() {
         </div>
 
         {/* 用户区域 */}
-        <div
-          className="flex items-center h-9 rounded-lg px-2"
-          style={{
-            backgroundColor: 'var(--header-action-bg)',
-            border: '1px solid var(--header-action-border)',
-            color: 'var(--header-action-fg)',
-          }}
-        >
-          {isAuthenticated && user ? (
+        {isAuthenticated && user ? (
+          <div
+            className="flex h-9 items-center rounded-lg px-2"
+            style={{
+              backgroundColor: 'var(--header-action-bg)',
+              border: '1px solid var(--header-action-border)',
+              color: 'var(--header-action-fg)',
+            }}
+          >
             <button
               type="button"
               onClick={handleOpenUserCenter}
@@ -79,27 +79,27 @@ export const Header = memo(function Header() {
                 {user.username}
               </span>
             </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleLoginClick}
-              className="flex items-center gap-2 rounded-md px-3 py-1.5 transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-[var(--ring)] focus:ring-offset-2 focus:ring-offset-[var(--header-action-bg)]"
-              style={{
-                backgroundColor: 'var(--primary)',
-                color: 'var(--on-primary)',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.backgroundColor = 'var(--primary-hover)'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.backgroundColor = 'var(--primary)'
-              }}
-            >
-              <User className="h-4 w-4" />
-              <span className="text-sm font-medium">登录</span>
-            </button>
-          )}
-        </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={handleLoginClick}
+            className="flex h-9 items-center gap-2 rounded-lg px-4 text-sm font-medium transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-[var(--ring)] focus:ring-offset-2 focus:ring-offset-background"
+            style={{
+              backgroundColor: 'var(--primary)',
+              color: 'var(--on-primary)',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.backgroundColor = 'var(--primary-hover)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.backgroundColor = 'var(--primary)'
+            }}
+          >
+            <User className="h-4 w-4" />
+            <span>登录</span>
+          </button>
+        )}
       </div>
     </header>
   )

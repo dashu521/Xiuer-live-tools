@@ -157,8 +157,8 @@ const PlatformSelect = React.memo((props: { fullWidth?: boolean } = {}) => {
       <SelectTrigger
         className={
           fullWidth
-            ? 'w-full border-border/30 bg-muted/30 text-muted-foreground text-sm'
-            : 'w-[8.75rem] border-border/30 bg-muted/30 text-muted-foreground opacity-60 hover:opacity-80 transition-opacity text-sm'
+            ? 'h-10 w-full min-w-0 sm:w-[13.5rem] border-border/40 bg-muted/20 text-foreground text-sm'
+            : 'h-10 w-[13.5rem] border-border/40 bg-muted/20 text-foreground text-sm'
         }
       >
         <SelectValue>{displayValue}</SelectValue>
