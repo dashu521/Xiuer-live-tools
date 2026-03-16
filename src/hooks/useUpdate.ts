@@ -182,9 +182,18 @@ const useUpdateStoreBase = create<UpdateStore>()((set, get) => ({
           },
         })
       } else {
-        set({ status: 'idle' })
         if (result) {
+          set({ status: 'idle' })
           return { upToDate: true }
+        }
+
+        // 主进程可能已经通过 updateError 事件返回了更具体的错误；
+        // 如果没有结果也没有错误态，至少给用户一个明确反馈，而不是停在“没反应”。
+        if (get().status === 'checking') {
+          set({
+            status: 'error',
+            error: { message: '检查更新失败，请稍后重试。' },
+          })
         }
       }
     } catch (e) {
@@ -300,6 +309,7 @@ const useUpdateStoreBase = create<UpdateStore>()((set, get) => ({
   handleError: (error: ErrorType) => {
     const currentStatus = get().status
     if (
+      currentStatus === 'checking' ||
       currentStatus === 'preparing' ||
       currentStatus === 'downloading' ||
       currentStatus === 'verifying'

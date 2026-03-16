@@ -77,6 +77,20 @@ npm run publish:mac:full
 npm run publish:check
 ```
 
+### 7. 部署下载首页
+
+如果这次改动影响了下载页，或者希望首页上的版本号、按钮链接立即同步到最新发布，再执行：
+
+```bash
+npm run deploy:download-page
+```
+
+说明：
+
+- 这一步会把 `download-page/index.html` 上传到 OSS 根目录
+- 不影响 `releases/latest/` 更新链路
+- 首页现在会运行时读取 `latest.yml / latest-mac.yml`，但页面本身仍然需要部署一次
+
 ## 发布成功的判断标准
 
 满足下面几项，才算真正“用户可更新”：
@@ -85,6 +99,7 @@ npm run publish:check
 - Windows 的 `latest.yml` 已更新
 - 如果发 macOS，`latest-mac.yml` 也已更新
 - 安装包已经同步到 `download.xiuer.work/releases/latest/`
+- 下载首页已经同步到 OSS 根目录（如本次有首页改动）
 - `npm run publish:check` 通过
 
 ## 最常用的一套命令
@@ -98,6 +113,7 @@ npm version patch
 git push origin main
 git push origin --tags
 npm run publish:check
+npm run deploy:download-page
 ```
 
 同时发 macOS：
@@ -110,6 +126,7 @@ git push origin main
 git push origin --tags
 npm run publish:mac:full
 npm run publish:check
+npm run deploy:download-page
 ```
 
 ## 常见误区
