@@ -1,16 +1,18 @@
-import Markdown from 'react-markdown'
-import rehypeHighlight from 'rehype-highlight'
-import remarkGfm from 'remark-gfm'
+import { lazy, Suspense } from 'react'
 import './MessageContent.css'
-import 'highlight.js/styles/vs.css'
+
+const MarkdownMessageContent = lazy(async () => {
+  const module = await import('./MarkdownMessageContent')
+  return { default: module.MarkdownMessageContent }
+})
 
 export function MessageContent({ content }: { content: string }) {
   return (
     <div className="whitespace-normal leading-relaxed text-[0.9375rem]">
       <div className="markdown-body">
-        <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
-          {content}
-        </Markdown>
+        <Suspense fallback={<div className="whitespace-pre-wrap break-words">{content}</div>}>
+          <MarkdownMessageContent content={content} />
+        </Suspense>
       </div>
     </div>
   )

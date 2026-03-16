@@ -4,6 +4,7 @@
  * 【修复】支持多账号隔离，每个账号的任务状态独立管理
  */
 
+import { getStopReasonText } from '@/utils/taskGate'
 import { gateCanRun } from './gateCheck'
 import type { StopReason, Task, TaskContext, TaskId, TaskStatus } from './types'
 import { BaseTask } from './types'
@@ -293,7 +294,6 @@ export class TaskManagerImpl {
 
     // 显示 toast（如果有回调且不是手动停止）
     if (toastCallback && reason !== 'manual') {
-      const { getStopReasonText } = await import('@/utils/taskGate')
       const reasonText = getStopReasonText(reason)
       toastCallback(reasonText)
     }

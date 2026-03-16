@@ -179,9 +179,9 @@ export default function ChatBox() {
   const { scrollAreaRef } = useScrollToBottom(messages)
 
   return (
-    <Card className="flex flex-col h-[calc(100vh-20rem)] border-none">
-      <CardContent className="flex-1 flex flex-col gap-4 p-0 overflow-hidden">
-        <ScrollArea ref={scrollAreaRef} className="flex-1 px-6 py-4">
+    <Card className="flex min-h-0 flex-1 flex-col border-none">
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-0">
+        <ScrollArea ref={scrollAreaRef} className="min-h-0 flex-1 px-6 py-4">
           <MessageList messages={messages} status={status} onRetry={sendMessage} />
         </ScrollArea>
 

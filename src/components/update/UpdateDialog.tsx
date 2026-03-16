@@ -313,7 +313,7 @@ export function UpdateDialog() {
 
           {status !== 'ready' && status !== 'downloading' && status !== 'preparing' && (
             <div className={`flex ${isCustom ? 'flex-col gap-3' : 'items-center justify-between'}`}>
-              <div className={isCustom ? 'flex gap-2' : ''}>
+              <div className={isCustom ? 'flex flex-col gap-2 sm:flex-row' : ''}>
                 <Select value={updateSource} onValueChange={value => setUpdateSource(value)}>
                   <SelectTrigger className="w-[8.75rem]">
                     <SelectValue placeholder="选择更新源" />
@@ -331,7 +331,7 @@ export function UpdateDialog() {
                     value={customUpdateSource}
                     onChange={e => setCustomUpdateSource(e.target.value)}
                     placeholder="自定义更新源地址"
-                    className="w-[200px]"
+                    className="w-full sm:w-[200px]"
                   />
                 )}
               </div>

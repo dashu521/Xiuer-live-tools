@@ -73,13 +73,14 @@ function UserMessage({
           variant="ghost"
           size="icon"
           onClick={handleRetry}
-          className="opacity-50 group-hover:opacity-100 transition-opacity hover:bg-transparent"
+          aria-label="重新发送这条消息"
+          className="opacity-70 group-hover:opacity-100 transition-opacity hover:bg-transparent focus-visible:opacity-100"
         >
           <RotateCw className="h-4 w-4" />
         </Button>
       )}
       <div
-        className="max-w-[80%] rounded-lg px-4 py-2 break-words shadow-sm bg-primary text-primary-foreground"
+        className="max-w-[85%] rounded-lg px-4 py-2 break-words shadow-sm bg-primary text-primary-foreground xl:max-w-[80%]"
         style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
       >
         <div className="whitespace-pre-wrap leading-relaxed text-[0.9375rem]">{content}</div>
@@ -107,7 +108,7 @@ function AssistantMessage({
   return (
     <div className="relative flex justify-start group">
       <div
-        className={`max-w-[80%] rounded-lg px-4 py-2 break-words shadow-sm ${
+        className={`max-w-[85%] rounded-lg px-4 py-2 break-words shadow-sm xl:max-w-[80%] ${
           isError ? 'bg-destructive text-destructive-foreground' : 'bg-muted hover:bg-muted/80'
         }`}
         style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}

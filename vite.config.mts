@@ -78,20 +78,11 @@ export default defineConfig(({ command }) => {
               '@radix-ui/react-context-menu',
             ],
             // Markdown 相关库单独打包（按需加载）
-            'markdown-vendor': [
-              'react-markdown',
-              'marked',
-              'highlight.js',
-              'rehype-highlight',
-              'remark-gfm',
-              'dompurify',
-            ],
+            'markdown-vendor': ['react-markdown', 'highlight.js', 'rehype-highlight', 'remark-gfm'],
+            // HTML 清洗单独打包，避免和 Markdown 高亮强绑定
+            'html-vendor': ['dompurify'],
             // 工具库单独打包
             'utils-vendor': ['lodash-es', 'zustand', 'immer', 'ahooks', 'clsx', 'tailwind-merge'],
-            // 动画库单独打包
-            'motion-vendor': ['motion'],
-            // AI 相关库单独打包
-            'ai-vendor': ['openai'],
             // 图标库单独打包
             'icons-vendor': ['lucide-react'],
             // 表单验证库单独打包
@@ -182,6 +173,12 @@ export default defineConfig(({ command }) => {
                   'better-sqlite3',
                   'electron-updater',
                 ],
+                output: {
+                  // 主进程运行期间如果重新 build，哈希 chunk 会被替换掉，
+                  // 旧进程后续再动态 require('./dev-旧hash.js') 就会报 Cannot find module。
+                  // 这里把主进程的动态 chunk 名固定下来，避免运行中的旧进程引用失效。
+                  chunkFileNames: '[name]-chunk.js',
+                },
               },
             },
             resolve: {
