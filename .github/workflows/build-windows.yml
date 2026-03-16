@@ -43,13 +43,13 @@ jobs:
     steps:
       # 1. 检出代码
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # 2. 设置 Node.js
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 24
 
       # 3. 检查环境
       - name: Check environment
@@ -147,7 +147,7 @@ jobs:
 
       # 10. 上传构建产物为 Artifact（始终上传，便于调试）
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: windows-build
           path: |
@@ -159,7 +159,7 @@ jobs:
       # 11. 自动上传到 GitHub Release（仅 tag 触发时）
       - name: Upload to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             release/**/Xiuer-Live-Assistant_*.exe
