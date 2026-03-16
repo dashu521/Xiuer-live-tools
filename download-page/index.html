@@ -329,8 +329,8 @@
       <p class="subtitle">
         面向直播场景的效率工具，支持中控台连接、自动发言、自动弹窗、自动回复等功能
       </p>
-      <div class="version-badge">
-        当前稳定版本：v1.3.3
+      <div class="version-badge" id="stable-version-badge">
+        当前稳定版本：v1.3.5
       </div>
     </header>
 
@@ -340,7 +340,7 @@
         <div class="platform-icon windows">🪟</div>
         <h2 class="platform-name">Windows 版</h2>
         <p class="platform-desc">适用于 Windows 10/11 64 位系统</p>
-        <a href="https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_win-x64.exe" class="download-btn" download>
+        <a id="windows-download-link" href="https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.5_win-x64.exe" class="download-btn" download>
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
@@ -353,7 +353,7 @@
         <div class="platform-icon macos-arm">🍎</div>
         <h2 class="platform-name">macOS Apple 芯片版</h2>
         <p class="platform-desc">适用于 M1/M2/M3/M4 系列 Mac</p>
-        <a href="https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_macos_arm64.dmg" class="download-btn" download>
+        <a id="macos-arm-download-link" href="https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_macos_arm64.dmg" class="download-btn" download>
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
@@ -366,7 +366,7 @@
         <div class="platform-icon macos-intel">💻</div>
         <h2 class="platform-name">macOS Intel 版</h2>
         <p class="platform-desc">适用于 Intel 处理器 Mac</p>
-        <a href="https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_macos_x64.dmg" class="download-btn" download>
+        <a id="macos-intel-download-link" href="https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_macos_x64.dmg" class="download-btn" download>
           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
           </svg>
@@ -391,8 +391,8 @@
     </section>
 
     <footer class="footer">
-      <p class="footer-info">
-        秀儿直播助手 v1.3.3 · 更新于 2025年3月
+      <p class="footer-info" id="footer-version-info">
+        秀儿直播助手 v1.3.5 · 更新于 2026年3月
       </p>
       <div class="footer-links">
         <a href="https://xiuer.work" target="_blank" rel="noopener">官网首页</a>
@@ -403,6 +403,79 @@
   </div>
 
   <script>
+    function parseLatestYml(ymlText) {
+      const versionMatch = ymlText.match(/^version:\s*([^\n\r]+)/m);
+      const releaseDateMatch = ymlText.match(/^releaseDate:\s*['"]?([^\n\r'"]+)/m);
+      const urls = Array.from(ymlText.matchAll(/url:\s*([^\n\r]+)/g)).map(match => match[1].trim());
+
+      return {
+        version: versionMatch ? versionMatch[1].trim() : '',
+        releaseDate: releaseDateMatch ? releaseDateMatch[1].trim() : '',
+        urls,
+      };
+    }
+
+    function formatReleaseMonth(releaseDate) {
+      const parsed = new Date(releaseDate);
+      if (Number.isNaN(parsed.getTime())) {
+        return '最近';
+      }
+      return `${parsed.getFullYear()}年${parsed.getMonth() + 1}月`;
+    }
+
+    async function syncLatestReleaseInfo() {
+      try {
+        const windowsYmlText = await fetch('https://download.xiuer.work/releases/latest/latest.yml', {
+          cache: 'no-store',
+        }).then(res => {
+          if (!res.ok) throw new Error(`latest.yml ${res.status}`);
+          return res.text();
+        });
+
+        const windowsInfo = parseLatestYml(windowsYmlText);
+        const versionBadge = document.getElementById('stable-version-badge');
+        const footerInfo = document.getElementById('footer-version-info');
+        const windowsLink = document.getElementById('windows-download-link');
+
+        if (windowsInfo.version) {
+          versionBadge.textContent = `当前稳定版本：v${windowsInfo.version}`;
+          footerInfo.textContent = `秀儿直播助手 v${windowsInfo.version} · 更新于 ${formatReleaseMonth(windowsInfo.releaseDate)}`;
+        }
+
+        const windowsExe = windowsInfo.urls.find(url => url.endsWith('.exe'));
+        if (windowsExe && windowsLink) {
+          windowsLink.href = `https://download.xiuer.work/releases/latest/${windowsExe}`;
+        }
+      } catch (error) {
+        console.warn('同步 Windows 最新版本信息失败:', error);
+      }
+
+      try {
+        const macYmlText = await fetch('https://download.xiuer.work/releases/latest/latest-mac.yml', {
+          cache: 'no-store',
+        }).then(res => {
+          if (!res.ok) throw new Error(`latest-mac.yml ${res.status}`);
+          return res.text();
+        });
+
+        const macInfo = parseLatestYml(macYmlText);
+        const armLink = document.getElementById('macos-arm-download-link');
+        const intelLink = document.getElementById('macos-intel-download-link');
+        const armDmg = macInfo.urls.find(url => url.endsWith('.dmg') && url.includes('arm64'));
+        const intelDmg = macInfo.urls.find(url => url.endsWith('.dmg') && url.includes('x64'));
+
+        if (armDmg && armLink) {
+          armLink.href = `https://download.xiuer.work/releases/latest/${armDmg}`;
+        }
+
+        if (intelDmg && intelLink) {
+          intelLink.href = `https://download.xiuer.work/releases/latest/${intelDmg}`;
+        }
+      } catch (error) {
+        console.warn('同步 macOS 最新版本信息失败:', error);
+      }
+    }
+
     // 简单的下载统计（可选）
     document.querySelectorAll('.download-btn').forEach(btn => {
       btn.addEventListener('click', function(e) {
@@ -410,6 +483,8 @@
         console.log('Download started:', this.href);
       });
     });
+
+    void syncLatestReleaseInfo();
 
     // 自动检测操作系统并高亮对应卡片
     (function detectOS() {
