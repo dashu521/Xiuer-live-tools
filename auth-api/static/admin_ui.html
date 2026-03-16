@@ -141,9 +141,9 @@
 <div class="header">
   <h1>用户管理后台</h1>
   <div class="header-right" id="headerRight" style="display:none;">
-    <button onclick="loadUsers()" title="刷新"><span class="spinner" style="display:none" id="refreshSpinner"></span>刷新</button>
-    <button onclick="openAuditLogs()">操作日志</button>
-    <button class="danger sm" onclick="doLogout()">退出</button>
+    <button id="btnRefreshUsers" title="刷新"><span class="spinner" style="display:none" id="refreshSpinner"></span>刷新</button>
+    <button id="btnOpenAuditLogs">操作日志</button>
+    <button class="danger sm" id="btnLogout">退出</button>
   </div>
 </div>
 
@@ -168,9 +168,9 @@
 <div class="container hidden" id="mainView">
   <!-- Tabs -->
   <div class="tabs">
-    <div class="tab active" data-tab="users" onclick="switchTab('users')">用户管理</div>
-    <div class="tab" data-tab="giftcards" onclick="switchTab('giftcards')">礼品卡</div>
-    <div class="tab" data-tab="logs" onclick="switchTab('logs')">操作日志</div>
+    <div class="tab active" data-tab="users">用户管理</div>
+    <div class="tab" data-tab="giftcards">礼品卡</div>
+    <div class="tab" data-tab="logs">操作日志</div>
   </div>
 
   <!-- Users Tab -->
@@ -214,15 +214,15 @@
             <option value="offline">离线</option>
           </select>
         </div>
-        <button class="sm" onclick="applyFilters()">应用筛选</button>
-        <button class="sm" onclick="resetFilters()" style="color: var(--gray-500);">重置筛选</button>
+        <button class="sm" id="btnApplyFilters">应用筛选</button>
+        <button class="sm" id="btnResetFilters" style="color: var(--gray-500);">重置筛选</button>
       </div>
     </div>
 
     <div class="toolbar">
       <input type="text" class="search-input" id="searchInput" placeholder="搜索邮箱/手机/ID..." />
-      <button onclick="doSearch()">搜索</button>
-      <button onclick="clearSearch()">清空</button>
+      <button id="btnUserSearch">搜索</button>
+      <button id="btnUserSearchClear">清空</button>
       <div class="spacer"></div>
       <span class="stats" id="statsText"></span>
       <select id="batchSelect" style="font-size:12px;">
@@ -231,8 +231,8 @@
         <option value="enable">批量启用</option>
         <option value="delete">批量删除</option>
       </select>
-      <button class="sm" onclick="doBatchAction()">执行</button>
-      <button class="sm" onclick="exportCSV()">导出 CSV</button>
+      <button class="sm" id="btnBatchAction">执行</button>
+      <button class="sm" id="btnExportUsersCsv">导出 CSV</button>
     </div>
 
     <div class="card" id="usersCard">
@@ -240,7 +240,7 @@
         <table>
           <thead>
             <tr>
-              <th><input type="checkbox" id="checkAll" onchange="toggleCheckAll()" /></th>
+              <th><input type="checkbox" id="checkAll" /></th>
               <th>账号</th>
               <th>在线</th>
               <th>注册方式</th>
@@ -274,21 +274,21 @@
       </select>
       <input type="text" id="gcBatchIdFilter" placeholder="批次 ID" class="search-input" style="max-width:180px;" />
       <input type="text" id="gcCodeSearch" placeholder="兑换码搜索" class="search-input" style="max-width:140px;" />
-      <button onclick="loadGiftCards()">筛选</button>
-      <button class="sm" onclick="copyGcSelected()" title="复制当前页勾选的兑换码">复制选中</button>
-      <button class="sm" onclick="batchDisableGc()">批量禁用</button>
-      <button class="sm danger" onclick="batchDeleteGc()">删除选中</button>
-      <button class="sm" onclick="exportGcCsv()">导出 CSV</button>
+      <button id="btnGiftCardFilter">筛选</button>
+      <button class="sm" id="btnCopyGcSelected" title="复制当前页勾选的兑换码">复制选中</button>
+      <button class="sm" id="btnBatchDisableGc">批量禁用</button>
+      <button class="sm danger" id="btnBatchDeleteGc">删除选中</button>
+      <button class="sm" id="btnExportGcCsv">导出 CSV</button>
       <div class="spacer"></div>
       <span class="stats" id="gcStatsText"></span>
-      <button class="primary" id="btnCreateGc" onclick="openCreateGcModal()">生成礼品卡</button>
+      <button class="primary" id="btnCreateGc">生成礼品卡</button>
     </div>
     <div class="card" id="gcCard">
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th><input type="checkbox" id="gcCheckAll" onchange="toggleGcCheckAll()" title="全选本页" /></th>
+              <th><input type="checkbox" id="gcCheckAll" title="全选本页" /></th>
               <th>兑换码</th>
               <th>类型</th>
               <th>天数</th>
@@ -307,7 +307,7 @@
       <div id="gcLoading" class="hidden" style="text-align:center;padding:20px;color:var(--gray-500);"><span class="spinner"></span> 加载中...</div>
       <div id="gcEmpty" class="hidden" style="text-align:center;padding:20px;color:var(--gray-500);">
         <p style="margin-bottom:10px;">暂无礼品卡</p>
-        <button class="primary sm" onclick="openCreateGcModal()">生成礼品卡</button>
+        <button class="primary sm" id="btnCreateGcEmpty">生成礼品卡</button>
       </div>
       <div id="gcPaginationWrap" style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;flex-wrap:wrap;gap:8px;">
         <span class="stats" id="gcPaginationInfo"></span>
@@ -333,7 +333,7 @@
         <option value="redeem_gift_card">兑换礼品卡</option>
         <option value="disable_gift_card">禁用礼品卡</option>
       </select>
-      <button onclick="loadAuditLogs()">筛选</button>
+      <button id="btnFilterLogs">筛选</button>
     </div>
     <div class="card" id="logsCard">
       <div id="logsBody"></div>
@@ -353,8 +353,8 @@
       <input type="password" id="newPassword" placeholder="输入新密码" minlength="8" />
     </div>
     <div class="modal-actions">
-      <button onclick="closeModal('modalReset')">取消</button>
-      <button class="primary" onclick="doResetPassword()">确认重置</button>
+      <button id="btnCloseResetModal">取消</button>
+      <button class="primary" id="btnConfirmResetPassword">确认重置</button>
     </div>
     <p id="modalResetError" class="error" style="display:none;"></p>
   </div>
@@ -367,8 +367,8 @@
     <p>用户 <strong id="tempUsername"></strong> 的临时密码（仅显示一次）：</p>
     <div class="temp-pw" id="tempPasswordValue"></div>
     <div class="modal-actions">
-      <button class="primary" onclick="copyTempPw()">复制密码</button>
-      <button onclick="closeModal('modalTemp')">关闭</button>
+      <button class="primary" id="btnCopyTempPw">复制密码</button>
+      <button id="btnCloseTempModal">关闭</button>
     </div>
   </div>
 </div>
@@ -379,8 +379,8 @@
     <div class="modal-title" id="modalToggleTitle"></div>
     <p id="modalToggleText"></p>
     <div class="modal-actions">
-      <button onclick="closeModal('modalToggle')">取消</button>
-      <button class="primary" onclick="doToggle()">确认</button>
+      <button id="btnCloseToggleModal">取消</button>
+      <button class="primary" id="btnConfirmToggle">确认</button>
     </div>
   </div>
 </div>
@@ -392,8 +392,8 @@
     <p>确定要删除用户 <strong id="deleteUsername"></strong> 吗？</p>
     <p style="color:var(--red);font-size:12px;margin-top:8px;">此操作不可撤销，将同时删除该用户的所有数据。</p>
     <div class="modal-actions">
-      <button onclick="closeModal('modalDelete')">取消</button>
-      <button class="danger" onclick="doDelete()">确认删除</button>
+      <button id="btnCloseDeleteModal">取消</button>
+      <button class="danger" id="btnConfirmDelete">确认删除</button>
     </div>
   </div>
 </div>
@@ -408,8 +408,8 @@
       <input type="number" id="extendDays" value="7" min="1" max="365" />
     </div>
     <div class="modal-actions">
-      <button onclick="closeModal('modalExtend')">取消</button>
-      <button class="success" onclick="doExtendTrial()">确认延长</button>
+      <button id="btnCloseExtendModal">取消</button>
+      <button class="success" id="btnConfirmExtendTrial">确认延长</button>
     </div>
   </div>
 </div>
@@ -439,8 +439,8 @@
       <input type="text" id="gcExpiresAt" placeholder="如 2026-12-31T23:59:59" />
     </div>
     <div class="modal-actions">
-      <button onclick="closeModal('modalCreateGc')">取消</button>
-      <button class="primary" id="btnDoCreateGc" onclick="doCreateGiftCards()">生成</button>
+      <button id="btnCloseCreateGcModal">取消</button>
+      <button class="primary" id="btnDoCreateGc">生成</button>
     </div>
   </div>
 </div>
@@ -453,16 +453,16 @@
     <p style="margin-bottom:8px;">共生成 <strong id="gcResultCount"></strong> 张礼品卡：</p>
     <div id="gcResultCodes" style="max-height:300px;overflow-y:auto;background:var(--gray-50);border-radius:6px;padding:12px;font-family:'SF Mono',Monaco,monospace;font-size:14px;line-height:2;"></div>
     <div class="modal-actions">
-      <button onclick="copyGcCodes()">复制全部兑换码</button>
-      <button onclick="downloadGcTxt()">下载 TXT</button>
-      <button class="primary" onclick="closeModal('modalGcResult')">关闭</button>
+      <button id="btnCopyGcCodes">复制全部兑换码</button>
+      <button id="btnDownloadGcTxt">下载 TXT</button>
+      <button class="primary" id="btnCloseGcResultModal">关闭</button>
     </div>
   </div>
 </div>
 
 <script>
 const API = window.location.origin;
-let token = sessionStorage.getItem('admin_token') || '';
+let token = '';
 let currentPage = 1;
 let currentSize = 20;
 let currentQuery = '';
@@ -481,6 +481,41 @@ const $ = id => document.getElementById(id);
 function hdrs() { return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }; }
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function escAttr(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function clearNode(el) { while (el.firstChild) el.removeChild(el.firstChild); }
+function el(tag, opts) {
+  var node = document.createElement(tag);
+  if (!opts) return node;
+  if (opts.className) node.className = opts.className;
+  if (opts.text != null) node.textContent = String(opts.text);
+  if (opts.html != null) node.innerHTML = opts.html;
+  if (opts.title) node.title = opts.title;
+  if (opts.attrs) Object.keys(opts.attrs).forEach(function(key) { node.setAttribute(key, opts.attrs[key]); });
+  return node;
+}
+function createActionButton(label, className, handler) {
+  var btn = el('button', { className: className || 'sm', text: label });
+  btn.addEventListener('click', handler);
+  return btn;
+}
+function renderPager(container, page, totalPages, onPage) {
+  clearNode(container);
+  if (totalPages <= 1) return;
+  var prev = createActionButton('«', '', function() { if (page > 1) onPage(page - 1); });
+  prev.disabled = page <= 1;
+  container.appendChild(prev);
+  var start = Math.max(1, page - 2);
+  var end = Math.min(totalPages, page + 2);
+  for (var i = start; i <= end; i++) {
+    (function(targetPage) {
+      var btn = createActionButton(String(targetPage), targetPage === page ? 'current' : '', function() { onPage(targetPage); });
+      container.appendChild(btn);
+    })(i);
+  }
+  var next = createActionButton('»', '', function() { if (page < totalPages) onPage(page + 1); });
+  next.disabled = page >= totalPages;
+  container.appendChild(next);
+  container.appendChild(el('span', { className: 'info', text: page + ' / ' + totalPages }));
+}
 
 /* Toast */
 function toast(msg, type = 'success') {
@@ -537,7 +572,6 @@ async function doLogin() {
     const d = await r.json();
     if (r.ok && d.token) {
       token = d.token;
-      sessionStorage.setItem('admin_token', token);
       enterMain();
     } else {
       showErr('loginError', d.detail?.message || '登录失败');
@@ -558,7 +592,6 @@ function enterMain() {
 
 function doLogout() {
   token = '';
-  sessionStorage.removeItem('admin_token');
   $('loginView').classList.remove('hidden');
   $('mainView').classList.add('hidden');
   $('headerRight').style.display = 'none';
@@ -597,11 +630,11 @@ function resetFilters() {
 async function loadUsers() {
   const tbody = $('usersBody');
   const errEl = $('usersError');
-  tbody.innerHTML = '';
+  clearNode(tbody);
   hideErr('usersError');
   $('loadingRow').classList.remove('hidden');
   $('emptyRow').classList.add('hidden');
-  $('pagination').innerHTML = '';
+  clearNode($('pagination'));
 
   let url = API + '/admin/users?page=' + currentPage + '&size=' + currentSize;
   if (currentQuery) url += '&query=' + encodeURIComponent(currentQuery);
@@ -638,40 +671,60 @@ async function loadUsers() {
       const membershipLabel = u.membership_label || '免费版';
       const membershipExpire = u.membership_expire_at || null;
       
-      // 构建会员状态显示
-      let membershipBadge = '<span class="badge membership-' + membershipStatus + '">' + esc(membershipLabel) + '</span>';
-      let membershipExpireText = '';
-      if (membershipExpire && membershipStatus !== 'free') {
-        const expireDate = membershipExpire.slice(0, 16).replace('T', ' ');
-        membershipExpireText = '<div class="membership-expire">到期: ' + expireDate + '</div>';
-      } else if (membershipStatus === 'free') {
-        membershipExpireText = '<div class="membership-expire">-</div>';
-      }
-      const membershipCell = '<div>' + membershipBadge + membershipExpireText + '</div>';
+      var checkboxCell = document.createElement('td');
+      var checkbox = el('input', { attrs: { type: 'checkbox', value: String(u.user_id) } });
+      checkbox.className = 'user-check';
+      checkboxCell.appendChild(checkbox);
+      tr.appendChild(checkboxCell);
 
-      let regType = '<span class="badge" style="background:#eee;color:#666;">未知</span>';
-      if (u.phone) regType = '<span class="badge phone">手机</span>';
-      else if (u.email) regType = '<span class="badge email">邮箱</span>';
+      var usernameCell = el('td', { title: 'ID: ' + u.user_id, text: u.username });
+      tr.appendChild(usernameCell);
 
-      const onlineBadge = u.is_online
-        ? '<span class="badge online">在线</span>'
-        : '<span class="badge offline" title="' + (u.last_active_at ? '最后活跃: ' + escAttr(u.last_active_at.slice(0,16).replace('T',' ')) : '从未活跃') + '">离线</span>';
+      var onlineCell = document.createElement('td');
+      var onlineBadge = el('span', {
+        className: 'badge ' + (u.is_online ? 'online' : 'offline'),
+        text: u.is_online ? '在线' : '离线',
+        title: u.is_online ? '' : (u.last_active_at ? '最后活跃: ' + u.last_active_at.slice(0,16).replace('T',' ') : '从未活跃')
+      });
+      onlineCell.appendChild(onlineBadge);
+      tr.appendChild(onlineCell);
 
-      tr.innerHTML =
-        '<td><input type="checkbox" class="user-check" value="' + escAttr(u.user_id) + '" /></td>' +
-        '<td title="ID: ' + escAttr(u.user_id) + '">' + esc(u.username) + '</td>' +
-        '<td>' + onlineBadge + '</td>' +
-        '<td>' + regType + '</td>' +
-        '<td><span class="badge ' + statusCls + '">' + statusText + '</span></td>' +
-        '<td>' + membershipCell + '</td>' +
-        '<td>' + esc(created) + '</td>' +
-        '<td style="white-space:nowrap;">' +
-          '<button class="sm" onclick="openResetModal(\'' + escAttr(u.username) + '\')">重置密码</button>' +
-          '<button class="sm" onclick="genTempPw(\'' + escAttr(u.username) + '\')">临时密码</button>' +
-          '<button class="sm" onclick="openToggle(\'' + escAttr(u.username) + '\',' + u.disabled + ')">' + (u.disabled ? '启用' : '禁用') + '</button>' +
-          '<button class="sm" onclick="openExtend(\'' + escAttr(u.username) + '\')">延长试用</button>' +
-          '<button class="sm danger" onclick="openDeleteModal(\'' + escAttr(u.username) + '\')">删除</button>' +
-        '</td>';
+      var regCell = document.createElement('td');
+      var regBadge = el('span', { className: 'badge', text: '未知' });
+      if (u.phone) regBadge.className = 'badge phone';
+      else if (u.email) regBadge.className = 'badge email';
+      regBadge.textContent = u.phone ? '手机' : (u.email ? '邮箱' : '未知');
+      if (!u.phone && !u.email) regBadge.style.cssText = 'background:#eee;color:#666;';
+      regCell.appendChild(regBadge);
+      tr.appendChild(regCell);
+
+      var statusCell = document.createElement('td');
+      statusCell.appendChild(el('span', { className: 'badge ' + statusCls, text: statusText }));
+      tr.appendChild(statusCell);
+
+      var membershipCell = document.createElement('td');
+      var membershipWrap = document.createElement('div');
+      membershipWrap.appendChild(el('span', { className: 'badge membership-' + membershipStatus, text: membershipLabel }));
+      var expireText = el('div', {
+        className: 'membership-expire',
+        text: membershipExpire && membershipStatus !== 'free'
+          ? '到期: ' + membershipExpire.slice(0, 16).replace('T', ' ')
+          : '-'
+      });
+      membershipWrap.appendChild(expireText);
+      membershipCell.appendChild(membershipWrap);
+      tr.appendChild(membershipCell);
+
+      tr.appendChild(el('td', { text: created }));
+
+      var actionCell = document.createElement('td');
+      actionCell.style.whiteSpace = 'nowrap';
+      actionCell.appendChild(createActionButton('重置密码', 'sm', function() { openResetModal(u.username); }));
+      actionCell.appendChild(createActionButton('临时密码', 'sm', function() { genTempPw(u.username); }));
+      actionCell.appendChild(createActionButton(u.disabled ? '启用' : '禁用', 'sm', function() { openToggle(u.username, u.disabled); }));
+      actionCell.appendChild(createActionButton('延长试用', 'sm', function() { openExtend(u.username); }));
+      actionCell.appendChild(createActionButton('删除', 'sm danger', function() { openDeleteModal(u.username); }));
+      tr.appendChild(actionCell);
       tbody.appendChild(tr);
     });
 
@@ -691,17 +744,7 @@ function fmtTs(ts) {
 function renderPagination(total, page, size) {
   const el = $('pagination');
   const totalPages = Math.ceil(total / size) || 1;
-  if (totalPages <= 1) { el.innerHTML = ''; return; }
-
-  let html = '<button ' + (page <= 1 ? 'disabled' : 'onclick="goPage(' + (page-1) + ')"') + '>&laquo;</button>';
-  const start = Math.max(1, page - 2);
-  const end = Math.min(totalPages, page + 2);
-  for (let i = start; i <= end; i++) {
-    html += '<button class="' + (i === page ? 'current' : '') + '" onclick="goPage(' + i + ')">' + i + '</button>';
-  }
-  html += '<button ' + (page >= totalPages ? 'disabled' : 'onclick="goPage(' + (page+1) + ')"') + '>&raquo;</button>';
-  html += '<span class="info">' + page + ' / ' + totalPages + '</span>';
-  el.innerHTML = html;
+  renderPager(el, page, totalPages, goPage);
 }
 
 function goPage(p) { currentPage = p; loadUsers(); }
@@ -838,9 +881,9 @@ function openAuditLogs() { switchTab('logs'); }
 
 async function loadAuditLogs() {
   const body = $('logsBody');
-  body.innerHTML = '';
+  clearNode(body);
   $('logsLoading').classList.remove('hidden');
-  $('logsPagination').innerHTML = '';
+  clearNode($('logsPagination'));
 
   const action = $('logActionFilter').value;
   let url = API + '/admin/audit-logs?page=' + logsPage + '&size=50';
@@ -854,7 +897,9 @@ async function loadAuditLogs() {
     if (!data.items) return;
 
     if (data.items.length === 0) {
-      body.innerHTML = '<div style="text-align:center;padding:20px;color:var(--gray-500);">暂无日志</div>';
+      var empty = el('div', { text: '暂无日志' });
+      empty.style.cssText = 'text-align:center;padding:20px;color:var(--gray-500);';
+      body.appendChild(empty);
       return;
     }
 
@@ -863,20 +908,21 @@ async function loadAuditLogs() {
       div.className = 'log-item';
       const time = log.created_at ? log.created_at.slice(0,19).replace('T',' ') : '';
       const statusCls = log.status === 'success' ? 'log-status-success' : 'log-status-failure';
-      div.innerHTML = '<span class="log-time">' + esc(time) + '</span> &nbsp;' +
-        '<span class="log-action">' + esc(log.action) + '</span> &nbsp;' +
-        (log.target_user ? '<span>' + esc(log.target_user) + '</span> &nbsp;' : '') +
-        '<span class="' + statusCls + '">' + esc(log.status) + '</span>';
+      div.appendChild(el('span', { className: 'log-time', text: time }));
+      div.appendChild(document.createTextNode(' '));
+      div.appendChild(el('span', { className: 'log-action', text: log.action }));
+      if (log.target_user) {
+        div.appendChild(document.createTextNode(' '));
+        div.appendChild(el('span', { text: log.target_user }));
+      }
+      div.appendChild(document.createTextNode(' '));
+      div.appendChild(el('span', { className: statusCls, text: log.status }));
       body.appendChild(div);
     });
 
     const totalPages = Math.ceil(data.total / 50) || 1;
     if (totalPages > 1) {
-      let html = '';
-      for (let i = 1; i <= Math.min(totalPages, 10); i++) {
-        html += '<button class="' + (i === logsPage ? 'current' : '') + '" onclick="goLogsPage(' + i + ')">' + i + '</button>';
-      }
-      $('logsPagination').innerHTML = html;
+      renderPager($('logsPagination'), logsPage, Math.min(totalPages, 10), goLogsPage);
     }
   } catch { $('logsLoading').classList.add('hidden'); }
 }
@@ -898,10 +944,10 @@ async function loadGcStats() {
 
 async function loadGiftCards() {
   const tbody = $('gcBody');
-  tbody.innerHTML = '';
+  clearNode(tbody);
   $('gcLoading').classList.remove('hidden');
   $('gcEmpty').classList.add('hidden');
-  $('gcPagination').innerHTML = '';
+  clearNode($('gcPagination'));
 
   const sf = $('gcStatusFilter').value;
   const batchId = ($('gcBatchIdFilter') && $('gcBatchIdFilter').value) ? $('gcBatchIdFilter').value.trim() : '';
@@ -926,10 +972,11 @@ async function loadGiftCards() {
       tr.setAttribute('data-code', gc.code);
       tr.setAttribute('data-id', gc.id);
       tr.setAttribute('data-status', gc.status || '');
-      let statusBadge = '<span class="badge active">可用</span>';
-      if (gc.status === 'redeemed') statusBadge = '<span class="badge trial-expired">已兑换</span>';
-      else if (gc.status === 'expired') statusBadge = '<span class="badge trial-none">已过期</span>';
-      else if (gc.status === 'disabled') statusBadge = '<span class="badge disabled">已禁用</span>';
+      var statusBadgeClass = 'badge active';
+      var statusBadgeText = '可用';
+      if (gc.status === 'redeemed') { statusBadgeClass = 'badge trial-expired'; statusBadgeText = '已兑换'; }
+      else if (gc.status === 'expired') { statusBadgeClass = 'badge trial-none'; statusBadgeText = '已过期'; }
+      else if (gc.status === 'disabled') { statusBadgeClass = 'badge disabled'; statusBadgeText = '已禁用'; }
 
       const created = fmtDt(gc.created_at);
       const expiresStr = fmtDt(gc.expires_at);
@@ -937,26 +984,34 @@ async function loadGiftCards() {
       const batchShort = gc.batch_id ? (gc.batch_id.slice(0, 8) + '…') : '-';
       const mType = gc.membership_type || '-';
 
-      let actions = '';
-      if (gc.status === 'active') {
-        actions = '<button class="sm" onclick="copyText(\'' + escAttr(gc.code) + '\')">复制</button>' +
-                  '<button class="sm danger" onclick="disableGc(\'' + escAttr(gc.id) + '\')">禁用</button>';
-      } else {
-        actions = '<button class="sm" onclick="copyText(\'' + escAttr(gc.code) + '\')">复制</button>';
-      }
+      var gcCheckboxCell = document.createElement('td');
+      var gcCheckbox = el('input', { attrs: { type: 'checkbox', value: String(gc.id) } });
+      gcCheckbox.className = 'gc-row-check';
+      gcCheckboxCell.appendChild(gcCheckbox);
+      tr.appendChild(gcCheckboxCell);
 
-      tr.innerHTML =
-        '<td><input type="checkbox" class="gc-row-check" value="' + escAttr(gc.id) + '" /></td>' +
-        '<td style="font-family:monospace;letter-spacing:1px;">' + esc(gc.code) + '</td>' +
-        '<td>' + esc(mType) + '</td>' +
-        '<td>' + (gc.membership_days || 0) + ' 天</td>' +
-        '<td>' + statusBadge + '</td>' +
-        '<td title="' + escAttr(gc.batch_id || '') + '">' + esc(batchShort) + '</td>' +
-        '<td>' + esc(created) + '</td>' +
-        '<td>' + esc(expiresStr) + '</td>' +
-        '<td>' + esc(redeemedStr) + '</td>' +
-        '<td>' + (gc.redeemed_by ? esc(gc.redeemed_by) : '-') + '</td>' +
-        '<td>' + actions + '</td>';
+      var codeCell = el('td', { text: gc.code });
+      codeCell.style.cssText = 'font-family:monospace;letter-spacing:1px;';
+      tr.appendChild(codeCell);
+      tr.appendChild(el('td', { text: mType }));
+      tr.appendChild(el('td', { text: (gc.membership_days || 0) + ' 天' }));
+
+      var statusCell = document.createElement('td');
+      statusCell.appendChild(el('span', { className: statusBadgeClass, text: statusBadgeText }));
+      tr.appendChild(statusCell);
+
+      tr.appendChild(el('td', { title: gc.batch_id || '', text: batchShort }));
+      tr.appendChild(el('td', { text: created }));
+      tr.appendChild(el('td', { text: expiresStr }));
+      tr.appendChild(el('td', { text: redeemedStr }));
+      tr.appendChild(el('td', { text: gc.redeemed_by || '-' }));
+
+      var gcActionCell = document.createElement('td');
+      gcActionCell.appendChild(createActionButton('复制', 'sm', function() { copyText(gc.code); }));
+      if (gc.status === 'active') {
+        gcActionCell.appendChild(createActionButton('禁用', 'sm danger', function() { disableGc(gc.id); }));
+      }
+      tr.appendChild(gcActionCell);
       tbody.appendChild(tr);
     });
 
@@ -970,11 +1025,7 @@ async function loadGiftCards() {
     var infoEl = $('gcPaginationInfo');
     if (infoEl) infoEl.textContent = '第 ' + from + '-' + to + ' 条 / 共 ' + total + ' 条';
     if (totalPages > 1) {
-      let html = '';
-      for (let i = 1; i <= Math.min(totalPages, 10); i++) {
-        html += '<button class="' + (i === gcPage ? 'current' : '') + '" onclick="goGcPage(' + i + ')">' + i + '</button>';
-      }
-      $('gcPagination').innerHTML = html;
+      renderPager($('gcPagination'), gcPage, Math.min(totalPages, 10), goGcPage);
     }
 
     loadGcStats();
@@ -1101,7 +1152,10 @@ async function doCreateGiftCards() {
       _gcCodes = d.cards.map(c => c.code);
       $('gcBatchId').textContent = d.batch_id;
       $('gcResultCount').textContent = d.count;
-      $('gcResultCodes').innerHTML = _gcCodes.map(c => '<div>' + esc(c) + '</div>').join('');
+      clearNode($('gcResultCodes'));
+      _gcCodes.forEach(function(code) {
+        $('gcResultCodes').appendChild(el('div', { text: code }));
+      });
       openModal('modalGcResult');
       loadGiftCards();
     } else toast((d.detail && d.detail.message) || '生成失败', 'error');
@@ -1112,6 +1166,53 @@ async function doCreateGiftCards() {
 function copyGcCodes() {
   if (_gcCodes.length === 0) { toast('无兑换码可复制', 'error'); return; }
   if (copyToClipboard(_gcCodes.join('\n'))) toast('已复制 ' + _gcCodes.length + ' 个兑换码'); else toast('复制失败，请手动选择复制', 'error');
+}
+
+function bindStaticUiEvents() {
+  $('btnRefreshUsers').addEventListener('click', loadUsers);
+  $('btnOpenAuditLogs').addEventListener('click', openAuditLogs);
+  $('btnLogout').addEventListener('click', doLogout);
+
+  document.querySelectorAll('.tab').forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      switchTab(tab.dataset.tab);
+    });
+  });
+
+  $('btnApplyFilters').addEventListener('click', applyFilters);
+  $('btnResetFilters').addEventListener('click', resetFilters);
+  $('btnUserSearch').addEventListener('click', doSearch);
+  $('btnUserSearchClear').addEventListener('click', clearSearch);
+  $('btnBatchAction').addEventListener('click', doBatchAction);
+  $('btnExportUsersCsv').addEventListener('click', exportCSV);
+  $('checkAll').addEventListener('change', toggleCheckAll);
+
+  $('btnGiftCardFilter').addEventListener('click', loadGiftCards);
+  $('btnCopyGcSelected').addEventListener('click', copyGcSelected);
+  $('btnBatchDisableGc').addEventListener('click', batchDisableGc);
+  $('btnBatchDeleteGc').addEventListener('click', batchDeleteGc);
+  $('btnExportGcCsv').addEventListener('click', exportGcCsv);
+  $('btnCreateGc').addEventListener('click', openCreateGcModal);
+  $('btnCreateGcEmpty').addEventListener('click', openCreateGcModal);
+  $('gcCheckAll').addEventListener('change', toggleGcCheckAll);
+
+  $('btnFilterLogs').addEventListener('click', loadAuditLogs);
+
+  $('btnCloseResetModal').addEventListener('click', function() { closeModal('modalReset'); });
+  $('btnConfirmResetPassword').addEventListener('click', doResetPassword);
+  $('btnCopyTempPw').addEventListener('click', copyTempPw);
+  $('btnCloseTempModal').addEventListener('click', function() { closeModal('modalTemp'); });
+  $('btnCloseToggleModal').addEventListener('click', function() { closeModal('modalToggle'); });
+  $('btnConfirmToggle').addEventListener('click', doToggle);
+  $('btnCloseDeleteModal').addEventListener('click', function() { closeModal('modalDelete'); });
+  $('btnConfirmDelete').addEventListener('click', doDelete);
+  $('btnCloseExtendModal').addEventListener('click', function() { closeModal('modalExtend'); });
+  $('btnConfirmExtendTrial').addEventListener('click', doExtendTrial);
+  $('btnCloseCreateGcModal').addEventListener('click', function() { closeModal('modalCreateGc'); });
+  $('btnDoCreateGc').addEventListener('click', doCreateGiftCards);
+  $('btnCopyGcCodes').addEventListener('click', copyGcCodes);
+  $('btnDownloadGcTxt').addEventListener('click', downloadGcTxt);
+  $('btnCloseGcResultModal').addEventListener('click', function() { closeModal('modalGcResult'); });
 }
 
 /* CSV export with auth — need to handle token in header, so use fetch + blob */
@@ -1130,7 +1231,7 @@ async function exportCSV() {
 }
 
 /* Init */
-if (token) { enterMain(); }
+bindStaticUiEvents();
 </script>
 </body>
 </html>

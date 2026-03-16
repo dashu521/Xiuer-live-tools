@@ -204,6 +204,11 @@ function useChromeIpcSync() {
 function useUpdateIpcSync() {
   const enableAutoCheckUpdate = useUpdateConfigStore(s => s.enableAutoCheckUpdate)
   const handleUpdate = useUpdateStore.use.handleUpdate()
+  const handleCheckResult = useUpdateStore.use.handleCheckResult()
+
+  useIpcListener(IPC_CHANNELS.updater.updateAvailable, info => {
+    handleCheckResult(info)
+  })
 
   useIpcListener(IPC_CHANNELS.app.notifyUpdate, info => {
     if (enableAutoCheckUpdate) {

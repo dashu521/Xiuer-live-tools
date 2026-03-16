@@ -71,6 +71,67 @@ function resolvePlanFromStatus(
   return normalizePlan(fallbackPlan)
 }
 
+function getUserIdentifiers(user: SafeUser | null | undefined): string[] {
+  if (!user) return []
+  return [user.id, user.username, user.phone, user.email]
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .map(value => value.trim())
+}
+
+function doesStatusBelongToUser(
+  status: UserStatus | null | undefined,
+  user: SafeUser | null | undefined,
+): boolean {
+  if (!user) return false
+  if (status?.user_id && user.id) {
+    return status.user_id === user.id
+  }
+  if (!status?.username) return false
+  return getUserIdentifiers(user).includes(status.username)
+}
+
+function buildUserFromStatus(currentUser: SafeUser, status: UserStatus): SafeUser {
+  const effectivePlan = resolvePlanFromStatus(status, currentUser.plan)
+  const nextUsername = status.username || currentUser.username
+  const isPhoneUsername = /^1[3-9]\d{9}$/.test(nextUsername)
+
+  return {
+    ...currentUser,
+    id: status.user_id ?? currentUser.id,
+    username: nextUsername,
+    phone: isPhoneUsername ? nextUsername : currentUser.phone,
+    plan: effectivePlan,
+    expire_at: status.expire_at ?? null,
+  }
+}
+
+function applyUserStatusSnapshot(
+  set: (
+    partial: Partial<AuthStore> | ((state: AuthStore) => Partial<AuthStore>),
+    replace?: false,
+  ) => void,
+  get: () => AuthStore,
+  status: UserStatus,
+  logContext: string,
+): boolean {
+  const currentUser = get().user
+  if (!doesStatusBelongToUser(status, currentUser)) {
+    console.warn(`[AuthStore] Ignore stale user status during ${logContext}:`, {
+      statusUserId: status.user_id ?? null,
+      statusUsername: status.username,
+      currentUserId: currentUser?.id ?? null,
+      currentUser: currentUser?.username ?? null,
+    })
+    return false
+  }
+
+  set({
+    userStatus: status,
+    ...(currentUser ? { user: buildUserFromStatus(currentUser, status) } : {}),
+  })
+  return true
+}
+
 /** 将后端 /login 返回的 user 转为 SafeUser */
 function _backendUserToSafeUser(
   backendUser: LoginResponseBackend['user'] | undefined,
@@ -195,6 +256,7 @@ export const useAuthStore = create<AuthStore>()(
             set({
               isAuthenticated: true,
               user,
+              userStatus: null,
               token: response.token,
               refreshToken: refreshToken ?? get().refreshToken,
               isLoading: false,
@@ -211,20 +273,9 @@ export const useAuthStore = create<AuthStore>()(
             try {
               const status = await getUserStatus()
               if (status) {
-                get().setUserStatus(status)
-                // 服务端 userStatus.plan 是套餐真相源；前端只做归一化。
-                const currentUser = get().user
-                if (currentUser && status.plan) {
-                  const effectivePlan = resolvePlanFromStatus(status, currentUser.plan)
-                  set({
-                    user: {
-                      ...currentUser,
-                      plan: effectivePlan,
-                      expire_at: status.expire_at ?? null,
-                    },
-                  })
+                if (applyUserStatusSnapshot(set, get, status, 'login')) {
+                  console.log('[USER-STATUS] 登录后同步完成:', status)
                 }
-                console.log('[USER-STATUS] 登录后同步完成:', status)
               }
             } catch (error) {
               console.error('[AuthStore] Failed to fetch user status after login:', error)
@@ -648,6 +699,7 @@ export const useAuthStore = create<AuthStore>()(
             set({
               isAuthenticated: true,
               user: get().user ?? safeUserFromUsername(userId),
+              userStatus: null,
               isLoading: false,
               authCheckDone: true,
               isOffline: false,
@@ -669,27 +721,9 @@ export const useAuthStore = create<AuthStore>()(
             getUserStatus()
               .then(status => {
                 if (status) {
-                  get().setUserStatus(status)
-                  // 服务端 userStatus.plan 是套餐真相源；前端只做归一化。
-                  const currentUser = get().user
-                  if (currentUser && status.plan) {
-                    const effectivePlan = resolvePlanFromStatus(status, currentUser.plan)
-                    // 如果 username 是手机号格式，更新 phone 和 username 显示
-                    const isPhone = /^1[3-9]\d{9}$/.test(status.username)
-                    set({
-                      user: {
-                        ...currentUser,
-                        plan: effectivePlan,
-                        expire_at: status.expire_at ?? null,
-                        // 如果 username 是手机号，同时更新 phone 和 username 显示
-                        ...(isPhone && {
-                          phone: status.username,
-                          username: status.username,
-                        }),
-                      },
-                    })
+                  if (applyUserStatusSnapshot(set, get, status, 'checkAuth')) {
+                    console.log('[USER-STATUS]', status)
                   }
-                  console.log('[USER-STATUS]', status)
                 }
               })
               .catch(error => {
@@ -750,18 +784,8 @@ export const useAuthStore = create<AuthStore>()(
       refreshUserStatus: async () => {
         const status = await getUserStatus()
         if (status) {
-          set({ userStatus: status })
-          // 服务端 userStatus.plan 是套餐真相源；前端只做归一化。
-          const currentUser = get().user
-          if (currentUser && status.plan) {
-            const effectivePlan = resolvePlanFromStatus(status, currentUser.plan)
-            set({
-              user: {
-                ...currentUser,
-                plan: effectivePlan,
-                expire_at: status.expire_at ?? null,
-              },
-            })
+          if (!applyUserStatusSnapshot(set, get, status, 'refresh')) {
+            return null
           }
         }
         return status
@@ -795,9 +819,11 @@ export const useAuthStore = create<AuthStore>()(
           refreshedStatus ??
           (statusData
             ? {
+                user_id: get().user?.id,
                 username: get().user?.username ?? username,
                 status: 'active',
                 plan: statusData.active ? 'trial' : 'free',
+                max_accounts: 1,
                 trial: {
                   start_at:
                     statusData.start_ts != null
@@ -812,24 +838,15 @@ export const useAuthStore = create<AuthStore>()(
                 },
               }
             : {
+                user_id: get().user?.id,
                 username: get().user?.username ?? username,
                 status: 'active',
                 plan: 'trial',
+                max_accounts: 1,
                 trial: { is_active: true },
               })
         console.log('[AuthStore] Setting userStatus after trial:', userStatus)
-        set({ userStatus })
-
-        // 同步更新 user.plan
-        const currentUser = get().user
-        if (currentUser) {
-          set({
-            user: {
-              ...currentUser,
-              plan: userStatus.plan,
-            },
-          })
-        }
+        applyUserStatusSnapshot(set, get, userStatus, 'trial-start')
 
         return { success: true as const, status: userStatus }
       },

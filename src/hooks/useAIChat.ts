@@ -2,6 +2,7 @@ import { providers } from 'shared/providers'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { immer } from 'zustand/middleware/immer'
+import { SecureStorage } from '@/utils/encryption'
 
 // 【P1-1 AI联动】导出 store 类型供 AISharedConfig 使用
 export type { AIChatStore }
@@ -17,8 +18,45 @@ export interface ChatMessage {
 
 export type AIProvider = keyof typeof providers | 'custom'
 
+const AI_CHAT_API_KEYS_STORAGE_KEY = 'ai_chat_api_keys'
+
 type APIKeys = {
   [key in AIProvider]: string
+}
+
+function createDefaultAPIKeys(): APIKeys {
+  return Object.keys(providers).reduce(
+    (acc, provider) => {
+      acc[provider as AIProvider] = ''
+      return acc
+    },
+    { custom: '' } as Record<AIProvider, string>,
+  )
+}
+
+function loadStoredAPIKeys(): APIKeys {
+  if (typeof localStorage === 'undefined') {
+    return createDefaultAPIKeys()
+  }
+  const stored = SecureStorage.getItem<Partial<Record<AIProvider, string>>>(
+    AI_CHAT_API_KEYS_STORAGE_KEY,
+  )
+  return {
+    ...createDefaultAPIKeys(),
+    ...stored,
+  }
+}
+
+function persistAPIKeys(apiKeys: APIKeys) {
+  if (typeof localStorage === 'undefined') {
+    return
+  }
+  const hasAnyKey = Object.values(apiKeys).some(Boolean)
+  if (!hasAnyKey) {
+    SecureStorage.removeItem(AI_CHAT_API_KEYS_STORAGE_KEY)
+    return
+  }
+  SecureStorage.setItem(AI_CHAT_API_KEYS_STORAGE_KEY, apiKeys)
 }
 
 export interface ProviderConfig {
@@ -65,13 +103,7 @@ export const useAIChatStore = create<AIChatStore>()(
         {} as Record<AIProvider, string>,
       )
 
-      const apiKeys = Object.keys(providers).reduce(
-        (acc, provider) => {
-          acc[provider as AIProvider] = ''
-          return acc
-        },
-        {} as Record<AIProvider, string>,
-      )
+      const apiKeys = loadStoredAPIKeys()
 
       return {
         messages: [],
@@ -104,6 +136,7 @@ export const useAIChatStore = create<AIChatStore>()(
         setApiKey: (provider, key) => {
           set(state => {
             state.apiKeys[provider] = key
+            persistAPIKeys(state.apiKeys)
           })
         },
         addMessage: message => {
@@ -180,7 +213,6 @@ export const useAIChatStore = create<AIChatStore>()(
     {
       name: 'ai-chat-storage',
       partialize: state => ({
-        apiKeys: state.apiKeys,
         config: state.config,
         customBaseURL: state.customBaseURL,
       }),

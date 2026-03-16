@@ -244,7 +244,7 @@ export interface TrialStatusResponse {
 }
 
 /**
- * POST /trial/start：开启 7 天试用。必须带 Authorization: Bearer <token>，Body 必须包含 { username }。
+ * POST /trial/start：开启 3 天试用。必须带 Authorization: Bearer <token>，Body 必须包含 { username }。
  * 从当前登录状态读取 username，不允许空 body。
  */
 export async function startTrial(): Promise<ApiResult<TrialStartResponse>> {
@@ -304,7 +304,7 @@ export interface LoginResponseBackend {
     last_login_at?: string | null
     status?: string
     plan?: string | null
-    expire_at?: number | null
+    expire_at?: string | null
   }
 }
 

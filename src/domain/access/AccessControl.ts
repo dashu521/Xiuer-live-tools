@@ -280,23 +280,25 @@ export function useAccessContext(): AccessContext {
   // 订阅 accounts 状态
   const _accounts = useAccounts(s => s.accounts)
 
-  // 使用 useMemo 缓存计算结果，依赖状态变化时重新计算
-  return useMemo(() => {
-    const context = buildAccessContext()
+  void _accounts
+  void _isAuthenticated
+  void _user
+  void _userStatus
 
-    // DEV 模式下输出调试日志
-    if (import.meta.env.DEV) {
-      console.log('[useAccessContext] Recomputed:', {
-        plan: context.plan,
-        trialEndsAt: context.trialEndsAt,
-        maxLiveAccounts: context.maxLiveAccounts,
-        isAuthenticated: context.isAuthenticated,
-        timestamp: Date.now(),
-      })
-    }
+  const context = buildAccessContext()
 
-    return context
-  }, [])
+  // DEV 模式下输出调试日志
+  if (import.meta.env.DEV) {
+    console.log('[useAccessContext] Recomputed:', {
+      plan: context.plan,
+      trialEndsAt: context.trialEndsAt,
+      maxLiveAccounts: context.maxLiveAccounts,
+      isAuthenticated: context.isAuthenticated,
+      timestamp: Date.now(),
+    })
+  }
+
+  return context
 }
 
 /**

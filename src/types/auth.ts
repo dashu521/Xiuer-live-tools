@@ -13,7 +13,7 @@ export interface User {
   lastLogin: string | null
   status: 'active' | 'inactive' | 'banned'
   plan: PlanType
-  expire_at: number | null
+  expire_at: string | null
   deviceId: string
   machineFingerprint: string
   balance: number
@@ -124,6 +124,7 @@ export interface AuthResponseWithErrorType extends AuthResponse {
 
 /** GET /auth/status 返回：用户状态 */
 export interface UserStatus {
+  user_id?: string
   username: string
   status: 'active' | 'disabled'
   plan: PlanType
@@ -131,7 +132,7 @@ export interface UserStatus {
   has_password?: boolean
   created_at?: string
   last_login_at?: string
-  expire_at?: number | null
+  expire_at?: string | null
   trial?: {
     start_at?: string | null
     end_at?: string | null

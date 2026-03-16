@@ -4,7 +4,6 @@ import { SetPasswordDialog } from '@/components/auth/SetPasswordDialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { normalizePlan } from '@/domain/access/planRules'
 import { useAccounts } from '@/hooks/useAccounts'
 import { useAutoMessageStore } from '@/hooks/useAutoMessage'
 import { useAutoPopUpStore } from '@/hooks/useAutoPopUp'
@@ -13,7 +12,7 @@ import { useChromeConfigStore } from '@/hooks/useChromeConfig'
 import { useLiveControlStore } from '@/hooks/useLiveControl'
 import { useSubAccountStore } from '@/hooks/useSubAccount'
 import { useToast } from '@/hooks/useToast'
-import { getUserStatus, resetPasswordWithSms, sendSmsCode } from '@/services/apiClient'
+import { resetPasswordWithSms, sendSmsCode } from '@/services/apiClient'
 import { useAuthStore } from '@/stores/authStore'
 import { usePlatformPreferenceStore } from '@/stores/platformPreferenceStore'
 
@@ -65,7 +64,7 @@ export function PhoneAuthDialog({
   const [validationError, setValidationError] = useState<string | null>(null)
   const [showSetPassword, setShowSetPassword] = useState(false)
 
-  const { setUser, setToken, setRefreshToken, setUserStatus } = useAuthStore()
+  const { setUser, setToken, setRefreshToken } = useAuthStore()
   const { toast } = useToast()
 
   const mode = initialMode
@@ -257,7 +256,7 @@ export function PhoneAuthDialog({
         if (refresh_token) {
           setRefreshToken(refresh_token)
         }
-        useAuthStore.setState({ isAuthenticated: true })
+        useAuthStore.setState({ isAuthenticated: true, userStatus: null })
 
         console.log('[PhoneAuthDialog] 短信登录成功，加载用户账号数据, userId:', finalUserId)
         useAccounts.getState().loadUserAccounts(finalUserId)
@@ -269,23 +268,10 @@ export function PhoneAuthDialog({
         useLiveControlStore.getState().loadUserContexts(finalUserId)
         useSubAccountStore.getState().loadUserContexts(finalUserId)
 
-        // 获取用户状态并同步更新 user.plan
-        getUserStatus()
-          .then(status => {
-            if (status) {
-              setUserStatus(status)
-              // 同步更新 user.plan
-              const currentUser = useAuthStore.getState().user
-              if (currentUser && status.plan) {
-                const effectivePlan = normalizePlan(status.plan)
-                setUser({
-                  ...currentUser,
-                  plan: effectivePlan,
-                  expire_at: status.expire_at ?? null,
-                } as typeof currentUser)
-              }
-            }
-          })
+        // 统一通过 authStore 同步会员状态，避免会员等级 / 到期时间 / 账号上限割裂。
+        useAuthStore
+          .getState()
+          .refreshUserStatus()
           .catch(error => {
             console.error('[PhoneAuthDialog] Failed to fetch user status:', error)
           })

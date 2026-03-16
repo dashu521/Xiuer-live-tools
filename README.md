@@ -1,7 +1,7 @@
 # 秀儿直播助手
 
-> **版本**: v1.2.1
-> **最后更新**: 2026-03-14
+> **版本**: v1.3.3
+> **最后更新**: 2026-03-16
 > **状态**: 当前有效
 > **负责人**: TEAM
 > **当前适用性**: 项目总入口文档
@@ -50,9 +50,9 @@
 
 | 平台 | 下载地址 | 适用系统 |
 |------|----------|----------|
-| Windows | [下载 Windows 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.2_win-x64.exe) | Windows 10/11 64位 |
-| macOS Apple 芯片 | [下载 Apple 芯片版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.2_macos_arm64.dmg) | M1/M2/M3/M4 Mac |
-| macOS Intel | [下载 Intel 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.2_macos_x64.dmg) | Intel 处理器 Mac |
+| Windows | [下载 Windows 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_win-x64.exe) | Windows 10/11 64位 |
+| macOS Apple 芯片 | [下载 Apple 芯片版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_macos_arm64.dmg) | M1/M2/M3/M4 Mac |
+| macOS Intel | [下载 Intel 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_macos_x64.dmg) | Intel 处理器 Mac |
 
 > **安装提示**：
 > - Windows：如果浏览器提示风险，请点击"保留"或"更多信息"→"仍要运行"
@@ -86,17 +86,24 @@ npm run dev
 # 仅构建，不打包
 npm run build
 
-# 构建并打包（本地测试）
-npm run build-exe
+# 本地打包 macOS（本机测试）
+npm run dist:mac
 
-# 完整构建并打包（用于发布）
-npm run dist
+# 本地打包 Windows
+npm run dist:win
+
+# 本地打包 Linux
+npm run dist:linux
 ```
 
 ### 运行测试
 
 ```bash
 npm test
+npm run typecheck
+npm run lint
+npm run auth:venv
+npm run auth:check
 ```
 
 ## 项目结构
@@ -122,9 +129,15 @@ npm test
 |------|------|
 | `npm run dev` | 启动开发服务器 |
 | `npm run build` | 构建生产版本 |
-| `npm run build-exe` | 构建并打包为可执行文件（本地测试） |
-| `npm run dist` | 完整构建并打包（用于发布） |
+| `npm run lint` | 运行 Biome 静态检查 |
+| `npm run typecheck` | 运行 TypeScript 类型检查 |
+| `npm run quality:check` | 运行 lint、typecheck 和测试 |
+| `npm run auth:venv` | 创建 auth-api 专用虚拟环境并安装依赖 |
+| `npm run auth:check` | 运行 auth-api 语法检查、导入冒烟和稳定单测 |
 | `npm run dist:clean` | 清理发布目录 |
+| `npm run dist:mac` | 构建 macOS 安装包（本地测试） |
+| `npm run dist:win` | 构建 Windows 安装包（本地测试） |
+| `npm run dist:linux` | 构建 Linux 安装包（本地测试） |
 | `npm test` | 运行测试 |
 
 ---
@@ -139,6 +152,7 @@ npm test
 |------|------|------|
 | [README.md](README.md) | 项目总入口 | 当前有效 |
 | [docs/project-architecture-foundation.md](docs/project-architecture-foundation.md) | 全仓库架构总规范 | 已固化 |
+| [docs/project-development-rules-spec.md](docs/project-development-rules-spec.md) | 项目开发规则总规范 | 已固化 |
 | [docs/architecture-change-checklist.md](docs/architecture-change-checklist.md) | 架构变更提交前检查清单 | 已固化 |
 | [docs/live-control-lifecycle-spec.md](docs/live-control-lifecycle-spec.md) | 中控台/直播状态规范 | 已固化 |
 | [docs/access-control-architecture.md](docs/access-control-architecture.md) | 权限与套餐架构 | 已固化 |
@@ -173,16 +187,14 @@ npm test
 
 ---
 
-## 首发版本
+## 当前稳定版本
 
-**v1.2.1** - 首发版本
+**v1.3.3** - 当前稳定版本
 
-- 完成基础框架整理
-- 统一项目命名为「秀儿直播助手」
-- 支持多平台直播中控台连接
-- 实现自动发言、自动弹窗、自动回复功能
-- 集成 AI 智能回复能力
-- 支持多账号管理与数据隔离
+- 延续多平台直播中控台连接与自动化能力
+- 持续完善认证、套餐权限与多账号隔离逻辑
+- 优化桌面端更新、发布和构建链路
+- 补充测试、回归和发布检查脚本
 
 ## 技术支持
 

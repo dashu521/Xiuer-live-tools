@@ -30,7 +30,7 @@ interface User {
   lastLogin: string | null
   status: 'active' | 'inactive' | 'banned'
   plan: PlanType
-  expire_at: number | null
+  expire_at: string | null
   deviceId: string
   machineFingerprint: string
   balance: number
@@ -262,7 +262,9 @@ export class AuthService {
 
     // 检查试用是否过期
     if (userPlan === 'trial' && user.expire_at) {
-      return Date.now() < user.expire_at && meetsMinimumPlan(userPlan, requiredPlan)
+      return (
+        Date.now() < new Date(user.expire_at).getTime() && meetsMinimumPlan(userPlan, requiredPlan)
+      )
     }
 
     return meetsMinimumPlan(userPlan, requiredPlan)
@@ -279,7 +281,7 @@ export class AuthService {
 
     // 检查试用是否过期
     if (userPlan === 'trial' && user.expire_at) {
-      if (Date.now() >= user.expire_at) return false
+      if (Date.now() >= new Date(user.expire_at).getTime()) return false
     }
 
     return canUseAllFeaturesByPlan(userPlan)
@@ -329,7 +331,7 @@ export class AuthService {
     data: {
       balance?: number
       plan?: PlanType
-      expire_at?: number | null
+      expire_at?: string | null
     },
   ): void {
     const db = getAuthDatabase()

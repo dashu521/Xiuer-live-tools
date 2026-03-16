@@ -13,7 +13,6 @@ import windowManager from '#/windowManager'
 import { createLogger, isAppQuitting } from '../logger'
 import { errorMessage, sleep } from '../utils'
 import { cdnManager } from './CDNManager'
-import { integrityManager } from './IntegrityManager'
 import { type BackupInfo, rollbackManager } from './RollbackManager'
 import { UpdateErrorCode, updateErrorHandler } from './UpdateErrorHandler'
 import { type VersionInfo, versionManager } from './VersionManager'
@@ -99,11 +98,26 @@ async function timeoutFetch(url: string | URL, timeout = 5000) {
 let _latestVersion: string | null = null
 
 async function fetchChangelog(): Promise<string | undefined> {
-  return undefined
+  try {
+    const response = await net.fetch(
+      'https://api.github.com/repos/Xiuer-Chinese/Xiuer-live-tools/releases/latest',
+      {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          Accept: 'application/vnd.github.v3+json',
+        },
+      },
+    )
+    if (!response.ok) return undefined
+    const data = (await response.json()) as { body: string }
+    return data.body
+  } catch {
+    return undefined
+  }
 }
 
 function getAssetsURL() {
-  return ''
+  return 'https://github.com/Xiuer-Chinese/Xiuer-live-tools/releases/latest'
 }
 
 interface Updater {
@@ -237,12 +251,6 @@ class EnhancedUpdateManager {
       const errorMsg = errorMessage(error)
       logger.error('Download failed:', errorMsg)
 
-      const backup = rollbackManager.getLatestBackup()
-      if (backup) {
-        logger.info('Attempting rollback after download failure')
-        await rollbackManager.rollbackToVersion(backup.version)
-      }
-
       this.updateState({
         status: 'error',
         error: errorMsg,
@@ -253,18 +261,15 @@ class EnhancedUpdateManager {
   }
 
   async pauseDownload(): Promise<void> {
-    this.updateState({ status: 'paused' })
-    logger.info('Download paused')
+    throw new Error('EnhancedUpdateManager does not support pauseDownload yet')
   }
 
   async resumeDownload(): Promise<void> {
-    this.updateState({ status: 'downloading' })
-    logger.info('Download resumed')
+    throw new Error('EnhancedUpdateManager does not support resumeDownload yet')
   }
 
   async cancelDownload(): Promise<void> {
-    this.updateState({ status: 'idle', progress: 0 })
-    logger.info('Download cancelled')
+    throw new Error('EnhancedUpdateManager does not support cancelDownload yet')
   }
 
   async quitAndInstall(): Promise<void> {
@@ -366,11 +371,15 @@ class EnhancedWindowsUpdater implements Updater {
       if (isAppQuitting) return
       logger.info(`Update available: ${info.version}`)
 
-      try {
-        const backup = await rollbackManager.createBackup(app.getVersion())
-        logger.info(`Backup created: ${backup.id}`)
-      } catch (error) {
-        logger.warn('Failed to create backup:', error)
+      if (rollbackManager.isOperational()) {
+        try {
+          const backup = await rollbackManager.createBackup(app.getVersion())
+          logger.info(`Backup created: ${backup.id}`)
+        } catch (error) {
+          logger.warn('Failed to create backup:', error)
+        }
+      } else {
+        logger.info('Skipping backup creation: rollback runtime is not operational')
       }
 
       const releaseNote = await fetchChangelog()
@@ -402,21 +411,8 @@ class EnhancedWindowsUpdater implements Updater {
       logger.info(`Update downloaded: ${event.version}`)
 
       try {
-        const isValid = await integrityManager.verifyChecksum(event.downloadedFile!, {
-          algorithm: 'sha512',
-          value: '',
-        })
-
-        if (isValid) {
-          windowManager.send(IPC_CHANNELS.updater.updateDownloaded, event)
-        } else {
-          const error = updateErrorHandler.createError(
-            UpdateErrorCode.CHECKSUM_MISMATCH,
-            'Update package verification failed',
-            { recoverable: true, canRollback: true },
-          )
-          await updateErrorHandler.handleError(error)
-        }
+        // electron-updater itself already verifies downloaded package integrity.
+        windowManager.send(IPC_CHANNELS.updater.updateDownloaded, event)
       } catch (error) {
         logger.error('Verification error:', error)
       }
@@ -514,7 +510,7 @@ class EnhancedMacOSUpdater implements Updater {
       this.versionInfo = latestYml
       _latestVersion = latestYml.version
 
-      if (semver.lt(latestYml.version, app.getVersion())) {
+      if (!semver.gt(latestYml.version, app.getVersion())) {
         logger.info(`${app.getVersion()} 已经是最新版本`)
         if (!isAppQuitting) {
           windowManager.send(IPC_CHANNELS.updater.updateAvailable, {
@@ -528,11 +524,11 @@ class EnhancedMacOSUpdater implements Updater {
 
       logger.info(`Update available: ${app.getVersion()} -> ${latestYml.version}`)
 
-      try {
+      if (rollbackManager.isOperational()) {
         const backup = await rollbackManager.createBackup(app.getVersion())
         logger.info(`Backup created: ${backup.id}`)
-      } catch (error) {
-        logger.warn('Failed to create backup:', error)
+      } else {
+        logger.info('Skipping backup creation: rollback runtime is not operational')
       }
 
       if (!isAppQuitting) {
@@ -540,6 +536,7 @@ class EnhancedMacOSUpdater implements Updater {
           update: true,
           version: app.getVersion(),
           newVersion: latestYml.version,
+          releaseNote: source === 'github' ? await fetchChangelog() : undefined,
         })
       }
     } catch (err) {

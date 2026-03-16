@@ -45,6 +45,7 @@ export function UserCenter({ isOpen, onClose }: UserCenterProps) {
       date: null,
       isExpired: false,
       isPermanent: false,
+      displayText: '无到期时间',
     }
 
     // 优先使用试用到期时间，其次使用正式套餐到期时间
@@ -54,6 +55,11 @@ export function UserCenter({ isOpen, onClose }: UserCenterProps) {
         date: endDate,
         isExpired: accessContext.trialExpired,
         isPermanent: false,
+        displayText: endDate.toLocaleDateString('zh-CN', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        }),
       }
     } else if (accessContext.expiresAt) {
       const endDate = new Date(accessContext.expiresAt)
@@ -61,12 +67,18 @@ export function UserCenter({ isOpen, onClose }: UserCenterProps) {
         date: endDate,
         isExpired: accessContext.expiresAt < Date.now(),
         isPermanent: false,
+        displayText: endDate.toLocaleDateString('zh-CN', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        }),
       }
     } else {
       expiry = {
         date: null,
         isExpired: false,
-        isPermanent: ['pro', 'pro_max', 'ultra'].includes(plan),
+        isPermanent: false,
+        displayText: ['pro', 'pro_max', 'ultra'].includes(plan) ? '同步中' : '无到期时间',
       }
     }
 
@@ -115,8 +127,12 @@ export function UserCenter({ isOpen, onClose }: UserCenterProps) {
   const handleRefreshStatus = useCallback(async () => {
     setIsRefreshing(true)
     try {
-      await refreshUserStatus()
-      toast.success('状态已刷新')
+      const status = await refreshUserStatus()
+      if (status) {
+        toast.success('状态已刷新')
+      } else {
+        toast.error('状态同步失败，请稍后重试')
+      }
     } catch {
       toast.error('刷新失败，请重试')
     } finally {
@@ -157,7 +173,10 @@ export function UserCenter({ isOpen, onClose }: UserCenterProps) {
         setRedeemResult(result.data)
         if (result.data.success) {
           toast.success('兑换成功！')
-          await refreshUserStatus()
+          const refreshedStatus = await refreshUserStatus()
+          if (!refreshedStatus) {
+            toast.error('会员状态同步失败，请点击刷新状态重试')
+          }
         }
       } else {
         console.error('[GiftCard] Redeem failed:', result)
@@ -173,17 +192,6 @@ export function UserCenter({ isOpen, onClose }: UserCenterProps) {
       setIsRedeeming(false)
     }
   }, [giftCardCode, refreshUserStatus, toast])
-
-  // 格式化到期日期显示
-  const formatExpiryDate = useCallback((date: Date | null, isPermanent: boolean): string => {
-    if (isPermanent) return '永久有效'
-    if (!date) return '无到期时间'
-    return date.toLocaleDateString('zh-CN', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    })
-  }, [])
 
   if (!isOpen) return null
 
@@ -312,7 +320,7 @@ export function UserCenter({ isOpen, onClose }: UserCenterProps) {
                       <span
                         className={`font-medium ${expiry.isExpired ? 'text-destructive' : 'text-foreground'}`}
                       >
-                        {formatExpiryDate(expiry.date, expiry.isPermanent)}
+                        {expiry.displayText}
                       </span>
                       {!expiry.isPermanent && !expiry.isExpired && remainingDays !== null && (
                         <span className="text-xs text-primary bg-primary/10 px-1.5 py-0.5 rounded">
@@ -353,9 +361,9 @@ export function UserCenter({ isOpen, onClose }: UserCenterProps) {
 
                   {redeemResult && (
                     <output
-                      className={`p-2.5 rounded-lg text-sm ${
+                      className={`block w-full p-2.5 rounded-lg text-sm ${
                         redeemResult.success
-                          ? 'bg-primary/5 border border-primary/20'
+                          ? 'border border-primary/20'
                           : 'bg-destructive/5 border border-destructive/20'
                       }`}
                       aria-live="polite"

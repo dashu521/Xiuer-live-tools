@@ -72,6 +72,8 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
+.venv/
+auth-api/.venv/
 *.db
 *.sqlite
 *.sqlite3

@@ -378,9 +378,9 @@ curl -I https://download.xiuer.work/releases/latest/latest.yml
 curl -I https://download.xiuer.work/releases/latest/latest-mac.yml
 
 # 验证安装包（示例版本号，实际根据发布版本调整）
-curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.2_win-x64.exe
-curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.2_macos_arm64.dmg
-curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.2_macos_x64.dmg
+curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_win-x64.exe
+curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_macos_arm64.dmg
+curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_macos_x64.dmg
 ```
 
 ---

@@ -3,13 +3,75 @@ import { normalizePlan, PLAN_TEXT_MAP } from '@/domain/access'
 import { useAuthStore } from '@/stores/authStore'
 
 export function useAuthInit() {
-  const { checkAuth } = useAuthStore()
+  const { checkAuth, refreshUserStatus, isAuthenticated, authCheckDone, isOffline } = useAuthStore()
+  const syncInFlightRef = useRef(false)
+  const lastSyncedAtRef = useRef(0)
+
+  const syncUserStatus = useCallback(
+    async (force = false) => {
+      if (!authCheckDone || !isAuthenticated || isOffline || syncInFlightRef.current) {
+        return
+      }
+
+      const now = Date.now()
+      if (!force && now - lastSyncedAtRef.current < 15_000) {
+        return
+      }
+
+      syncInFlightRef.current = true
+      try {
+        const status = await refreshUserStatus()
+        if (status) {
+          lastSyncedAtRef.current = Date.now()
+        }
+      } catch (error) {
+        console.warn('[useAuthInit] Failed to sync user status:', error)
+      } finally {
+        syncInFlightRef.current = false
+      }
+    },
+    [authCheckDone, isAuthenticated, isOffline, refreshUserStatus],
+  )
 
   useEffect(() => {
     // Check authentication status on app startup
     // 注意：不阻塞应用启动，允许未登录用户浏览界面
     checkAuth()
   }, [checkAuth])
+
+  useEffect(() => {
+    if (!authCheckDone || !isAuthenticated || isOffline) {
+      return
+    }
+
+    // 鉴权完成后立即同步一次会员/试用状态，避免长时间停留在旧套餐信息。
+    void syncUserStatus(true)
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void syncUserStatus()
+      }
+    }, 30_000)
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void syncUserStatus(true)
+      }
+    }
+
+    const handleFocus = () => {
+      void syncUserStatus(true)
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('focus', handleFocus)
+
+    return () => {
+      window.clearInterval(intervalId)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [authCheckDone, isAuthenticated, isOffline, syncUserStatus])
 }
 
 // Hook to handle login requirement for features

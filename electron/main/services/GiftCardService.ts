@@ -113,7 +113,7 @@ export class GiftCardService {
         const baseDate = previousExpireAt ? new Date(previousExpireAt) : new Date()
         const newDate = new Date(baseDate)
         newDate.setDate(newDate.getDate() + card.membershipDays)
-        newExpireAt = newDate.getTime()
+        newExpireAt = newDate.toISOString()
       }
     }
 
@@ -135,8 +135,8 @@ export class GiftCardService {
           newBalance,
           previousMembershipType: previousPlan,
           newMembershipType: newPlan,
-          previousExpiryDate: previousExpireAt ? String(previousExpireAt) : null,
-          newExpiryDate: newExpireAt ? String(newExpireAt) : null,
+          previousExpiryDate: previousExpireAt ?? null,
+          newExpiryDate: newExpireAt ?? null,
           ipAddress: request.ipAddress || '',
           deviceInfo: request.deviceInfo || '',
         })

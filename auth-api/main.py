@@ -37,11 +37,18 @@ class RequestIdMiddleware(BaseHTTPMiddleware):
 
 app = FastAPI(title="Auth API", lifespan=lifespan)
 
+cors_origins = (
+    settings.CORS_ORIGINS.split(",") if "," in settings.CORS_ORIGINS else [settings.CORS_ORIGINS]
+)
+cors_origins = [origin.strip() for origin in cors_origins if origin.strip()]
+allow_credentials = "*" not in cors_origins
+
 app.add_middleware(RequestIdMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS.split(",") if "," in settings.CORS_ORIGINS else [settings.CORS_ORIGINS],
-    allow_credentials=True,
+    allow_origins=cors_origins,
+    # wildcard 场景下禁止 credentials，避免出现 `* + allow_credentials=true` 的高风险组合
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

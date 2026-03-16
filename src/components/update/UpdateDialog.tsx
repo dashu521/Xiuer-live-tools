@@ -1,5 +1,5 @@
 import { useMemoizedFn } from 'ahooks'
-import { AlertTriangle, Download, Pause, Play, Rocket, RotateCcw, X } from 'lucide-react'
+import { AlertTriangle, Download, Rocket, RotateCcw } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { HtmlRenderer } from '@/components/common/HtmlRenderer'
@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useIpcListener } from '@/hooks/useIpc'
+import { useToast } from '@/hooks/useToast'
 import { type ProgressState, useUpdateConfigStore, useUpdateStore } from '@/hooks/useUpdate'
 
 interface UpdateSource {
@@ -54,14 +55,17 @@ export function UpdateDialog() {
   const _setProgress = useUpdateStore.use.setProgress()
   const updateInfo = useUpdateStore.use.versionInfo()
   const startDownload = useUpdateStore.use.startDownload()
-  const pauseDownload = useUpdateStore.use.pauseDownload()
-  const resumeDownload = useUpdateStore.use.resumeDownload()
-  const cancelDownload = useUpdateStore.use.cancelDownload()
+  const refreshRuntimeStatus = useUpdateStore.use.refreshRuntimeStatus()
+  const listBackups = useUpdateStore.use.listBackups()
+  const rollback = useUpdateStore.use.rollback()
   const reset = useUpdateStore.use.reset()
   const error = useUpdateStore.use.error()
   const handleError = useUpdateStore.use.handleError()
   const handleDownloadProgress = useUpdateStore.use.handleDownloadProgress()
   const handleDownloadReady = useUpdateStore.use.handleDownloadReady()
+  const runtime = useUpdateStore.use.runtime()
+  const backups = useUpdateStore.use.backups()
+  const { toast } = useToast()
   const [dialogOpen, setDialogOpen] = useState(false)
   const updateSource = useUpdateConfigStore(s => s.source)
   const setUpdateSource = useUpdateConfigStore(s => s.setSource)
@@ -73,6 +77,16 @@ export function UpdateDialog() {
       setDialogOpen(true)
     }
   }, [status])
+
+  useEffect(() => {
+    void refreshRuntimeStatus()
+  }, [refreshRuntimeStatus])
+
+  useEffect(() => {
+    if (dialogOpen && status === 'error' && runtime.capabilities.listBackups) {
+      void listBackups().catch(() => {})
+    }
+  }, [dialogOpen, status, runtime.capabilities.listBackups, listBackups])
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
@@ -86,20 +100,21 @@ export function UpdateDialog() {
   }
 
   const handleStartDownload = useMemoizedFn(() => {
-    const actualUpdateSource = updateSource === 'custom' ? customUpdateSource : updateSource
-    startDownload(actualUpdateSource)
+    startDownload()
   })
 
-  const handlePauseResume = useMemoizedFn(() => {
-    if (status === 'paused') {
-      resumeDownload()
-    } else if (status === 'downloading') {
-      pauseDownload()
+  const handleRollbackLatest = useMemoizedFn(async () => {
+    const latestBackup = backups[0]
+    if (!latestBackup) {
+      toast.error('当前没有可用备份')
+      return
     }
-  })
-
-  const handleCancel = useMemoizedFn(() => {
-    cancelDownload()
+    const success = await rollback(latestBackup.version)
+    if (success) {
+      toast.success(`已回滚到备份版本 ${latestBackup.version}，建议重新启动应用`)
+    } else {
+      toast.error('回滚失败，请查看日志')
+    }
   })
 
   useIpcListener(IPC_CHANNELS.updater.downloadProgress, (info: ProgressState | any) => {
@@ -124,9 +139,6 @@ export function UpdateDialog() {
   }
 
   const isDownloading = status === 'downloading' || status === 'preparing'
-  const isPaused = status === 'paused'
-  const canPauseResume = status === 'downloading' || status === 'paused'
-  const canCancel = status === 'downloading' || status === 'paused' || status === 'preparing'
 
   const buttonContent = useMemoizedFn(() => {
     if (status === 'error') {
@@ -142,7 +154,7 @@ export function UpdateDialog() {
       }
       return (
         <div className="flex gap-2">
-          <Button onClick={handleStartDownload} variant="default">
+          <Button onClick={handleStartDownload} variant="default" disabled={!runtime.canUpdate}>
             <RotateCcw className="mr-2 h-4 w-4" />
             重试
           </Button>
@@ -152,7 +164,11 @@ export function UpdateDialog() {
 
     if (status === 'ready') {
       return (
-        <Button onClick={quitAndInstall} variant="default">
+        <Button
+          onClick={quitAndInstall}
+          variant="default"
+          disabled={!runtime.capabilities.quitAndInstall}
+        >
           <Rocket className="mr-2 h-4 w-4" />
           马上安装
         </Button>
@@ -169,7 +185,11 @@ export function UpdateDialog() {
     }
 
     return (
-      <Button onClick={handleStartDownload} variant="default">
+      <Button
+        onClick={handleStartDownload}
+        variant="default"
+        disabled={!runtime.capabilities.startDownload}
+      >
         <Download className="mr-2 h-4 w-4" />
         立即更新
       </Button>
@@ -179,13 +199,13 @@ export function UpdateDialog() {
   const isCustom = updateSource === 'custom'
 
   const renderProgressInfo = () => {
-    if (!isDownloading && !isPaused) return null
+    if (!isDownloading) return null
 
     return (
       <div className="space-y-3 p-4 bg-muted/50 rounded-lg">
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground">
-            {status === 'preparing' ? '准备中...' : status === 'paused' ? '已暂停' : '下载中'}
+            {status === 'preparing' ? '准备中...' : '下载中'}
           </span>
           <span className="font-medium">{Math.round(progress.percent)}%</span>
         </div>
@@ -196,47 +216,15 @@ export function UpdateDialog() {
           <span>
             {formatBytes(progress.transferred)} / {formatBytes(progress.total)}
           </span>
-          <span>
-            {isPaused
-              ? '已暂停'
-              : `${formatSpeed(progress.speed)} · 剩余 ${formatEta(progress.eta)}`}
-          </span>
+          <span>{`${formatSpeed(progress.speed)} · 剩余 ${formatEta(progress.eta)}`}</span>
         </div>
-
-        {canPauseResume && (
-          <div className="flex gap-2 pt-2">
-            <Button size="sm" variant="outline" onClick={handlePauseResume} className="flex-1">
-              {isPaused ? (
-                <>
-                  <Play className="mr-1 h-3 w-3" />
-                  继续
-                </>
-              ) : (
-                <>
-                  <Pause className="mr-1 h-3 w-3" />
-                  暂停
-                </>
-              )}
-            </Button>
-            {canCancel && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleCancel}
-                className="flex-1 text-destructive hover:text-destructive"
-              >
-                <X className="mr-1 h-3 w-3" />
-                取消
-              </Button>
-            )}
-          </div>
-        )}
       </div>
     )
   }
 
   const renderErrorInfo = () => {
     if (status !== 'error') return null
+    const latestBackup = backups[0]
 
     return (
       <div className="space-y-3 p-4 bg-destructive/10 border border-destructive/30 rounded-lg">
@@ -249,6 +237,30 @@ export function UpdateDialog() {
         </ScrollArea>
         {error?.downloadURL && (
           <p className="text-xs text-muted-foreground">可点击下方按钮通过浏览器下载更新包</p>
+        )}
+
+        {!runtime.canUpdate && (
+          <div className="text-xs text-muted-foreground">
+            当前平台或运行环境仅支持查看更新状态，不支持下载安装流程。
+          </div>
+        )}
+
+        {runtime.capabilities.rollback && (
+          <div className="pt-2 border-t border-destructive/20">
+            <div className="text-xs text-muted-foreground mb-2">
+              {latestBackup
+                ? `可回滚到最近备份版本 ${latestBackup.version}`
+                : '当前没有可用备份，无法执行回滚'}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!latestBackup}
+              onClick={handleRollbackLatest}
+            >
+              回滚到最近备份
+            </Button>
+          </div>
         )}
       </div>
     )

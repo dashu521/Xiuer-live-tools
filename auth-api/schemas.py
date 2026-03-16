@@ -104,6 +104,7 @@ class UserCapabilitiesOut(BaseModel):
 
 
 class UserStatusResponse(BaseModel):
+    user_id: str
     username: str
     status: str = "active"
     plan: str = "free"

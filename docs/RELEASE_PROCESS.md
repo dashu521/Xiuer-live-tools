@@ -51,7 +51,7 @@
 │  ├─ 执行 release:guard          [自动] 阻断检查                 │
 │  ├─ 执行 release                [自动] 构建 macOS 安装包        │
 │  ├─ 执行 release:notes          [自动] 生成 Release Notes       │
-│  └─ 执行 release:upload:mac     [自动] 上传 Mac 产物            │
+│  └─ 执行 upload:mac             [自动] 上传 Mac 产物            │
 │                              ↓                                  │
 │  第二阶段: npm run publish:confirm                               │
 │  ├─ 检查 git 状态               [自动] 确认工作区干净           │
@@ -174,7 +174,7 @@ npm run release
 #### 步骤 3：本地测试（人工）
 
 ```bash
-open "release/1.2.1"  # 替换为实际版本号
+open "release/1.3.3"  # 替换为实际版本号
 ```
 
 安装并测试 macOS 安装包。
@@ -185,13 +185,13 @@ open "release/1.2.1"  # 替换为实际版本号
 npm run release:notes
 ```
 
-自动生成 `release-notes/v1.2.1.md`，包含分类的更新日志。
+自动生成 `release-notes/v1.3.3.md`，包含分类的更新日志。
 
 #### 步骤 5：推送 Tag（人工）
 
 ```bash
-git tag v1.2.1
-git push origin v1.2.1
+git tag v1.3.3
+git push origin v1.3.3
 ```
 
 推送 tag 后自动触发：
@@ -203,7 +203,7 @@ git push origin v1.2.1
 等待 Windows 构建完成后，执行：
 
 ```bash
-npm run release:upload:mac
+npm run upload:mac
 ```
 
 自动上传 Mac 产物到同一 Release。
@@ -216,11 +216,11 @@ npm run release:upload:mac
 
 | 文件 | 来源 | 上传方式 |
 |------|------|----------|
-| `Xiuer-Live-Assistant_1.2.1_macos_x64.dmg` | 本机构建 | `npm run release:upload:mac` |
-| `Xiuer-Live-Assistant_1.2.1_macos_arm64.dmg` | 本机构建 | `npm run release:upload:mac` |
-| `Xiuer-Live-Assistant_1.2.1_win-x64.exe` | GitHub Actions | 自动上传 |
-| `Xiuer-Live-Assistant_1.2.1_win-x64.zip` | GitHub Actions | 自动上传 |
-| `latest-mac.yml` | 本机构建 | `npm run release:upload:mac` |
+| `Xiuer-Live-Assistant_1.3.3_macos_x64.dmg` | 本机构建 | `npm run upload:mac` |
+| `Xiuer-Live-Assistant_1.3.3_macos_arm64.dmg` | 本机构建 | `npm run upload:mac` |
+| `Xiuer-Live-Assistant_1.3.3_win-x64.exe` | GitHub Actions | 自动上传 |
+| `Xiuer-Live-Assistant_1.3.3_win-x64.zip` | GitHub Actions | 自动上传 |
+| `latest-mac.yml` | 本机构建 | `npm run upload:mac` |
 | `latest.yml` | GitHub Actions | 自动上传 |
 | `*.blockmap` | 自动 | 自动上传 |
 
@@ -235,7 +235,7 @@ npm run release:upload:mac
 **解决方案**：
 ```bash
 git add .
-git commit -m "chore: prepare release v1.2.1"
+git commit -m "chore: prepare release v1.3.3"
 ```
 
 ### 2. 未设置 VITE_AUTH_API_BASE_URL
@@ -326,8 +326,8 @@ Windows 构建只能通过以下方式触发：
 
 1. **推送 Tag**：
    ```bash
-   git tag v1.2.1
-   git push origin v1.2.1
+   git tag v1.3.3
+   git push origin v1.3.3
    ```
 
 2. **手动触发**：
@@ -387,12 +387,12 @@ npm run release:notes
 release-notes/vX.X.X.md
 ```
 
-例如：`release-notes/v1.2.1.md`
+例如：`release-notes/v1.3.3.md`
 
 ### 文件结构
 
 ```markdown
-# 秀儿直播助手 v1.2.1
+# 秀儿直播助手 v1.3.3
 
 ## 📋 更新概览
 
@@ -415,18 +415,18 @@ release-notes/vX.X.X.md
 
 **方式 1：复制粘贴**
 ```bash
-cat release-notes/v1.2.1.md
+cat release-notes/v1.3.3.md
 # 复制内容到 GitHub Release 页面
 ```
 
 **方式 2：命令行更新**
 ```bash
-gh release edit v1.2.1 --notes-file release-notes/v1.2.1.md
+gh release edit v1.3.3 --notes-file release-notes/v1.3.3.md
 ```
 
 **方式 3：创建 Release 时直接指定**
 ```bash
-gh release create v1.2.1 --notes-file release-notes/v1.2.1.md
+gh release create v1.3.3 --notes-file release-notes/v1.3.3.md
 ```
 
 ### 提交信息规范建议
@@ -464,4 +464,4 @@ git commit -m "chore(release): 添加一键发布脚本"
 ---
 
 **最后更新**：2025-03-11
-**版本**：v1.2.1
+**版本**：v1.3.3

@@ -141,6 +141,13 @@ describe('IPC 通道契约测试', () => {
       expect(IPC_CHANNELS.app).toBeDefined()
       expect(IPC_CHANNELS.app.openLogFolder).toBe('app:openLogFolder')
     })
+
+    it('应包含更新通道', () => {
+      expect(IPC_CHANNELS.updater).toBeDefined()
+      expect(IPC_CHANNELS.updater.getStatus).toBe('updater:getStatus')
+      expect(IPC_CHANNELS.updater.listBackups).toBe('updater:listBackups')
+      expect(IPC_CHANNELS.updater.rollback).toBe('updater:rollback')
+    })
   })
 
   describe('通道命名规范', () => {

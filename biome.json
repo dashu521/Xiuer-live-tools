@@ -16,6 +16,8 @@
       "!**/build",
       "!**/.vscode",
       "!**/.agents",
+      "!**/.venv",
+      "!**/logs",
       "!**/docs/archive",
       "!**/*.html",
       "!changelog.config.js",

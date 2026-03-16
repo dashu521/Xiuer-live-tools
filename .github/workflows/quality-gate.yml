@@ -69,6 +69,7 @@ jobs:
         working-directory: ./auth-api
         run: |
           python -m py_compile main.py config.py deps.py models.py schemas.py sms_service.py
+          python -m py_compile auth_feature_rules.py subscription_rules.py
           find routers -name "*.py" -exec python -m py_compile {} \;
 
       # FastAPI 应用能否正常导入（冒烟测试）
@@ -79,3 +80,9 @@ jobs:
         env:
           JWT_SECRET: test-secret-for-ci
           DATABASE_URL: sqlite:///tmp/test.db
+
+      # 稳定单测
+      - name: Run Python unit tests
+        working-directory: ./auth-api
+        run: |
+          python -m unittest test_auth_feature_rules.py test_subscription_rules.py

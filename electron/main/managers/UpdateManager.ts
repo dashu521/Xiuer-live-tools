@@ -149,7 +149,12 @@ function getAssetsURL(): string {
 }
 
 interface Updater {
-  checkForUpdates(source: string): Promise<void>
+  checkForUpdates(source: string): Promise<{
+    update: boolean
+    version: string
+    newVersion: string
+    releaseNote?: string
+  } | null>
   downloadUpdate(): void
   quitAndInstall(): void
 }
@@ -158,13 +163,13 @@ class UpdateManager {
   constructor(private updater: Updater) {}
 
   public async checkForUpdates(source = 'github') {
-    await this.updater.checkForUpdates(source)
+    return await this.updater.checkForUpdates(source)
   }
 
-  public async checkUpdateVersion() {
+  public async checkUpdateVersion(source = 'github') {
     // 首发版：启用更新检查
     logger.info('检查更新版本...')
-    return this.checkForUpdates('github')
+    return await this.checkForUpdates(source)
   }
 
   public async silentCheckForUpdate() {
@@ -259,12 +264,21 @@ class WindowsUpdater implements Updater {
     // 首发版：启用 GitHub Releases 自动更新
     logger.info('正在从 GitHub Releases 检查更新...')
     try {
-      return await this.autoUpdater.checkForUpdates()
+      const result = await this.autoUpdater.checkForUpdates()
+      const newVersion = result?.updateInfo?.version || app.getVersion()
+      const update = semver.gt(newVersion, app.getVersion())
+      return {
+        update,
+        version: app.getVersion(),
+        newVersion,
+        releaseNote: update ? await fetchChangelog() : undefined,
+      }
     } catch (error) {
-      if (isAppQuitting) return
+      if (isAppQuitting) return null
       const message = `检查 GitHub 更新失败：${errorMessage(error).split('\n')[0]}`
       logger.error(message)
       windowManager.send(IPC_CHANNELS.updater.updateError, { message })
+      return null
     }
   }
 
@@ -283,12 +297,19 @@ class WindowsUpdater implements Updater {
       url: `${sourceURL}${assetsURL}`,
     })
     try {
-      return await this.autoUpdater.checkForUpdates()
+      const result = await this.autoUpdater.checkForUpdates()
+      const newVersion = result?.updateInfo?.version || app.getVersion()
+      return {
+        update: semver.gt(newVersion, app.getVersion()),
+        version: app.getVersion(),
+        newVersion,
+      }
     } catch (error) {
-      if (isAppQuitting) return
+      if (isAppQuitting) return null
       const message = `网络错误：${errorMessage(error).split('\n')[0]}`
       const downloadURL = `${sourceURL}${assetsURL}${PRODUCT_NAME}_${latestVersion}_windows_x64.exe`
       windowManager.send(IPC_CHANNELS.updater.updateError, { message, downloadURL })
+      return null
     }
   }
 
@@ -304,7 +325,7 @@ class WindowsUpdater implements Updater {
         if (!this.autoUpdater.forceDevUpdateConfig) {
           const message = '更新功能仅在应用打包后可用。'
           windowManager.send(IPC_CHANNELS.updater.updateError, { message })
-          return
+          return null
         }
         // 开发环境下的更新，要先启动 slow-server (pnpm slow-server)
         // await this.autoUpdater.checkForUpdates()
@@ -313,14 +334,15 @@ class WindowsUpdater implements Updater {
       logger.debug(`检查更新中…… (更新源: ${source})`)
 
       if (source === 'github') {
-        await this.checkUpdateForGithub()
-      } else {
-        await this.checkUpdateForGhProxy(source)
+        return await this.checkUpdateForGithub()
       }
+
+      return await this.checkUpdateForGhProxy(source)
     } catch (error) {
       const message = `检查更新时发生错误: ${errorMessage(error)}`
       logger.error(message)
       windowManager.send(IPC_CHANNELS.updater.updateError, { message })
+      return null
     }
   }
 
@@ -357,18 +379,46 @@ class MacOSUpdater implements Updater {
         throw new Error(message)
       }
       this.versionInfo = latestYml
-      if (semver.lt(latestYml.version, app.getVersion())) {
+      const hasUpdate = semver.gt(latestYml.version, app.getVersion())
+      if (!hasUpdate) {
         logger.info(`${app.getVersion()} 已经是最新版本，无需更新`)
-        return
+        if (!isAppQuitting) {
+          windowManager.send(IPC_CHANNELS.updater.updateAvailable, {
+            update: false,
+            version: app.getVersion(),
+            newVersion: latestYml.version,
+          })
+        }
+        return {
+          update: false,
+          version: app.getVersion(),
+          newVersion: latestYml.version,
+        }
+      }
+
+      const releaseNote = source === 'github' ? await fetchChangelog() : undefined
+      if (!isAppQuitting) {
+        windowManager.send(IPC_CHANNELS.updater.updateAvailable, {
+          update: true,
+          version: app.getVersion(),
+          newVersion: latestYml.version,
+          releaseNote,
+        })
+      }
+
+      return {
+        update: true,
+        version: app.getVersion(),
+        newVersion: latestYml.version,
+        releaseNote,
       }
     } catch (err) {
-      if (isAppQuitting) return
+      if (isAppQuitting) return null
       const message = errorMessage(err)
       logger.error(message)
       windowManager.send(IPC_CHANNELS.updater.updateError, { message: message })
-      return
+      return null
     }
-    this.downloadUpdate()
   }
 
   public async downloadUpdate() {

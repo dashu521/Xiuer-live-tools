@@ -9,7 +9,12 @@ import { useAccounts } from '@/hooks/useAccounts'
 import { useAuthInit } from '@/hooks/useAuth'
 import { useLiveControlStore } from '@/hooks/useLiveControl'
 import { useToast } from '@/hooks/useToast'
-import { useAuthCheckDone, useIsAuthenticated, useIsOffline } from '@/stores/authStore'
+import {
+  useAuthCheckDone,
+  useAuthStore,
+  useIsAuthenticated,
+  useIsOffline,
+} from '@/stores/authStore'
 import { useGateStore } from '@/stores/gateStore'
 import { usePlatformPreferenceStore } from '@/stores/platformPreferenceStore'
 
@@ -24,6 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isOffline = useIsOffline()
   const accessContext = useAccessContext()
   const { runPendingActionAndClear } = useGateStore()
+  const refreshUserStatus = useAuthStore(s => s.refreshUserStatus)
   const { toast } = useToast()
   const trialExpiredModalShownRef = useRef(false)
 
@@ -73,6 +79,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const handleUserCenterOpen = () => {
       setShowUserCenter(true)
+      void refreshUserStatus().catch((error: unknown) => {
+        console.warn(
+          '[AuthProvider] Failed to refresh user status before opening user center:',
+          error,
+        )
+      })
     }
 
     window.addEventListener('auth:required', handleAuthRequired as EventListener)
@@ -93,7 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('auth:account-disabled', handleAccountDisabled as EventListener)
       window.removeEventListener('auth:user-center', handleUserCenterOpen as EventListener)
     }
-  }, [runPendingActionAndClear, toast])
+  }, [refreshUserStatus, runPendingActionAndClear, toast])
 
   // 试用已结束：进入主界面后自动弹一次试用弹窗
   useEffect(() => {

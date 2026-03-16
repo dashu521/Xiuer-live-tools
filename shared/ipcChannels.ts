@@ -140,9 +140,12 @@ export const IPC_CHANNELS = {
     saveState: 'chrome:saveState',
   },
   updater: {
+    getStatus: 'updater:getStatus',
     checkUpdate: 'updater:checkUpdate',
     updateAvailable: 'updater:updateAvailable',
     startDownload: 'updater:startDownload',
+    listBackups: 'updater:listBackups',
+    rollback: 'updater:rollback',
     downloadProgress: 'updater:downloadProgress',
     updateError: 'updater:updateError',
     updateDownloaded: 'updater:updateDownloaded',

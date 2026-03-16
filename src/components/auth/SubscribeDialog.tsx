@@ -1,5 +1,5 @@
 /**
- * 订阅/试用弹窗：免费试用 3 天（服务端），不接支付。支持"试用已结束"模式。
+ * 订阅/试用弹窗：免费试用 3 天（服务端），不接支付。支持“试用已结束”模式。
  * 方案三变体：开通试用后同步到本地 trialStore
  */
 import { Gift, Loader2 } from 'lucide-react'
@@ -108,8 +108,8 @@ export function SubscribeDialog({
             {trialExpired
               ? '试用已经结束，升级会员后就能继续使用全部功能'
               : actionName
-                ? '开通免费试用或升级会员后，就可以使用这个功能了'
-                : '免费试用已开通，接下来 3 天可以体验全部功能'}
+                ? '开通免费试用 3 天或升级会员后，就可以使用这个功能了'
+                : '免费试用 3 天开通后，就可以体验全部功能'}
           </DialogDescription>
           {trialError && (
             <p className="text-sm text-destructive mt-2" role="alert">

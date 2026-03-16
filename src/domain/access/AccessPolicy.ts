@@ -200,14 +200,7 @@ export function canAddMoreLiveAccounts(context: AccessContext): AccessDecision {
   const planName = PLAN_TEXT_MAP[context.plan]
   const nextPlanName = requiredPlan ? PLAN_TEXT_MAP[requiredPlan] : ''
 
-  let reason = ''
-  if (context.plan === 'pro') {
-    reason = '当前专业版最多可添加 1 个直播账号。想添加更多账号，可以升级到 Pro Max。'
-  } else if (context.plan === 'pro_max') {
-    reason = '当前 Pro Max 最多可添加 3 个直播账号。想添加更多账号，可以升级到 Ultra。'
-  } else {
-    reason = `${planName}最多可添加 ${maxLiveAccounts} 个直播账号${requiredPlan ? `，升级到${nextPlanName}可以添加更多` : ''}`
-  }
+  const reason = `${planName}最多可添加 ${maxLiveAccounts} 个直播账号${requiredPlan ? `，升级到${nextPlanName}可以添加更多` : ''}`
 
   return {
     allowed: false,

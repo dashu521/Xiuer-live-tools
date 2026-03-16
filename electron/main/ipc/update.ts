@@ -1,19 +1,21 @@
-import { ipcMain } from 'electron'
+import { app, ipcMain } from 'electron'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { createLogger, isAppQuitting } from '#/logger'
+import { enhancedUpdateManager } from '#/managers/EnhancedUpdateManager'
+import { rollbackManager } from '#/managers/RollbackManager'
 import { updateManager } from '#/managers/UpdateManager'
 
 const logger = createLogger('update-ipc')
 
 export function setupUpdateIpcHandlers() {
   // 检查更新
-  ipcMain.handle(IPC_CHANNELS.updater.checkUpdate, async () => {
+  ipcMain.handle(IPC_CHANNELS.updater.checkUpdate, async (_, source?: string) => {
     if (isAppQuitting) {
       logger.warn('IPC: checkUpdate called during app quitting, ignored')
       return { error: '应用正在退出' }
     }
-    logger.info('IPC: checkUpdate called')
-    return await updateManager.checkUpdateVersion()
+    logger.info('IPC: checkUpdate called', { source: source || 'github' })
+    return await updateManager.checkUpdateVersion(source || 'github')
   })
 
   // 开始下载更新
@@ -24,6 +26,40 @@ export function setupUpdateIpcHandlers() {
     }
     logger.info('IPC: startDownload called')
     await updateManager.startDownload()
+  })
+
+  ipcMain.handle(IPC_CHANNELS.updater.listBackups, async () => {
+    logger.info('IPC: listBackups called')
+    if (!rollbackManager.isOperational()) {
+      return []
+    }
+    const backups = await enhancedUpdateManager.listBackups()
+    return backups.map(backup => ({
+      id: backup.id,
+      version: backup.version,
+      timestamp: backup.timestamp,
+      size: backup.size,
+    }))
+  })
+
+  ipcMain.handle(IPC_CHANNELS.updater.rollback, async (_, targetVersion?: string) => {
+    if (isAppQuitting) {
+      logger.warn('IPC: rollback called during app quitting, ignored')
+      return { success: false, error: '应用正在退出' }
+    }
+    if (!rollbackManager.isOperational()) {
+      return { success: false, error: '当前运行环境不支持回滚' }
+    }
+    logger.info('IPC: rollback called', { targetVersion: targetVersion || 'latest' })
+    try {
+      const success = await enhancedUpdateManager.rollback(targetVersion)
+      return success ? { success: true } : { success: false, error: '回滚失败' }
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : '回滚失败',
+      }
+    }
   })
 
   // 退出并安装更新
@@ -37,11 +73,24 @@ export function setupUpdateIpcHandlers() {
   })
 
   // 获取更新状态（供前端查询）
-  ipcMain.handle('update:getStatus', async () => {
+  ipcMain.handle(IPC_CHANNELS.updater.getStatus, async () => {
+    const packagedCanUpdate =
+      (process.platform === 'win32' || process.platform === 'darwin') && app.isPackaged
+    const backupCapabilities = rollbackManager.isOperational()
+
     return {
       platform: process.platform,
-      canUpdate: process.platform === 'win32' || process.platform === 'darwin',
-      isQuitting: isAppQuitting,
+      canUpdate: packagedCanUpdate,
+      capabilities: {
+        checkUpdate: packagedCanUpdate,
+        startDownload: packagedCanUpdate,
+        quitAndInstall: packagedCanUpdate,
+        pauseDownload: false,
+        resumeDownload: false,
+        cancelDownload: false,
+        rollback: backupCapabilities,
+        listBackups: backupCapabilities,
+      },
     }
   })
 }

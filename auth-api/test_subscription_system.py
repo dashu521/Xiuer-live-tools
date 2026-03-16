@@ -8,15 +8,23 @@
 5. 档位升级逻辑
 """
 
-import sqlite3
-import uuid
-import time
-from datetime import datetime, timedelta
+from pathlib import Path
 import secrets
-import re
+import sqlite3
+import time
+import uuid
+from datetime import datetime
 
-# 测试数据库路径
-TEST_DB_PATH = '/Users/xiuer/TRAE-CN/tasi-live-supertool/auth-api/data/test_users.db'
+# 测试数据库路径：固定在当前仓库 auth-api/data/ 下，避免依赖旧仓库绝对路径
+TEST_DB_PATH = Path(__file__).resolve().parent / 'data' / 'test_users.db'
+
+
+def setup_function(_function):
+    """每个 pytest 用例前都初始化一份干净的测试数据库。"""
+    TEST_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if TEST_DB_PATH.exists():
+        TEST_DB_PATH.unlink()
+    init_test_database()
 
 def init_test_database():
     """初始化测试数据库"""

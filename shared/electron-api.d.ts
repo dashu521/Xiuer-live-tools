@@ -341,12 +341,50 @@ export interface IpcChannels {
   ) => { synced: number }
 
   // Updater
-  [IPC_CHANNELS.updater.checkUpdate]: () => Promise<
-    { latestVersion: string; currentVersion: string; releaseNote?: string } | undefined
+  [IPC_CHANNELS.updater.getStatus]: () => Promise<{
+    platform: NodeJS.Platform
+    canUpdate: boolean
+    capabilities: {
+      checkUpdate: boolean
+      startDownload: boolean
+      quitAndInstall: boolean
+      pauseDownload: boolean
+      resumeDownload: boolean
+      cancelDownload: boolean
+      rollback: boolean
+      listBackups: boolean
+    }
+  }>
+  [IPC_CHANNELS.updater.listBackups]: () => Promise<
+    Array<{
+      id: string
+      version: string
+      timestamp: number
+      size: number
+    }>
   >
-  [IPC_CHANNELS.updater.startDownload]: (source: string) => void
+  [IPC_CHANNELS.updater.rollback]: (targetVersion?: string) => Promise<{
+    success: boolean
+    error?: string
+  }>
+  [IPC_CHANNELS.updater.checkUpdate]: (source?: string) => Promise<
+    | {
+        update: boolean
+        version: string
+        newVersion: string
+        releaseNote?: string
+      }
+    | undefined
+    | null
+  >
+  [IPC_CHANNELS.updater.startDownload]: () => void
   [IPC_CHANNELS.updater.quitAndInstall]: () => void
-  [IPC_CHANNELS.updater.updateAvailable]: (info: VersionInfo) => void
+  [IPC_CHANNELS.updater.updateAvailable]: (info: {
+    update: boolean
+    version: string
+    newVersion: string
+    releaseNote?: string
+  }) => void
   [IPC_CHANNELS.updater.updateError]: (error: ErrorType) => void
   [IPC_CHANNELS.updater.downloadProgress]: (progress: ProgressInfo) => void
   [IPC_CHANNELS.updater.updateDownloaded]: (event?: UpdateDownloadedEvent) => void

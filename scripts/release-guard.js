@@ -136,15 +136,32 @@ function checkGit() {
   // 1.3 检查 remote 数量
   try {
     const remotes = exec('git remote').split('\n').filter(r => r.trim());
-    if (remotes.length === 1 && remotes[0] === 'origin') {
-      log('Remote 配置正确（仅 origin）', 'PASS');
+    const allowedRemotes = new Set(['origin', 'backup']);
+    const unexpectedRemotes = remotes.filter(remote => !allowedRemotes.has(remote));
+    const hasOrigin = remotes.includes('origin');
+
+    if (hasOrigin && unexpectedRemotes.length === 0) {
+      if (remotes.length === 1) {
+        log('Remote 配置正确（仅 origin）', 'PASS');
+      } else {
+        log(`Remote 配置可接受（${remotes.join(', ')}）`, 'PASS');
+        addInfo('Git', `检测到镜像 remote: ${remotes.join(', ')}`);
+      }
     } else {
       if (CI_MODE) {
         log(`发现 ${remotes.length} 个 remote`, 'INFO');
         addInfo('Git', `CI 环境 remote: ${remotes.join(', ')}`);
       } else {
-        log('Remote 配置错误', 'BLOCKER', `发现 ${remotes.length} 个 remote: ${remotes.join(', ')}`);
-        addBlocker('Git', 'Remote 配置错误', `发现 ${remotes.length} 个 remote`);
+        log(
+          'Remote 配置错误',
+          'BLOCKER',
+          `发现 ${remotes.length} 个 remote: ${remotes.join(', ')}${unexpectedRemotes.length > 0 ? `；未知 remote: ${unexpectedRemotes.join(', ')}` : ''}`,
+        );
+        addBlocker(
+          'Git',
+          'Remote 配置错误',
+          `发现 ${remotes.length} 个 remote，未知 remote: ${unexpectedRemotes.join(', ') || '无'}`,
+        );
       }
     }
   } catch (error) {

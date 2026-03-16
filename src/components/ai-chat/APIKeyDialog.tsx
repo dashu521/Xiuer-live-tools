@@ -222,11 +222,11 @@ const ApiKeyInput = memo(
             >
               {providerInfo.name}
             </a>
-            获取 API Key。您的密钥将被安全地存储在本地。
+            获取 API Key。您的密钥将加密保存在本机存储中。
           </p>
         )}
         {isCustom && (
-          <p className="text-xs text-muted-foreground">您的密钥将被安全地存储在本地。</p>
+          <p className="text-xs text-muted-foreground">您的密钥将加密保存在本机存储中。</p>
         )}
       </div>
     )

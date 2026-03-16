@@ -132,6 +132,6 @@ export interface GiftCardRedemptionResult {
     membershipDays: number
     newBalance: number
     newPlan: PlanType
-    newExpireAt: number | null
+    newExpireAt: string | null
   }
 }

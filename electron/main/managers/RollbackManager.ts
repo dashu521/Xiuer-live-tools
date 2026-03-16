@@ -6,8 +6,8 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  rmSync,
   statSync,
-  unlinkSync,
   writeFileSync,
 } from 'node:fs'
 import * as path from 'node:path'
@@ -37,7 +37,10 @@ const DEFAULT_CONFIG: RollbackConfig = {
   autoBackup: true,
 }
 
-const CRITICAL_FILES = ['app.asar', 'app.asar.unpacked', 'resources', 'locales']
+type BackupTarget = {
+  sourcePath: string
+  relativePath: string
+}
 
 class RollbackManager {
   private config: RollbackConfig
@@ -73,9 +76,19 @@ class RollbackManager {
       try {
         const data = readFileSync(indexPath, 'utf-8')
         const backups = JSON.parse(data) as BackupInfo[]
+        let removedStaleRecord = false
 
         for (const backup of backups) {
+          if (!existsSync(backup.backupPath)) {
+            removedStaleRecord = true
+            logger.warn(`Skipping stale backup record: ${backup.id}`)
+            continue
+          }
           this.backups.set(backup.id, backup)
+        }
+
+        if (removedStaleRecord) {
+          this.saveBackupIndex()
         }
 
         logger.info(`Loaded ${this.backups.size} backup records`)
@@ -83,6 +96,10 @@ class RollbackManager {
         logger.error('Failed to load backup index:', error)
       }
     }
+  }
+
+  isOperational(): boolean {
+    return app.isPackaged && !!this.config.backupDir && this.getBackupTargets().length > 0
   }
 
   private saveBackupIndex(): void {
@@ -97,6 +114,10 @@ class RollbackManager {
   }
 
   async createBackup(version: string): Promise<BackupInfo> {
+    if (!this.isOperational()) {
+      throw new Error('RollbackManager is not operational in current runtime')
+    }
+
     const backupId = this.generateBackupId(version)
     const backupPath = path.join(this.config.backupDir, backupId)
 
@@ -106,26 +127,17 @@ class RollbackManager {
       mkdirSync(backupPath, { recursive: true })
     }
 
-    const _appPath = app.getAppPath()
-    const packagedAppPath = path.dirname(app.getPath('exe'))
-
     const files: string[] = []
     let totalSize = 0
 
-    if (existsSync(packagedAppPath)) {
-      for (const file of CRITICAL_FILES) {
-        const filePath = path.join(packagedAppPath, file)
-
-        if (existsSync(filePath)) {
-          try {
-            const destPath = path.join(backupPath, file)
-            await this.copyPath(filePath, destPath)
-            files.push(file)
-            totalSize += await this.getPathSize(filePath)
-          } catch (error) {
-            logger.warn(`Failed to backup ${file}:`, error)
-          }
-        }
+    for (const target of this.getBackupTargets()) {
+      try {
+        const destPath = path.join(backupPath, target.relativePath)
+        await this.copyPath(target.sourcePath, destPath)
+        files.push(target.relativePath)
+        totalSize += await this.getPathSize(target.sourcePath)
+      } catch (error) {
+        logger.warn(`Failed to backup ${target.relativePath}:`, error)
       }
     }
 
@@ -149,6 +161,11 @@ class RollbackManager {
   }
 
   async restoreBackup(backupId: string): Promise<boolean> {
+    if (!this.isOperational()) {
+      logger.error('RollbackManager is not operational in current runtime')
+      return false
+    }
+
     const backup = this.backups.get(backupId)
 
     if (!backup) {
@@ -163,13 +180,12 @@ class RollbackManager {
 
     logger.info(`Restoring backup: ${backupId}`)
 
-    const _appPath = app.getAppPath()
-    const packagedAppPath = path.dirname(app.getPath('exe'))
+    const installRoot = this.getInstallRoot()
 
     try {
       for (const file of backup.files) {
         const sourcePath = path.join(backup.backupPath, file)
-        const destPath = path.join(packagedAppPath, file)
+        const destPath = path.join(installRoot, file)
 
         if (existsSync(sourcePath)) {
           if (existsSync(destPath)) {
@@ -299,19 +315,7 @@ class RollbackManager {
   }
 
   private async removePath(targetPath: string): Promise<void> {
-    const stats = statSync(targetPath)
-
-    if (stats.isDirectory()) {
-      const entries = readdirSync(targetPath)
-
-      for (const entry of entries) {
-        await this.removePath(path.join(targetPath, entry))
-      }
-
-      unlinkSync(targetPath)
-    } else {
-      unlinkSync(targetPath)
-    }
+    rmSync(targetPath, { recursive: true, force: true })
   }
 
   private async getPathSize(targetPath: string): Promise<number> {
@@ -348,6 +352,36 @@ class RollbackManager {
     }
 
     return `${size.toFixed(2)} ${units[unitIndex]}`
+  }
+
+  private getInstallRoot(): string {
+    const exeDir = path.dirname(app.getPath('exe'))
+    return process.platform === 'darwin' ? path.dirname(exeDir) : exeDir
+  }
+
+  private getBackupTargets(): BackupTarget[] {
+    const installRoot = this.getInstallRoot()
+    const candidates = [process.resourcesPath, path.join(installRoot, 'locales')]
+    const seenRelativePaths = new Set<string>()
+
+    return candidates
+      .filter(sourcePath => existsSync(sourcePath))
+      .map(sourcePath => ({
+        sourcePath,
+        relativePath: path.relative(installRoot, sourcePath),
+      }))
+      .filter(target => {
+        if (!target.relativePath || target.relativePath.startsWith('..')) {
+          return false
+        }
+
+        if (seenRelativePaths.has(target.relativePath)) {
+          return false
+        }
+
+        seenRelativePaths.add(target.relativePath)
+        return true
+      })
   }
 }
 

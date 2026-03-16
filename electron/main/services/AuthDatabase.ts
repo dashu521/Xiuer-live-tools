@@ -131,7 +131,7 @@ export class AuthDatabase {
       user.lastLogin,
       user.status,
       user.plan,
-      user.expire_at ? new Date(user.expire_at).toISOString() : null,
+      user.expire_at ?? null,
       user.deviceId,
       user.machineFingerprint,
     )
@@ -171,7 +171,7 @@ export class AuthDatabase {
     data: {
       balance?: number
       plan?: User['plan']
-      expire_at?: number | null
+      expire_at?: string | null
     },
   ): void {
     const updates: string[] = []
@@ -187,7 +187,7 @@ export class AuthDatabase {
     }
     if (data.expire_at !== undefined) {
       updates.push('expiry_date = ?')
-      values.push(data.expire_at ? new Date(data.expire_at).toISOString() : null)
+      values.push(data.expire_at ?? null)
     }
 
     if (updates.length > 0) {
@@ -271,7 +271,7 @@ export class AuthDatabase {
       lastLogin: row.last_login,
       status: row.status as User['status'],
       plan: row.license_type as User['plan'],
-      expire_at: row.expiry_date ? new Date(row.expiry_date).getTime() : null,
+      expire_at: row.expiry_date ?? null,
       deviceId: row.device_id,
       machineFingerprint: row.machine_fingerprint,
       balance: row.balance || 0,

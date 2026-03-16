@@ -22,6 +22,7 @@ export interface ExpiryInfo {
   date: Date | null
   isExpired: boolean
   isPermanent: boolean
+  displayText: string
 }
 
 export interface UserInfo {

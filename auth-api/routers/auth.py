@@ -182,6 +182,7 @@ def build_user_status_response(user: User, db: Optional[Session] = None) -> User
     )
 
     return UserStatusResponse(
+        user_id=user.id,
         username=username,
         status=user.status or "active",
         plan=plan,
@@ -480,7 +481,7 @@ def start_trial(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """POST /trial/start：为用户开通 7 天试用"""
+    """POST /trial/start：为用户开通 3 天试用"""
     # 检查用户是否已有有效订阅
     existing_sub = db.query(Subscription).filter(
         Subscription.user_id == current_user.id,
@@ -505,9 +506,9 @@ def start_trial(
             detail={"code": "trial_active", "message": "您已有有效试用"},
         )
     
-    # 创建试用记录（7天）
+    # 创建试用记录（3天）
     now_ts = int(time.time())
-    end_ts = now_ts + 7 * 24 * 60 * 60  # 7天后
+    end_ts = now_ts + 3 * 24 * 60 * 60  # 3天后
     
     db.execute(
         text("""

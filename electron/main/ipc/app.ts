@@ -21,8 +21,8 @@ function setupIpcHandlers() {
   })
 
   typedIpcMainHandle(IPC_CHANNELS.app.openExternal, (_, url: string) => {
-    // 验证 URL 格式，只允许 http 和 https 协议
-    const allowedProtocols = ['http:', 'https:']
+    // 验证 URL 格式，只允许常规网页与邮件协议
+    const allowedProtocols = ['http:', 'https:', 'mailto:']
     let parsedUrl: URL
     try {
       parsedUrl = new URL(url)
@@ -31,7 +31,7 @@ function setupIpcHandlers() {
     }
     if (!allowedProtocols.includes(parsedUrl.protocol)) {
       throw new Error(
-        `Protocol "${parsedUrl.protocol}" is not allowed. Only HTTP and HTTPS are supported.`,
+        `Protocol "${parsedUrl.protocol}" is not allowed. Only HTTP, HTTPS, and mailto are supported.`,
       )
     }
     shell.openExternal(url)
