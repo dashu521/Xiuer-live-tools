@@ -10,6 +10,7 @@ import semver from 'semver'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import * as yaml from 'yaml'
 import windowManager from '#/windowManager'
+import { getUpdateUrl } from '../../config/download'
 import { createLogger, isAppQuitting } from '../logger'
 import { errorMessage, sleep } from '../utils'
 
@@ -27,6 +28,9 @@ type LatestYml = {
 
 const _PRODUCT_OWNER = '秀儿直播助手'
 const PRODUCT_NAME = '秀儿直播助手'
+const OFFICIAL_UPDATE_SOURCE = 'official'
+const GITHUB_UPDATE_SOURCE = 'github'
+const OFFICIAL_UPDATE_URL = getUpdateUrl()
 
 const logger = createLogger('update')
 
@@ -143,9 +147,26 @@ async function fetchChangelog(): Promise<string | undefined> {
   }
 }
 
-// Get GitHub Release assets URL
-function getAssetsURL(): string {
+function getGitHubReleasePageURL(): string {
   return 'https://github.com/Xiuer-Chinese/Xiuer-live-tools/releases/latest'
+}
+
+function getGitHubReleaseDownloadURL(): string {
+  return 'https://github.com/Xiuer-Chinese/Xiuer-live-tools/releases/latest/download/'
+}
+
+function ensureTrailingSlash(url: string): string {
+  return url.endsWith('/') ? url : `${url}/`
+}
+
+function normalizeUpdateSource(source?: string): string {
+  const trimmed = source?.trim()
+
+  if (!trimmed || trimmed === OFFICIAL_UPDATE_SOURCE) {
+    return OFFICIAL_UPDATE_URL
+  }
+
+  return trimmed
 }
 
 interface Updater {
@@ -162,23 +183,20 @@ interface Updater {
 class UpdateManager {
   constructor(private updater: Updater) {}
 
-  public async checkForUpdates(source = 'github') {
-    return await this.updater.checkForUpdates(source)
+  public async checkForUpdates(source = OFFICIAL_UPDATE_SOURCE) {
+    return await this.updater.checkForUpdates(normalizeUpdateSource(source))
   }
 
-  public async checkUpdateVersion(source = 'github') {
-    // 首发版：启用更新检查
-    logger.info('检查更新版本...')
+  public async checkUpdateVersion(source = OFFICIAL_UPDATE_SOURCE) {
+    logger.info('检查更新版本...', { source: normalizeUpdateSource(source) })
     return await this.checkForUpdates(source)
   }
 
   public async silentCheckForUpdate() {
-    // 首发版：静默检查更新（启动时调用）
-    logger.info('启动时静默检查更新...')
+    logger.info('启动时静默检查更新...', { source: OFFICIAL_UPDATE_URL })
     try {
-      await this.checkForUpdates('github')
+      await this.checkForUpdates(OFFICIAL_UPDATE_SOURCE)
     } catch (error) {
-      // 静默检查失败不提示用户
       logger.warn('静默检查更新失败:', error)
     }
   }
@@ -282,7 +300,7 @@ class WindowsUpdater implements Updater {
     }
   }
 
-  private async checkUpdateForGhProxy(source: string) {
+  private async checkUpdateForGenericSource(source: string) {
     let sourceURL: URL
     try {
       sourceURL = new URL(source)
@@ -290,11 +308,9 @@ class WindowsUpdater implements Updater {
       const msg = `更新源设置错误，你的更新源为 ${source}`
       throw new Error(msg)
     }
-    const assetsURL = getAssetsURL()
-    // 自定义更新源
     this.autoUpdater.setFeedURL({
       provider: 'generic',
-      url: `${sourceURL}${assetsURL}`,
+      url: sourceURL.toString().replace(/\/+$/, ''),
     })
     try {
       const result = await this.autoUpdater.checkForUpdates()
@@ -307,7 +323,7 @@ class WindowsUpdater implements Updater {
     } catch (error) {
       if (isAppQuitting) return null
       const message = `网络错误：${errorMessage(error).split('\n')[0]}`
-      const downloadURL = `${sourceURL}${assetsURL}${PRODUCT_NAME}_${latestVersion}_windows_x64.exe`
+      const downloadURL = ensureTrailingSlash(sourceURL.toString())
       windowManager.send(IPC_CHANNELS.updater.updateError, { message, downloadURL })
       return null
     }
@@ -331,13 +347,14 @@ class WindowsUpdater implements Updater {
         // await this.autoUpdater.checkForUpdates()
         // return
       }
-      logger.debug(`检查更新中…… (更新源: ${source})`)
+      const normalizedSource = normalizeUpdateSource(source)
+      logger.debug(`检查更新中…… (更新源: ${normalizedSource})`)
 
-      if (source === 'github') {
+      if (normalizedSource === GITHUB_UPDATE_SOURCE) {
         return await this.checkUpdateForGithub()
       }
 
-      return await this.checkUpdateForGhProxy(source)
+      return await this.checkUpdateForGenericSource(normalizedSource)
     } catch (error) {
       const message = `检查更新时发生错误: ${errorMessage(error)}`
       logger.error(message)
@@ -357,20 +374,21 @@ class WindowsUpdater implements Updater {
 
 class MacOSUpdater implements Updater {
   private versionInfo: LatestYml | null = null
-  private assetsURL: string | null = null
+  private assetsBaseURL: string | null = null
   private savePath: string | null = null
-  private safeSource = ''
   /**
    * MacOS 如果使用 autoUpdater 需要提供 zip 文件，但是下载了 zip 之后又不能安装，因为没有签名
    * 所以干脆就手动下载 dmg 文件，下载完毕后退出应用，手动安装
    */
   public async checkForUpdates(source: string) {
-    // 先从 latest-mac.yml 中获取目标文件
     try {
-      const assetsURL = getAssetsURL()
-      this.safeSource = source === 'github' ? '' : new URL(source).href
-      this.assetsURL = assetsURL
-      const latestYmlURL = `${this.safeSource}${new URL('latest-mac.yml', this.assetsURL)}`
+      const normalizedSource = normalizeUpdateSource(source)
+      const assetsBaseURL =
+        normalizedSource === GITHUB_UPDATE_SOURCE
+          ? getGitHubReleaseDownloadURL()
+          : ensureTrailingSlash(new URL(normalizedSource).toString())
+      this.assetsBaseURL = assetsBaseURL
+      const latestYmlURL = new URL('latest-mac.yml', assetsBaseURL).href
       const ymlContent = (await net.fetch(latestYmlURL).then(res => res.text())) as string
       const latestYml = yaml.parse(ymlContent) as LatestYml
 
@@ -396,7 +414,8 @@ class MacOSUpdater implements Updater {
         }
       }
 
-      const releaseNote = source === 'github' ? await fetchChangelog() : undefined
+      const releaseNote =
+        normalizedSource === GITHUB_UPDATE_SOURCE ? await fetchChangelog() : undefined
       if (!isAppQuitting) {
         windowManager.send(IPC_CHANNELS.updater.updateAvailable, {
           update: true,
@@ -455,7 +474,7 @@ class MacOSUpdater implements Updater {
           return
         }
       }
-      fileUrl = `${this.safeSource}${new URL(setupFile.url, this.assetsURL!)}`
+      fileUrl = new URL(setupFile.url, this.assetsBaseURL!).href
       const resp = await net.fetch(fileUrl)
       if (!resp.ok) {
         const message = `网络错误: ${resp.statusText}`

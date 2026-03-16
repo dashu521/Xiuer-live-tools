@@ -1,6 +1,7 @@
 import { app, net } from 'electron'
 import semver from 'semver'
 import * as yaml from 'yaml'
+import { getUpdateUrl } from '../../config/download'
 import { createLogger } from '../logger'
 import { errorMessage, sleep } from '../utils'
 
@@ -80,8 +81,12 @@ class VersionManager {
       const channel = this.currentChannel || this.channels[0]
       let checkUrl = channel.checkUrl
 
-      if (source && source !== 'github') {
-        checkUrl = source
+      if (source?.trim()) {
+        if (source === 'official') {
+          checkUrl = getUpdateUrl()
+        } else if (source !== 'github') {
+          checkUrl = source
+        }
       }
 
       if (!checkUrl) {

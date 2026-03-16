@@ -10,6 +10,7 @@ import semver from 'semver'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import * as yaml from 'yaml'
 import windowManager from '#/windowManager'
+import { getUpdateUrl } from '../../config/download'
 import { createLogger, isAppQuitting } from '../logger'
 import { errorMessage, sleep } from '../utils'
 import { cdnManager } from './CDNManager'
@@ -18,6 +19,9 @@ import { UpdateErrorCode, updateErrorHandler } from './UpdateErrorHandler'
 import { type VersionInfo, versionManager } from './VersionManager'
 
 const logger = createLogger('enhanced-update')
+const OFFICIAL_UPDATE_SOURCE = 'official'
+const GITHUB_UPDATE_SOURCE = 'github'
+const OFFICIAL_UPDATE_URL = getUpdateUrl()
 
 type LatestYml = {
   version: string
@@ -120,6 +124,24 @@ function getAssetsURL() {
   return 'https://github.com/Xiuer-Chinese/Xiuer-live-tools/releases/latest'
 }
 
+function getGitHubReleaseDownloadURL() {
+  return 'https://github.com/Xiuer-Chinese/Xiuer-live-tools/releases/latest/download/'
+}
+
+function ensureTrailingSlash(url: string) {
+  return url.endsWith('/') ? url : `${url}/`
+}
+
+function normalizeUpdateSource(source?: string) {
+  const trimmed = source?.trim()
+
+  if (!trimmed || trimmed === OFFICIAL_UPDATE_SOURCE) {
+    return OFFICIAL_UPDATE_URL
+  }
+
+  return trimmed
+}
+
 interface Updater {
   checkForUpdates(source: string): Promise<void>
   downloadUpdate(): void
@@ -217,11 +239,11 @@ class EnhancedUpdateManager {
     }
   }
 
-  async checkForUpdates(source = 'github'): Promise<void> {
+  async checkForUpdates(source = OFFICIAL_UPDATE_SOURCE): Promise<void> {
     const platformUpdater =
       platform() === 'darwin' ? new EnhancedMacOSUpdater() : new EnhancedWindowsUpdater()
 
-    await platformUpdater.checkForUpdates(source)
+    await platformUpdater.checkForUpdates(normalizeUpdateSource(source))
   }
 
   async startDownload(source?: string): Promise<void> {
@@ -448,9 +470,10 @@ class EnhancedWindowsUpdater implements Updater {
         }
       }
 
-      logger.debug(`Checking for updates, source: ${source}`)
+      const normalizedSource = normalizeUpdateSource(source)
+      logger.debug(`Checking for updates, source: ${normalizedSource}`)
 
-      if (source === 'github') {
+      if (normalizedSource === GITHUB_UPDATE_SOURCE) {
         // 使用默认 GitHub provider 配置（从 electron-builder.json 读取）
         await this.autoUpdater.checkForUpdates()
         return
@@ -458,15 +481,14 @@ class EnhancedWindowsUpdater implements Updater {
 
       let sourceURL: URL
       try {
-        sourceURL = new URL(source)
+        sourceURL = new URL(normalizedSource)
       } catch {
-        throw new Error(`更新源设置错误: ${source}`)
+        throw new Error(`更新源设置错误: ${normalizedSource}`)
       }
 
-      const assetsURL = getAssetsURL()
       this.autoUpdater.setFeedURL({
         provider: 'generic',
-        url: `${sourceURL}${assetsURL}`,
+        url: sourceURL.toString().replace(/\/+$/, ''),
       })
 
       await this.autoUpdater.checkForUpdates()
@@ -489,17 +511,19 @@ class EnhancedWindowsUpdater implements Updater {
 
 class EnhancedMacOSUpdater implements Updater {
   private versionInfo: LatestYml | null = null
-  private assetsURL: string | null = null
+  private assetsBaseURL: string | null = null
   private savePath: string | null = null
-  private safeSource = ''
 
   async checkForUpdates(source: string) {
     try {
-      const assetsURL = getAssetsURL()
-      this.safeSource = source === 'github' ? '' : new URL(source).href
-      this.assetsURL = assetsURL
+      const normalizedSource = normalizeUpdateSource(source)
+      const assetsBaseURL =
+        normalizedSource === GITHUB_UPDATE_SOURCE
+          ? getGitHubReleaseDownloadURL()
+          : ensureTrailingSlash(new URL(normalizedSource).toString())
+      this.assetsBaseURL = assetsBaseURL
 
-      const latestYmlURL = `${this.safeSource}${new URL('latest-mac.yml', this.assetsURL)}`
+      const latestYmlURL = new URL('latest-mac.yml', assetsBaseURL).href
       const ymlContent = (await net.fetch(latestYmlURL).then(res => res.text())) as string
       const latestYml = yaml.parse(ymlContent) as LatestYml
 
@@ -536,7 +560,8 @@ class EnhancedMacOSUpdater implements Updater {
           update: true,
           version: app.getVersion(),
           newVersion: latestYml.version,
-          releaseNote: source === 'github' ? await fetchChangelog() : undefined,
+          releaseNote:
+            normalizedSource === GITHUB_UPDATE_SOURCE ? await fetchChangelog() : undefined,
         })
       }
     } catch (err) {
@@ -582,7 +607,7 @@ class EnhancedMacOSUpdater implements Updater {
         }
       }
 
-      fileUrl = `${this.safeSource}${new URL(setupFile.url, this.assetsURL!)}`
+      fileUrl = new URL(setupFile.url, this.assetsBaseURL!).href
       const resp = await net.fetch(fileUrl)
 
       if (!resp.ok) {

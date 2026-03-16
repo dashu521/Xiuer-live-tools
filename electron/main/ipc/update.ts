@@ -6,6 +6,7 @@ import { rollbackManager } from '#/managers/RollbackManager'
 import { updateManager } from '#/managers/UpdateManager'
 
 const logger = createLogger('update-ipc')
+const DEFAULT_UPDATE_SOURCE = 'official'
 
 export function setupUpdateIpcHandlers() {
   // 检查更新
@@ -14,8 +15,8 @@ export function setupUpdateIpcHandlers() {
       logger.warn('IPC: checkUpdate called during app quitting, ignored')
       return { error: '应用正在退出' }
     }
-    logger.info('IPC: checkUpdate called', { source: source || 'github' })
-    return await updateManager.checkUpdateVersion(source || 'github')
+    logger.info('IPC: checkUpdate called', { source: source || DEFAULT_UPDATE_SOURCE })
+    return await updateManager.checkUpdateVersion(source || DEFAULT_UPDATE_SOURCE)
   })
 
   // 开始下载更新
