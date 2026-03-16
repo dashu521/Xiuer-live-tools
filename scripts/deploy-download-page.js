@@ -134,8 +134,11 @@ function main() {
     log(`目标路径: ${ossPath}`, 'info');
 
     try {
-      // 使用 -f 强制覆盖，设置正确的 Content-Type
-      exec(`${ossutilPath} cp "${pagePath}" "${ossPath}" -f --meta=Content-Type:text/html`);
+      // 强制覆盖，并为 HTML 显式关闭缓存，避免版本发布后页面仍显示旧版本。
+      exec(
+        `${ossutilPath} cp "${pagePath}" "${ossPath}" -f ` +
+        '--meta=Content-Type:text/html#Cache-Control:no-cache,no-store,must-revalidate'
+      );
       log('✅ 上传成功', 'success');
     } catch (error) {
       log(`❌ 上传失败: ${error.message}`, 'error');

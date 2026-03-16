@@ -209,7 +209,10 @@ function main() {
     log(`目标路径: ${ossPath}`, 'info');
 
     try {
-      exec(`${ossutilPath} cp "${pagePath}" "${ossPath}" -f --meta=Content-Type:text/html`);
+      exec(
+        `${ossutilPath} cp "${pagePath}" "${ossPath}" -f ` +
+        '--meta=Content-Type:text/html#Cache-Control:no-cache,no-store,must-revalidate'
+      );
       log('✅ 上传成功', 'success');
     } catch (error) {
       log(`❌ 上传失败: ${error.message}`, 'error');
