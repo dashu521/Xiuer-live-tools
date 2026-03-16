@@ -2,15 +2,31 @@
 
 // Inspired by react-hot-toast library
 import * as React from 'react'
-import type { ToastActionElement, ToastProps } from '@/components/ui/toast'
+import type { ToastProps } from '@/components/ui/toast'
 import { TOAST } from '@/constants'
 
-type ToasterToast = ToastProps & {
+type ToasterToast = Omit<ToastProps, 'title'> & {
   id: string
   title?: React.ReactNode
   description?: React.ReactNode
-  action?: ToastActionElement
+  action?: React.ReactNode
+  dedupeKey?: string
+  priority?: number
+  createdAt?: number
 }
+
+type ToastLevel = 'success' | 'error' | 'info' | 'warning'
+
+type ToastInput =
+  | string
+  | {
+      title?: React.ReactNode
+      description?: React.ReactNode
+      action?: React.ReactNode
+      duration?: number
+      dedupeKey?: string
+      priority?: number
+    }
 
 // eslint-disable-next-line unused-imports/no-unused-vars
 const actionTypes = {
@@ -69,13 +85,50 @@ function addToRemoveQueue(toastId: string) {
   toastTimeouts.set(toastId, timeout)
 }
 
+function sortToasts(toasts: ToasterToast[]) {
+  return [...toasts].sort(
+    (a, b) => (b.priority ?? 0) - (a.priority ?? 0) || (b.createdAt ?? 0) - (a.createdAt ?? 0),
+  )
+}
+
+function upsertToast(state: State, nextToast: ToasterToast): State {
+  const duplicate = nextToast.dedupeKey
+    ? state.toasts.find(toast => toast.dedupeKey === nextToast.dedupeKey)
+    : undefined
+
+  if (duplicate) {
+    if ((duplicate.priority ?? 0) > (nextToast.priority ?? 0)) {
+      return state
+    }
+
+    return {
+      ...state,
+      toasts: sortToasts(
+        state.toasts.map(toast =>
+          toast.id === duplicate.id
+            ? {
+                ...toast,
+                ...nextToast,
+                id: duplicate.id,
+                createdAt: toast.createdAt,
+                open: true,
+              }
+            : toast,
+        ),
+      ),
+    }
+  }
+
+  return {
+    ...state,
+    toasts: sortToasts([nextToast, ...state.toasts]).slice(0, TOAST.LIMIT),
+  }
+}
+
 export function reducer(state: State, action: Action): State {
   switch (action.type) {
     case 'ADD_TOAST':
-      return {
-        ...state,
-        toasts: [action.toast, ...state.toasts].slice(0, TOAST.LIMIT),
-      }
+      return upsertToast(state, action.toast)
 
     case 'UPDATE_TOAST':
       return {
@@ -151,6 +204,7 @@ function toast({ ...props }: Toast) {
       ...props,
       id,
       open: true,
+      createdAt: Date.now(),
       onOpenChange: open => {
         if (!open) dismiss()
       },
@@ -164,22 +218,36 @@ function toast({ ...props }: Toast) {
   }
 }
 
+function normalizeToastInput(
+  level: ToastLevel,
+  input: ToastInput,
+): Omit<Toast, 'variant'> & { variant: NonNullable<ToastProps['variant']> } {
+  const defaults = {
+    success: { variant: 'success' as const, duration: 3000, priority: 2 },
+    info: { variant: 'info' as const, duration: 3000, priority: 1 },
+    warning: { variant: 'warning' as const, duration: 4000, priority: 3 },
+    error: { variant: 'destructive' as const, duration: 5000, priority: 4 },
+  }
+
+  const base = defaults[level]
+  if (typeof input === 'string') {
+    return {
+      ...base,
+      description: input,
+    }
+  }
+
+  return {
+    ...base,
+    ...input,
+  }
+}
+
 const toasty = {
-  success: (message: string) =>
-    toast({
-      variant: 'default',
-      description: message,
-    }),
-  error: (message: string) =>
-    toast({
-      variant: 'destructive',
-      description: message,
-    }),
-  info: (message: string) =>
-    toast({
-      variant: 'default',
-      description: message,
-    }),
+  success: (input: ToastInput) => toast(normalizeToastInput('success', input)),
+  error: (input: ToastInput) => toast(normalizeToastInput('error', input)),
+  info: (input: ToastInput) => toast(normalizeToastInput('info', input)),
+  warning: (input: ToastInput) => toast(normalizeToastInput('warning', input)),
 }
 
 function useToasts() {

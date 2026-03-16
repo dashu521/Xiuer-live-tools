@@ -311,13 +311,24 @@ function KeywordReplyEditor({ rules, onSave }: { rules: Rule[]; onSave: (rules: 
       const rules = toRules(lines)
       onSave(rules)
       setSavedText(localText)
-      toast.success('保存成功')
+      toast.success({
+        title: '规则已保存',
+        description: '关键词回复规则已更新。',
+        dedupeKey: 'keyword-reply-save',
+      })
     } catch (e) {
       if (e instanceof Error) {
-        // 格式错误
-        toast.error(e.message)
+        toast.error({
+          title: '规则格式有误',
+          description: e.message,
+          dedupeKey: `keyword-reply-error:${e.message}`,
+        })
       } else {
-        toast.error(String(e))
+        toast.error({
+          title: '保存失败',
+          description: '规则保存失败，请检查输入格式后重试。',
+          dedupeKey: 'keyword-reply-save-failed',
+        })
       }
     }
   }

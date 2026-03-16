@@ -37,7 +37,11 @@ export function BrowserSetting() {
 
   const handleCookiesReset = () => {
     setStorageState('')
-    toast.success('登录状态已重置')
+    toast.info({
+      title: '登录状态已重置',
+      description: '已清除当前账号的浏览器登录状态。',
+      dedupeKey: 'chrome-storage-reset',
+    })
   }
 
   const handleSelectChrome = async () => {
@@ -46,10 +50,18 @@ export function BrowserSetting() {
       if (path) {
         setPath(path)
 
-        toast.success('Chrome 路径设置成功')
+        toast.success({
+          title: '浏览器路径已更新',
+          description: '已保存浏览器可执行文件路径。',
+          dedupeKey: 'chrome-path-selected',
+        })
       }
     } catch {
-      toast.error('选择 Chrome 路径失败')
+      toast.error({
+        title: '选择路径失败',
+        description: '未能读取浏览器路径，请重试。',
+        dedupeKey: 'chrome-path-select-failed',
+      })
     }
   }
 
@@ -60,12 +72,24 @@ export function BrowserSetting() {
       if (result) {
         setPath(result)
 
-        toast.success('已自动检测到路径')
+        toast.success({
+          title: '已自动检测到浏览器',
+          description: '浏览器路径已自动填入。',
+          dedupeKey: 'chrome-path-detected',
+        })
       } else {
-        toast.error('未检测到 Chrome，请确保 Chrome 已打开')
+        toast.warning({
+          title: '未检测到浏览器',
+          description: '请先打开 Chrome 或 Edge，再点击自动检测。',
+          dedupeKey: 'chrome-path-not-found',
+        })
       }
     } catch {
-      toast.error('检测 Chrome 路径失败')
+      toast.error({
+        title: '自动检测失败',
+        description: '浏览器路径检测失败，请稍后重试。',
+        dedupeKey: 'chrome-path-detect-failed',
+      })
     } finally {
       setIsDetecting(false)
     }

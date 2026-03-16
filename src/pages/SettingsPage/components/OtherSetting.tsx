@@ -37,7 +37,11 @@ function GiftCardDialog({ open, onOpenChange }: GiftCardDialogProps) {
 
   const handleRedeem = async () => {
     if (!code.trim()) {
-      toast.error('请输入兑换码')
+      toast.warning({
+        title: '请输入兑换码',
+        description: '填写有效兑换码后才能继续兑换。',
+        dedupeKey: 'gift-card-empty',
+      })
       return
     }
 
@@ -49,7 +53,11 @@ function GiftCardDialog({ open, onOpenChange }: GiftCardDialogProps) {
       if (apiResult.ok && apiResult.data) {
         setResult(apiResult.data)
         if (apiResult.data.success) {
-          toast.success('兑换成功！')
+          toast.success({
+            title: '兑换成功',
+            description: '会员权益已到账，正在同步最新状态。',
+            dedupeKey: 'gift-card-redeem-success',
+          })
           // 【修复】添加 await 确保状态刷新完成
           await useAuthStore.getState().refreshUserStatus()
           console.log('[GiftCard] User status refreshed after redeem')
@@ -94,13 +102,17 @@ function GiftCardDialog({ open, onOpenChange }: GiftCardDialogProps) {
 
           {result && (
             <div
-              className={`p-3 rounded-lg ${result.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}
+              className={`rounded-lg border p-3 ${
+                result.success
+                  ? 'border-emerald-500/25 bg-emerald-500/10'
+                  : 'border-destructive/25 bg-destructive/10'
+              }`}
             >
               {result.success ? (
                 <div className="space-y-1">
-                  <p className="font-medium text-green-800">兑换成功</p>
+                  <p className="font-medium text-emerald-100">兑换成功</p>
                   {result.data?.membershipType && (
-                    <p className="text-sm text-green-700">
+                    <p className="text-sm text-emerald-100/85">
                       已开通 {result.data.membershipType === 'pro' ? '专业版' : '试用'} 会员
                       {result.data.membershipDays ? `（${result.data.membershipDays} 天）` : ''}
                       {result.data.newExpiryDate
@@ -110,7 +122,7 @@ function GiftCardDialog({ open, onOpenChange }: GiftCardDialogProps) {
                   )}
                 </div>
               ) : (
-                <p className="text-red-700">{result.message}</p>
+                <p className="text-red-100">{result.message}</p>
               )}
             </div>
           )}
@@ -178,10 +190,18 @@ export function OtherSetting() {
       localStorage.removeItem(AUTH_LAST_IDENTIFIER_KEY)
       localStorage.removeItem(AUTH_ZUSTAND_PERSIST_KEY)
       clearTokensAndUnauth()
-      toast.success('已清除本地登录数据，下次打开登录框将为空')
+      toast.info({
+        title: '本地登录数据已清除',
+        description: '下次打开登录框时将显示为空。',
+        dedupeKey: 'clear-local-login-data',
+      })
     } catch (e) {
       console.error('Clear local login data failed:', e)
-      toast.error('清除失败，请重试')
+      toast.error({
+        title: '清除失败',
+        description: '本地登录数据清除失败，请重试。',
+        dedupeKey: 'clear-local-login-data-failed',
+      })
     }
   }
 

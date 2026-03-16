@@ -12,7 +12,7 @@ const ToastViewport = ({
 }: React.ComponentProps<typeof ToastPrimitives.Viewport>) => (
   <ToastPrimitives.Viewport
     className={cn(
-      'fixed top-0 left-1/2 -translate-x-1/2 z-100 flex max-h-screen w-[26.25rem] flex-col p-4',
+      'fixed top-0 left-1/2 z-100 flex max-h-screen w-[calc(100vw-1rem)] max-w-[26.25rem] -translate-x-1/2 flex-col p-2 sm:p-4',
       className,
     )}
     {...props}
@@ -26,12 +26,15 @@ const toastVariants = cva(
     variants: {
       variant: {
         default: 'border bg-background text-foreground',
+        success: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-50',
+        info: 'border-primary/25 bg-primary/10 text-foreground',
+        warning: 'border-amber-500/25 bg-amber-500/12 text-amber-50',
         destructive:
-          'destructive group border-destructive bg-background text-destructive-foreground',
+          'destructive group border-destructive/40 bg-destructive/12 text-destructive-foreground',
       },
     },
     defaultVariants: {
-      variant: 'default',
+      variant: 'info',
     },
   },
 )
@@ -65,9 +68,10 @@ const ToastClose = ({
 }: React.ComponentProps<typeof ToastPrimitives.Close>) => (
   <ToastPrimitives.Close
     className={cn(
-      'absolute right-1 top-1 rounded-md p-1 text-foreground/50 opacity-0 transition-opacity hover:text-foreground focus:opacity-100 focus:outline-hidden group-hover:opacity-100 group-[.destructive]:text-red-300 hover:group-[.destructive]:text-red-50',
+      'absolute right-2 top-2 rounded-md p-1 text-current/70 opacity-100 transition-opacity hover:text-current focus:opacity-100 focus:outline-hidden',
       className,
     )}
+    aria-label="关闭提示"
     toast-close=""
     {...props}
   >
@@ -91,7 +95,10 @@ const ToastDescription = ({
   className,
   ...props
 }: React.ComponentProps<typeof ToastPrimitives.Description>) => (
-  <ToastPrimitives.Description className={cn('text-sm opacity-90', className)} {...props} />
+  <ToastPrimitives.Description
+    className={cn('text-sm leading-5 opacity-90 whitespace-pre-line', className)}
+    {...props}
+  />
 )
 ToastDescription.displayName = ToastPrimitives.Description.displayName
 

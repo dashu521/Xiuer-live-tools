@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { getFriendlyErrorMessage } from '@/utils/errorMessages'
 import { useToast } from './useToast'
 
 /**
@@ -15,14 +16,17 @@ export function useErrorHandler() {
    */
   const handleError = useCallback(
     (error: unknown, message?: string) => {
-      const errorMessage = error instanceof Error ? error.message : String(error)
-      const displayMessage = message || errorMessage
+      const displayMessage = message || getFriendlyErrorMessage(error)
 
       // 记录错误到控制台
       console.error('错误:', error)
 
       // 显示错误提示给用户
-      toast.error(displayMessage)
+      toast.error({
+        title: '操作失败',
+        description: displayMessage,
+        dedupeKey: `error-handler:${displayMessage}`,
+      })
     },
     [toast],
   )

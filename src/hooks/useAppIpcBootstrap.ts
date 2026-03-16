@@ -157,7 +157,11 @@ function useLiveControlIpcSync() {
     })
 
     if (reason && !reasonStr.includes('用户主动断开')) {
-      toast.error(getFriendlyErrorMessage(reason))
+      toast.error({
+        title: '连接已断开',
+        description: getFriendlyErrorMessage(reason),
+        dedupeKey: `live-control-disconnected:${id}`,
+      })
     }
 
     await stopAllLiveTasks(id, 'disconnected', false)
@@ -177,7 +181,10 @@ function useLiveControlIpcSync() {
       error: null,
       lastVerifiedAt: Date.now(),
     })
-    toast.success('已成功连接到直播控制台')
+    toast.success({
+      description: '已成功连接到直播控制台',
+      dedupeKey: `live-control-connected:${params.accountId}`,
+    })
   })
 
   useIpcListener(

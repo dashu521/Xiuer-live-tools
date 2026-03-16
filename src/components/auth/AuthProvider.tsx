@@ -1,8 +1,5 @@
 import { Loader2 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
-import { AuthDialog } from '@/components/auth/AuthDialog'
-import { SubscribeDialog } from '@/components/auth/SubscribeDialog'
-import { UserCenter } from '@/components/auth/UserCenter'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useAccessContext } from '@/domain/access'
 import { GATE_ACTIONS } from '@/domain/access/gateActions'
 import { useAccounts } from '@/hooks/useAccounts'
@@ -17,6 +14,21 @@ import {
 } from '@/stores/authStore'
 import { useGateStore } from '@/stores/gateStore'
 import { usePlatformPreferenceStore } from '@/stores/platformPreferenceStore'
+
+const AuthDialog = lazy(async () => {
+  const module = await import('@/components/auth/AuthDialog')
+  return { default: module.AuthDialog }
+})
+
+const SubscribeDialog = lazy(async () => {
+  const module = await import('@/components/auth/SubscribeDialog')
+  return { default: module.SubscribeDialog }
+})
+
+const UserCenter = lazy(async () => {
+  const module = await import('@/components/auth/UserCenter')
+  return { default: module.UserCenter }
+})
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [showAuthDialog, setShowAuthDialog] = useState(false)
@@ -61,20 +73,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .getDefaultPlatform(accountId)
           useLiveControlStore.getState().setConnectState(accountId, { platform: defaultPlatform })
           useGateStore.getState().setDefaultPlatformSetAfterLogin(true)
-          toast.success(
-            `已切换到默认平台：${defaultPlatform === 'dev' ? '测试平台' : defaultPlatform}`,
-          )
+          toast.info({
+            title: '默认平台已恢复',
+            description: `当前平台：${defaultPlatform === 'dev' ? '测试平台' : defaultPlatform}`,
+            dedupeKey: `default-platform:${accountId}`,
+          })
         }
       }
     }
 
     const handleLicenseRequired = (event: CustomEvent) => {
       const { message } = event.detail
-      alert(message)
+      toast.warning({
+        title: '授权受限',
+        description: message,
+        dedupeKey: 'auth-license-required',
+      })
     }
 
     const handleAccountDisabled = () => {
-      toast.error('账号不可用')
+      toast.error({
+        title: '账号不可用',
+        description: '当前账号状态异常，请联系支持或稍后重试。',
+        dedupeKey: 'auth-account-disabled',
+      })
     }
 
     const handleUserCenterOpen = () => {
@@ -142,21 +164,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       )}
       {children}
 
-      <AuthDialog
-        isOpen={showAuthDialog}
-        onClose={() => {
-          setShowAuthDialog(false)
-          setCurrentFeature('')
-        }}
-        feature={currentFeature}
-      />
-      <SubscribeDialog
-        isOpen={showSubscribeDialog}
-        onClose={() => setShowSubscribeDialog(false)}
-        actionName={useGateStore.getState().pendingActionName || undefined}
-        trialExpired={accessContext.trialExpired}
-      />
-      <UserCenter isOpen={showUserCenter} onClose={() => setShowUserCenter(false)} />
+      <Suspense fallback={null}>
+        <AuthDialog
+          isOpen={showAuthDialog}
+          onClose={() => {
+            setShowAuthDialog(false)
+            setCurrentFeature('')
+          }}
+          feature={currentFeature}
+        />
+        <SubscribeDialog
+          isOpen={showSubscribeDialog}
+          onClose={() => setShowSubscribeDialog(false)}
+          actionName={useGateStore.getState().pendingActionName || undefined}
+          trialExpired={accessContext.trialExpired}
+        />
+        <UserCenter isOpen={showUserCenter} onClose={() => setShowUserCenter(false)} />
+      </Suspense>
     </>
   )
 }

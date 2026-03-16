@@ -254,6 +254,22 @@ export const BROWSER_ERROR_MAP: Record<string, ErrorMessageConfig> = {
     level: 'info',
     showRetry: true,
   },
+  'Cannot find module': {
+    title: '程序文件加载失败',
+    message: '运行所需的程序文件没有正确加载',
+    solution: '先重启软件再试；如果仍然出现，请重新安装或重新打包当前版本',
+    level: 'error',
+    showRetry: true,
+    showSupport: true,
+  },
+  'Require stack': {
+    title: '程序文件加载失败',
+    message: '运行所需的程序文件没有正确加载',
+    solution: '先重启软件再试；如果仍然出现，请重新安装或重新打包当前版本',
+    level: 'error',
+    showRetry: true,
+    showSupport: true,
+  },
 }
 
 /**
@@ -407,14 +423,12 @@ export function getFriendlyErrorConfig(error: unknown): ErrorMessageConfig {
     return CONNECTION_ERROR_MAP['browser has been closed']
   }
 
-  // 4. 兜底返回通用错误
-  return {
-    ...GENERIC_ERROR_MAP.UNKNOWN_ERROR,
-    // 在开发环境下，附加原始错误信息（仅用于调试）
-    ...(import.meta.env.DEV && {
-      message: `${GENERIC_ERROR_MAP.UNKNOWN_ERROR.message} (调试信息: ${errorMessage})`,
-    }),
+  if (errorLower.includes('cannot find module') || errorLower.includes('require stack')) {
+    return BROWSER_ERROR_MAP['Cannot find module']
   }
+
+  // 4. 兜底返回通用错误
+  return GENERIC_ERROR_MAP.UNKNOWN_ERROR
 }
 
 /**

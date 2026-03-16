@@ -40,7 +40,11 @@ export function AccountSetting() {
     }
     removeAccount(currentAccountId)
     setIsDeleteDialogOpen(false)
-    toast.success('删除账号成功')
+    toast.info({
+      title: '账号已删除',
+      description: '当前直播账号已移除。',
+      dedupeKey: `account-deleted:${currentAccountId}`,
+    })
   })
 
   return (

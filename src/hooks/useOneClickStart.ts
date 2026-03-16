@@ -72,8 +72,8 @@ export function useOneClickStart(): {
           }
         : undefined,
       toast: {
-        success: (message: string) => toast.success(message),
-        error: (message: string) => toast.error(message),
+        success: () => {},
+        error: () => {},
       },
       ipcInvoke: async <T = unknown>(channel: string, ...args: unknown[]): Promise<T> => {
         return (window as unknown as LooseElectronAPI).ipcRenderer.invoke(
@@ -123,16 +123,28 @@ export function useOneClickStart(): {
       const totalCount = results.length
 
       if (successCount === totalCount) {
-        toast.success('已开始启动自动任务，请稍等一下')
+        toast.success({
+          title: '启动中',
+          description: '已开始启动自动任务，请稍等一下。',
+          dedupeKey: `one-click-start:${currentAccountId}`,
+        })
       } else {
         const failedTasks = results
           .filter(r => !r.success)
           .map(r => r.task)
           .join('、')
-        toast.error(`${failedTasks}启动失败，请重试`)
+        toast.error({
+          title: '部分任务未启动',
+          description: `${failedTasks} 启动失败，请重试或单独开启。`,
+          dedupeKey: `one-click-start-failed:${currentAccountId}`,
+        })
       }
     } catch (error) {
-      toast.error('部分功能启动失败，你可以重试一次或单独开启')
+      toast.error({
+        title: '启动失败',
+        description: '部分功能启动失败，你可以重试一次或单独开启。',
+        dedupeKey: `one-click-start-error:${currentAccountId}`,
+      })
       console.error('[OneClickStart] Failed to start tasks:', error)
     } finally {
       setIsLoading(false)

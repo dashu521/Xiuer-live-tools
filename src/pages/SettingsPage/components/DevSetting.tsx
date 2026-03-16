@@ -15,9 +15,17 @@ export function DevSetting() {
   const handleToggleDevMode = async (checked: boolean) => {
     try {
       setDevMode(checked)
-      toast.success(checked ? '已开启开发者模式' : '已关闭开发者模式')
+      toast.info({
+        title: checked ? '开发者模式已开启' : '开发者模式已关闭',
+        description: checked ? '现在可以通过右键打开开发者工具。' : '已恢复普通使用模式。',
+        dedupeKey: 'dev-mode-toggle',
+      })
     } catch {
-      toast.error('切换开发者模式失败')
+      toast.error({
+        title: '切换失败',
+        description: '开发者模式切换失败，请重试。',
+        dedupeKey: 'dev-mode-toggle-failed',
+      })
     }
   }
   return (

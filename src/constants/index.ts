@@ -15,7 +15,7 @@ export const AUTO_REPLY = {
 // Toast 提示相关常量
 export const TOAST = {
   /** 同时显示的最大 toast 数量 */
-  LIMIT: 1,
+  LIMIT: 3,
   /** toast 自动移除的延迟时间（毫秒） */
   REMOVE_DELAY: 3000,
 } as const

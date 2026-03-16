@@ -1,4 +1,5 @@
-import { useCallback } from 'react'
+import React, { useCallback } from 'react'
+import { ToastAction } from '@/components/ui/toast'
 import {
   type ErrorMessageConfig,
   getFriendlyErrorConfig,
@@ -45,26 +46,45 @@ export function useFriendlyError() {
       const title = options?.title ?? config.title
       const message = options?.message ?? config.message
       const solution = config.solution
+      const description =
+        options?.showSolution && solution ? `${message}\n建议：${solution}` : message
+      const action = options?.action
+        ? React.createElement(
+            ToastAction,
+            {
+              altText: options.action.label,
+              onClick: options.action.onClick,
+            },
+            options.action.label,
+          )
+        : undefined
 
       // 根据错误级别选择不同的提示样式
       switch (config.level) {
         case 'error':
-          toast.error(`${title}：${message}`)
+          toast.error({
+            title,
+            description,
+            action,
+            dedupeKey: `friendly-error:${title}`,
+          })
           break
         case 'warning':
-          // 使用 info 样式显示警告，避免过于突兀
-          toast.info(`${title}：${message}`)
+          toast.warning({
+            title,
+            description,
+            action,
+            dedupeKey: `friendly-warning:${title}`,
+          })
           break
         case 'info':
-          toast.info(`${title}：${message}`)
+          toast.info({
+            title,
+            description,
+            action,
+            dedupeKey: `friendly-info:${title}`,
+          })
           break
-      }
-
-      // 如果需要显示解决方案，延迟显示第二条提示
-      if (options?.showSolution && solution) {
-        setTimeout(() => {
-          toast.info(`💡 ${solution}`)
-        }, 500)
       }
 
       return config

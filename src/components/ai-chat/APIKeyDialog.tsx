@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select'
 import type { AIProvider, ProviderConfig } from '@/hooks/useAIChat'
 import { useAIChatStore } from '@/hooks/useAIChat'
+import { useFriendlyError } from '@/hooks/useFriendlyError'
 import { useToast } from '@/hooks/useToast'
 import { ScrollArea } from '../ui/scroll-area'
 
@@ -180,7 +181,7 @@ const ApiKeyInput = memo(
           <Label>API Key</Label>
           {provider !== 'volcengine' && (
             <div className="flex items-center gap-2">
-              {testSuccess && <CheckIcon className="h-4 w-4 text-green-500" />}
+              {testSuccess && <CheckIcon className="h-4 w-4 text-emerald-300" />}
               <Button
                 type="button"
                 variant="outline"
@@ -237,6 +238,7 @@ export function APIKeyDialog() {
   const { apiKeys, config, setConfig, setApiKey, customBaseURL, setCustomBaseURL } =
     useAIChatStore()
   const { toast } = useToast()
+  const { showError } = useFriendlyError()
 
   const [open, setOpen] = useState(false)
   const [tempKeys, setTempKeys] = useState(apiKeys)
@@ -309,14 +311,20 @@ export function APIKeyDialog() {
       if (result.success) {
         setTestSuccess(true)
       } else {
-        toast.error(result.error ?? '测试连接失败')
+        showError(result.error ?? '测试连接失败', {
+          title: '测试连接失败',
+          showSolution: true,
+        })
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '未知错误')
+      showError(error, {
+        title: '测试连接失败',
+        showSolution: true,
+      })
     } finally {
       setTestLoading(false)
     }
-  }, [tempConfig.provider, tempKeys, tempCustomBaseURL, toast])
+  }, [showError, tempConfig.provider, tempKeys, tempCustomBaseURL, toast.error])
 
   // 当切换提供商时重置测试状态
   // biome-ignore lint/correctness/useExhaustiveDependencies: 需要依赖 provider 的变化（可能有更好的方法）
