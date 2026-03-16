@@ -16,11 +16,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Separator } from '@/components/ui/separator'
 import { getAccountPreference, setAccountPreference } from '@/hooks/useAccountPreference'
 import { useAccounts } from '@/hooks/useAccounts'
-import {
-  getAccountAutoStartOnLive,
-  setAccountAutoStartOnLive,
-  useAutoStartOnLive,
-} from '@/hooks/useAutoStartOnLive'
+import { getAccountAutoStartOnLive, setAccountAutoStartOnLive } from '@/hooks/useAutoStartOnLive'
 import { useLiveFeatureGate } from '@/hooks/useLiveFeatureGate'
 import { useOneClickStart } from '@/hooks/useOneClickStart'
 
@@ -109,9 +105,6 @@ export function OneClickStartButton({ variant = 'default' }: OneClickStartButton
       setAutoStartOnLiveState(getAccountAutoStartOnLive(currentAccountId))
     }
   }, [currentAccountId])
-
-  // 启用开播自动启动监听
-  useAutoStartOnLive()
 
   const handleClick = useMemoizedFn(() => {
     if (!state.canStart) {

@@ -14,6 +14,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Toaster } from '@/components/ui/toaster'
 import { useAppIpcBootstrap } from '@/hooks/useAppIpcBootstrap'
+import { useAutoStartOnLive } from '@/hooks/useAutoStartOnLive'
 import { useDevMode } from '@/hooks/useDevMode'
 import { Header } from './components/common/Header'
 import './App.css'
@@ -62,6 +63,8 @@ function AppContent() {
 
   // 全局 IPC 同步集中在专用 bootstrap hook，App 只负责装配
   useAppIpcBootstrap()
+  // 开播自动启动必须全局挂载，不能依赖用户停留在直播控制台页面
+  useAutoStartOnLive()
 
   // 【数据隔离】登录时加载各 Store 的配置
   useLoadChromeConfigOnLogin()

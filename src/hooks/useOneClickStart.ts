@@ -28,6 +28,12 @@ export interface OneClickStartState {
   isAnyTaskRunning: boolean
 }
 
+interface TaskStartAttemptResult {
+  task: string
+  success: boolean
+  message?: string
+}
+
 export function useOneClickStart(): {
   state: OneClickStartState
   startAllTasks: () => Promise<void>
@@ -88,39 +94,56 @@ export function useOneClickStart(): {
     if (!checkCanStart()) return
 
     setIsLoading(true)
-    const results: { task: string; success: boolean }[] = []
+    const results: TaskStartAttemptResult[] = []
 
     try {
       const ctx = createTaskContext()
-      const autoReplyResult = await taskManager.start('autoReply', ctx)
-      results.push({ task: '自动回复', success: autoReplyResult.success })
+      if (!isAutoReplyRunning) {
+        const autoReplyResult = await taskManager.start('autoReply', ctx)
+        results.push({
+          task: '自动回复',
+          success: autoReplyResult.success || autoReplyResult.reason === 'ALREADY_RUNNING',
+          message: autoReplyResult.message,
+        })
+      } else {
+        results.push({ task: '自动回复', success: true, message: '已在运行中' })
+      }
 
       if (!isAutoMessageRunning) {
         try {
           const result = await taskManager.start('autoSpeak', ctx)
-          if (result.success) {
-            results.push({ task: '自动发言', success: true })
-          } else {
-            console.error('[OneClickStart] Failed to start auto speak:', result.message)
-            results.push({ task: '自动发言', success: false })
-          }
+          results.push({
+            task: '自动发言',
+            success: result.success || result.reason === 'ALREADY_RUNNING',
+            message: result.message,
+          })
         } catch (error) {
           console.error('[OneClickStart] Failed to start auto speak:', error)
-          results.push({ task: '自动发言', success: false })
+          results.push({
+            task: '自动发言',
+            success: false,
+            message: error instanceof Error ? error.message : '启动自动发言任务失败',
+          })
         }
       } else {
-        results.push({ task: '自动发言', success: true })
+        results.push({ task: '自动发言', success: true, message: '已在运行中' })
       }
 
       if (!isAutoPopUpRunning) {
         const result = await taskManager.start('autoPopup', ctx)
-        results.push({ task: '自动弹窗', success: result.success })
+        results.push({
+          task: '自动弹窗',
+          success: result.success || result.reason === 'ALREADY_RUNNING',
+          message: result.message,
+        })
       } else {
-        results.push({ task: '自动弹窗', success: true })
+        results.push({ task: '自动弹窗', success: true, message: '已在运行中' })
       }
 
       const successCount = results.filter(r => r.success).length
       const totalCount = results.length
+
+      console.log('[OneClickStart] Start results:', results)
 
       if (successCount === totalCount) {
         toast.success({
@@ -129,13 +152,13 @@ export function useOneClickStart(): {
           dedupeKey: `one-click-start:${currentAccountId}`,
         })
       } else {
-        const failedTasks = results
+        const failedDetails = results
           .filter(r => !r.success)
-          .map(r => r.task)
-          .join('、')
+          .map(r => `${r.task}${r.message ? `：${r.message}` : ''}`)
+          .join('\n')
         toast.error({
           title: '部分任务未启动',
-          description: `${failedTasks} 启动失败，请重试或单独开启。`,
+          description: `${failedDetails}\n请重试或单独开启。`,
           dedupeKey: `one-click-start-failed:${currentAccountId}`,
         })
       }

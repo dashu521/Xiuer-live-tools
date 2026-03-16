@@ -223,10 +223,10 @@ function normalizeToastInput(
   input: ToastInput,
 ): Omit<Toast, 'variant'> & { variant: NonNullable<ToastProps['variant']> } {
   const defaults = {
-    success: { variant: 'success' as const, duration: 3000, priority: 2 },
-    info: { variant: 'info' as const, duration: 3000, priority: 1 },
-    warning: { variant: 'warning' as const, duration: 4000, priority: 3 },
-    error: { variant: 'destructive' as const, duration: 5000, priority: 4 },
+    success: { variant: 'success' as const, duration: 2000, priority: 2 },
+    info: { variant: 'info' as const, duration: 2000, priority: 1 },
+    warning: { variant: 'warning' as const, duration: 3000, priority: 3 },
+    error: { variant: 'destructive' as const, duration: 4000, priority: 4 },
   }
 
   const base = defaults[level]

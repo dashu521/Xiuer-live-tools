@@ -61,18 +61,21 @@ export function setAccountAutoStartOnLive(accountId: string, value: boolean): vo
 export function useAutoStartOnLive() {
   const { currentAccountId } = useAccounts()
   const streamState = useCurrentLiveControl(context => context.streamState)
-  const { startAllTasks, state } = useOneClickStart()
+  const { startAllTasks, state, isAnyTaskRunning } = useOneClickStart()
 
   // 使用 ref 记录上一次的直播状态，避免重复触发
   const prevStreamStateRef = useRef(streamState)
   // 使用 ref 记录当前账号是否已经自动启动过，避免重复启动
   const hasAutoStartedRef = useRef(false)
+  // 在状态未稳定时保留一次待启动意图，避免偶发漏触发
+  const pendingAutoStartRef = useRef(false)
+  const lastAccountIdRef = useRef(currentAccountId)
 
   useEffect(() => {
+    if (!currentAccountId) return
+
     // 使用账号隔离的设置
-    const isEnabled = currentAccountId
-      ? getAccountAutoStartOnLive(currentAccountId)
-      : getAutoStartOnLive()
+    const isEnabled = getAccountAutoStartOnLive(currentAccountId)
 
     if (!isEnabled) return
 
@@ -80,26 +83,39 @@ export function useAutoStartOnLive() {
     const wasNotLive = prevStreamStateRef.current !== 'live'
     const isNowLive = streamState === 'live'
 
-    if (wasNotLive && isNowLive && !hasAutoStartedRef.current) {
-      // 检查是否可以启动任务
-      if (state.canStart) {
+    if (wasNotLive && isNowLive) {
+      pendingAutoStartRef.current = true
+    }
+
+    if (pendingAutoStartRef.current && !hasAutoStartedRef.current) {
+      if (isAnyTaskRunning) {
+        hasAutoStartedRef.current = true
+        pendingAutoStartRef.current = false
+      } else if (state.canStart) {
         console.log('[AutoStartOnLive] 检测到开播，自动启动任务')
         hasAutoStartedRef.current = true
-        startAllTasks()
+        pendingAutoStartRef.current = false
+        void startAllTasks()
       }
     }
 
     // 如果直播结束，重置自动启动标记
     if (streamState === 'ended' || streamState === 'offline') {
       hasAutoStartedRef.current = false
+      pendingAutoStartRef.current = false
     }
 
     prevStreamStateRef.current = streamState
-  }, [streamState, state.canStart, startAllTasks, currentAccountId])
+  }, [currentAccountId, isAnyTaskRunning, startAllTasks, state.canStart, streamState])
 
-  // 当切换账号时，重置自动启动标记
   useEffect(() => {
+    if (lastAccountIdRef.current === currentAccountId) {
+      return
+    }
+
+    lastAccountIdRef.current = currentAccountId
     hasAutoStartedRef.current = false
+    pendingAutoStartRef.current = false
     prevStreamStateRef.current = streamState
-  }, [streamState])
+  }, [currentAccountId, streamState])
 }

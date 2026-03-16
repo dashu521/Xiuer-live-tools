@@ -174,6 +174,11 @@ function useLiveControlIpcSync() {
       return
     }
 
+    const prevContext = useLiveControlStore.getState().contexts[params.accountId]
+    const shouldToastConnected =
+      prevContext?.connectState.status !== 'connected' ||
+      prevContext?.connectState.phase !== 'streaming'
+
     setAccountName(params.accountId, params.accountName)
     setConnectState(params.accountId, {
       status: 'connected',
@@ -181,10 +186,12 @@ function useLiveControlIpcSync() {
       error: null,
       lastVerifiedAt: Date.now(),
     })
-    toast.success({
-      description: '已成功连接到直播控制台',
-      dedupeKey: `live-control-connected:${params.accountId}`,
-    })
+    if (shouldToastConnected) {
+      toast.success({
+        description: '已成功连接到直播控制台',
+        dedupeKey: `live-control-connected:${params.accountId}`,
+      })
+    }
   })
 
   useIpcListener(
