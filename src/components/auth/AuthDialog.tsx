@@ -2,13 +2,7 @@ import { Eye, EyeOff, Loader2, LogIn, Smartphone } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -206,12 +200,6 @@ export function AuthDialog({ isOpen, onClose, feature }: AuthDialogProps) {
             >
               登录
             </DialogTitle>
-            <DialogDescription
-              id="auth-dialog-description"
-              style={{ color: 'var(--text-secondary)' }}
-            >
-              使用手机号和密码登录秀儿直播助手。
-            </DialogDescription>
           </DialogHeader>
           <div>
             {displayError && (
@@ -393,17 +381,6 @@ export function AuthDialog({ isOpen, onClose, feature }: AuthDialogProps) {
                 </div>
               </div>
             </form>
-
-            {/* Cancel Button */}
-            <div className="mt-4 text-center">
-              <Button
-                variant="ghost"
-                onClick={onClose}
-                className="text-[13px] text-muted-foreground hover:text-foreground h-auto p-0"
-              >
-                取消
-              </Button>
-            </div>
           </div>
         </DialogContent>
       </Dialog>
