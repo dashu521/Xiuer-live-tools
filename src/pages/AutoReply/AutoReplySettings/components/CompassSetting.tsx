@@ -324,9 +324,9 @@ function FilterText({ filterConfig }: { filterConfig: StringFilterConfig }) {
     return lines.map(({ prefix, suffix, conditionText, value, label }, i) => (
       <div key={i}>
         <span>{prefix}</span>
-        <span className="px-1 text-amber-200">{label}</span>
-        <span className="text-fuchsia-100">{conditionText}</span>
-        <span className="px-1 text-emerald-200">{value}</span>
+        <span className="px-1 text-primary/90">{label}</span>
+        <span className="text-muted-foreground">{conditionText}</span>
+        <span className="px-1 text-foreground">{value}</span>
         <span>{suffix}</span>
       </div>
     ))

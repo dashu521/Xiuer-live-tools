@@ -137,13 +137,13 @@ const StatusCardContent = React.memo(
     const getStreamStateColor = () => {
       switch (streamState) {
         case 'live':
-          return 'text-green-600'
+          return 'text-emerald-300'
         case 'offline':
-          return 'text-amber-600'
+          return 'text-amber-300'
         case 'ended':
-          return 'text-gray-500'
+          return 'text-muted-foreground'
         default:
-          return 'text-blue-600 animate-pulse'
+          return 'text-sky-300 animate-pulse'
       }
     }
 
@@ -164,7 +164,7 @@ const StatusCardContent = React.memo(
       <TooltipProvider>
         <Card className="overflow-hidden">
           <CardHeader className="bg-muted/50 px-6 py-5">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Monitor className="h-4 w-4 text-primary" />
                 控制台状态
@@ -174,50 +174,49 @@ const StatusCardContent = React.memo(
             </div>
           </CardHeader>
           <CardContent className="px-6 py-8">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
               {/* 左侧状态显示 */}
-              <div className="flex items-center gap-4">
+              <div className="flex min-w-0 items-center gap-4">
                 <div
                   className={`h-14 w-14 rounded-xl flex items-center justify-center border transition-all duration-300 ${
                     isConnected
-                      ? 'border-green-500/30 bg-green-500/10'
+                      ? 'border-emerald-500/25 bg-emerald-500/10'
                       : isConnecting
-                        ? 'border-amber-500/50 bg-amber-500/10 animate-pulse'
-                        : 'border-primary/30'
+                        ? 'border-amber-500/35 bg-amber-500/12 animate-pulse'
+                        : 'border-primary/30 bg-primary/6'
                   }`}
                 >
                   {isConnected ? (
-                    <div className="h-6 w-6 rounded-full border-2 border-green-500 animate-pulse" />
+                    <div className="h-6 w-6 rounded-full border-2 border-emerald-400 animate-pulse" />
                   ) : isConnecting ? (
-                    <Loader2 className="h-7 w-7 text-amber-500 animate-spin" />
+                    <Loader2 className="h-7 w-7 text-amber-400 animate-spin" />
                   ) : (
                     <Monitor className="h-7 w-7 text-primary" />
                   )}
                 </div>
-                <div className="min-w-[180px]">
+                <div className="min-w-0 flex-1">
                   <div
-                    className={`text-base font-medium transition-colors ${isConnecting ? 'text-amber-600' : ''}`}
+                    className={`text-base font-medium transition-colors ${isConnecting ? 'text-amber-200' : ''}`}
                   >
                     {statusText}
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {connectState.platform
-                      ? `${getPlatformName(connectState.platform)}`
-                      : '请选择平台并连接'}
-                    {/* 【修复】已连接时显示直播状态 */}
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                    <span>
+                      {connectState.platform
+                        ? `${getPlatformName(connectState.platform)}`
+                        : '请选择平台并连接'}
+                    </span>
                     {isConnected && (
-                      <span className={`ml-2 ${getStreamStateColor()}`}>
-                        · {getStreamStateText()}
-                      </span>
+                      <span className={getStreamStateColor()}>· {getStreamStateText()}</span>
                     )}
                   </div>
                 </div>
               </div>
 
               {/* 右侧操作区 */}
-              <div className="flex items-center gap-4">
+              <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center lg:w-auto lg:justify-end lg:gap-4">
                 {/* 平台选择 */}
-                <div className="border rounded-lg px-3 py-2 bg-muted/30 h-10 flex items-center">
+                <div className="flex h-10 w-full min-w-0 items-center rounded-lg border bg-muted/30 px-3 py-2 sm:w-auto sm:min-w-[13rem]">
                   <PlatformSelect />
                 </div>
 
@@ -374,6 +373,23 @@ const ConnectToLiveControl = React.memo(() => {
 
           console.log('[Connect] IPC result:', result)
 
+          const latestConnectState =
+            useLiveControlStore.getState().contexts[account.id]?.connectState
+          const wasDisconnectedDuringConnect =
+            latestConnectState?.status === 'disconnected' || latestConnectState?.status === 'error'
+
+          if (wasDisconnectedDuringConnect) {
+            console.warn(
+              `[conn][${account.id}][${traceId}] 连接过程中已收到断开事件，跳过后续 waiting_for_login/connected 状态覆盖`,
+              latestConnectState,
+            )
+            if (loginTimeoutRef.current) {
+              clearTimeout(loginTimeoutRef.current)
+              loginTimeoutRef.current = null
+            }
+            return
+          }
+
           // 【修复 2.1】browserLaunched=false 时立即回到 disconnected 状态
           if (result && !result.browserLaunched) {
             console.warn(`[conn][${account.id}][${traceId}] IPC 同步失败，浏览器未启动`, {
@@ -392,11 +408,11 @@ const ConnectToLiveControl = React.memo(() => {
 
             // 使用用户友好的错误提示
             const friendlyError = getFullErrorInfo(result.error || '连接失败')
-            toast.error(`${friendlyError.title}：${friendlyError.message}`)
-            // 延迟显示解决方案
-            setTimeout(() => {
-              toast.info(`💡 ${friendlyError.solution}`)
-            }, 1000)
+            toast.error({
+              title: friendlyError.title,
+              description: `${friendlyError.message}\n建议：${friendlyError.solution}`,
+              dedupeKey: `live-control-connect-error:${account.id}`,
+            })
 
             // 清理超时定时器
             if (loginTimeoutRef.current) clearTimeout(loginTimeoutRef.current)
@@ -422,7 +438,10 @@ const ConnectToLiveControl = React.memo(() => {
             console.log(
               `[conn][${account.id}][${traceId}] 浏览器已启动，已登录，状态已更新为 connected`,
             )
-            toast.success('已成功连接到直播中控台')
+            toast.success({
+              description: '已成功连接到直播中控台',
+              dedupeKey: `live-control-connected:${account.id}`,
+            })
           }
           loginTimeoutRef.current = setTimeout(() => {
             // 从 store 获取最新状态，避免闭包陷阱
@@ -436,10 +455,11 @@ const ConnectToLiveControl = React.memo(() => {
                 error: '登录超时，请检查是否已完成扫码登录',
               })
               const timeoutError = getFullErrorInfo('登录超时')
-              toast.error(`${timeoutError.title}：${timeoutError.message}`)
-              setTimeout(() => {
-                toast.info(`💡 ${timeoutError.solution}`)
-              }, 1000)
+              toast.error({
+                title: timeoutError.title,
+                description: `${timeoutError.message}\n建议：${timeoutError.solution}`,
+                dedupeKey: `live-control-login-timeout:${currentAccountId}`,
+              })
             } else if (latestStatus === 'connected') {
               // 已经在 connected 状态，说明登录成功了，只是 notifyAccountName 事件可能延迟
               console.log('[State Machine] Login already succeeded, ignoring timeout')
@@ -466,10 +486,11 @@ const ConnectToLiveControl = React.memo(() => {
               })
               // 使用用户友好的错误提示
               const timeoutError = getFullErrorInfo('登录超时')
-              toast.error(`${timeoutError.title}：${timeoutError.message}`)
-              setTimeout(() => {
-                toast.info(`💡 ${timeoutError.solution}`)
-              }, 1000)
+              toast.error({
+                title: timeoutError.title,
+                description: `${timeoutError.message}\n建议：${timeoutError.solution}`,
+                dedupeKey: `live-control-login-timeout:${currentAccountId}`,
+              })
             } else if (latestStatus === 'connected') {
               // 已经在 connected 状态，说明登录成功了
               console.log('[State Machine] Login already succeeded after error, ignoring timeout')
@@ -553,8 +574,12 @@ const ConnectToLiveControl = React.memo(() => {
         <Button
           onClick={handleButtonClick}
           disabled={isConnecting || !hasAccount}
-          variant={isConnected ? 'secondary' : 'default'}
-          className={`h-10 px-4 text-sm font-medium transition-all ${isConnecting ? 'bg-amber-500 hover:bg-amber-600' : ''} ${!hasAccount ? 'opacity-60 cursor-not-allowed' : ''}`}
+          variant={isConnecting ? 'subtle' : isConnected ? 'secondary' : 'default'}
+          className={`h-10 w-full px-4 text-sm font-medium transition-all sm:w-auto ${
+            isConnecting
+              ? 'border-amber-500/25 bg-amber-500/12 text-amber-100 hover:bg-amber-500/18'
+              : ''
+          } ${!hasAccount ? 'opacity-60 cursor-not-allowed' : ''}`}
         >
           {isConnecting ? (
             <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />

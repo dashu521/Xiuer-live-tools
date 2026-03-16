@@ -1,5 +1,6 @@
-import { CheckCircle, Monitor, Rocket, Sparkles, X } from 'lucide-react'
+import { CheckCircle, Monitor, Rocket, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 
 interface QuickStartDialogProps {
   isOpen: boolean
@@ -11,18 +12,24 @@ export function QuickStartDialog({ isOpen, onClose, onConnect }: QuickStartDialo
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="relative w-full max-w-md mx-4 overflow-hidden rounded-2xl bg-white shadow-2xl">
-        {/* 关闭按钮 */}
-        <button
-          onClick={onClose}
-          className="absolute right-4 top-4 z-10 rounded-full p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-        >
-          <X className="h-5 w-5" />
-        </button>
-
+    <Dialog open={isOpen} onOpenChange={open => !open && onClose()}>
+      <DialogContent
+        aria-describedby="quick-start-description"
+        className="w-full max-w-md overflow-hidden rounded-2xl border p-0"
+        style={{
+          backgroundColor: 'var(--surface)',
+          borderColor: 'hsla(var(--border), 0.95)',
+          boxShadow: 'var(--shadow-modal)',
+        }}
+      >
         {/* 顶部装饰 */}
-        <div className="relative h-28 bg-gradient-to-br from-indigo-400 via-purple-400 to-pink-400">
+        <div
+          className="relative h-28"
+          style={{
+            background:
+              'linear-gradient(135deg, rgba(255,107,53,0.98) 0%, rgba(247,147,30,0.92) 100%)',
+          }}
+        >
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20 backdrop-blur-sm">
               <Rocket className="h-7 w-7 text-white" />
@@ -44,48 +51,82 @@ export function QuickStartDialog({ isOpen, onClose, onConnect }: QuickStartDialo
         {/* 内容区域 */}
         <div className="px-6 pb-6 pt-2">
           <div className="mb-6 text-center">
-            <h2 className="mb-2 text-2xl font-bold text-gray-800">准备起飞啦！🚀</h2>
-            <p className="text-gray-600">恭喜你登录成功！接下来只需要一步就能开始使用啦～</p>
+            <h2 className="mb-2 text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>
+              登录完成，准备进入工作流
+            </h2>
+            <p id="quick-start-description" style={{ color: 'var(--text-secondary)' }}>
+              连接直播中控台后，自动发言、自动弹窗和自动回复功能才能正常启用。
+            </p>
           </div>
 
           {/* 步骤展示 */}
           <div className="mb-6 space-y-4">
-            <div className="flex items-center gap-4 rounded-xl bg-green-50 p-4">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-500 text-white">
+            <div
+              className="flex items-center gap-4 rounded-xl p-4"
+              style={{ backgroundColor: 'rgba(16, 185, 129, 0.12)' }}
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-full border border-emerald-500/25 bg-emerald-500/12 text-emerald-100">
                 <CheckCircle className="h-5 w-5" />
               </div>
               <div>
-                <h4 className="font-semibold text-gray-800">完成登录</h4>
-                <p className="text-sm text-gray-600">太棒了！你已经成功登录</p>
+                <h4 className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  完成登录
+                </h4>
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  当前账号权限和配置已可用
+                </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-4 rounded-xl bg-purple-50 p-4 ring-2 ring-purple-200">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-purple-500 text-white">
+            <div
+              className="flex items-center gap-4 rounded-xl p-4 ring-1"
+              style={{
+                backgroundColor: 'rgba(255, 107, 53, 0.12)',
+                borderColor: 'rgba(255, 107, 53, 0.28)',
+              }}
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-white">
                 <Monitor className="h-5 w-5" />
               </div>
               <div className="flex-1">
-                <h4 className="font-semibold text-gray-800">连接直播中控台</h4>
-                <p className="text-sm text-gray-600">这是使用其他功能的前提哦</p>
+                <h4 className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  连接直播中控台
+                </h4>
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  这是所有自动化能力的前置条件
+                </p>
               </div>
-              <Sparkles className="h-5 w-5 text-purple-500 animate-pulse" />
+              <Sparkles className="h-5 w-5 text-primary animate-pulse" />
             </div>
 
-            <div className="flex items-center gap-4 rounded-xl bg-gray-50 p-4 opacity-60">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-400 text-white">
+            <div
+              className="flex items-center gap-4 rounded-xl p-4 opacity-80"
+              style={{ backgroundColor: 'rgba(255,255,255,0.04)' }}
+            >
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white">
                 <span className="text-sm font-bold">3</span>
               </div>
               <div>
-                <h4 className="font-semibold text-gray-800">开启自动化</h4>
-                <p className="text-sm text-gray-600">享受智能直播助手的便利</p>
+                <h4 className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  开启自动化
+                </h4>
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  再配置发言、弹窗、回复等任务
+                </p>
               </div>
             </div>
           </div>
 
           {/* 提示文案 */}
-          <div className="mb-6 rounded-lg bg-amber-50 p-4 text-sm text-amber-800">
-            <span className="font-semibold">💡 小贴士：</span>
-            连接中控台后，你就可以使用自动发言、自动弹窗、AI回复等超酷功能啦！
+          <div
+            className="mb-6 rounded-lg p-4 text-sm"
+            style={{
+              backgroundColor: 'rgba(245, 158, 11, 0.14)',
+              color: 'rgb(253 230 138)',
+            }}
+          >
+            <span className="font-semibold">提示：</span>
+            连接成功后，再进入左侧各功能页完成配置，流程会更顺畅。
           </div>
 
           {/* 按钮区域 */}
@@ -93,13 +134,13 @@ export function QuickStartDialog({ isOpen, onClose, onConnect }: QuickStartDialo
             <Button variant="outline" className="flex-1" onClick={onClose}>
               稍后再说
             </Button>
-            <Button className="flex-1 gap-2 bg-purple-500 hover:bg-purple-600" onClick={onConnect}>
+            <Button className="flex-1 gap-2" onClick={onConnect}>
               <Monitor className="h-4 w-4" />
               立即连接
             </Button>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

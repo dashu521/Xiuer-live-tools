@@ -165,7 +165,7 @@ export function FeatureTour({ isOpen, onClose, onComplete }: FeatureTourProps) {
         {/* 关闭按钮 */}
         <button
           onClick={handleSkip}
-          className="absolute right-3 top-3 rounded-full p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+          className="absolute right-3 top-3 rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <X className="h-4 w-4" />
         </button>
@@ -178,26 +178,28 @@ export function FeatureTour({ isOpen, onClose, onComplete }: FeatureTourProps) {
                 key={index}
                 className={cn(
                   'h-1.5 rounded-full transition-all duration-300',
-                  index === currentStep ? 'w-4 bg-purple-500' : 'w-1.5 bg-gray-300',
+                  index === currentStep ? 'w-4 bg-primary' : 'w-1.5 bg-muted-foreground/35',
                 )}
               />
             ))}
           </div>
-          <span className="text-xs text-gray-400 ml-auto">
+          <span className="ml-auto text-xs text-muted-foreground">
             {currentStep + 1} / {tourSteps.length}
           </span>
         </div>
 
         {/* 标题 */}
         <div className="mb-3 flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-100">
-            <Target className="h-4 w-4 text-purple-500" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-full border border-primary/20 bg-primary/10 text-primary">
+            <Target className="h-4 w-4" />
           </div>
-          <h3 className="text-lg font-bold text-gray-800">{currentTourStep.title}</h3>
+          <h3 className="text-lg font-bold text-foreground">{currentTourStep.title}</h3>
         </div>
 
         {/* 内容 */}
-        <p className="mb-5 text-sm leading-relaxed text-gray-600">{currentTourStep.content}</p>
+        <p className="mb-5 text-sm leading-relaxed text-muted-foreground">
+          {currentTourStep.content}
+        </p>
 
         {/* 按钮区域 */}
         <div className="flex gap-2">

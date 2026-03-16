@@ -23,7 +23,7 @@ function DanmuItem({ message }: DanmuItemProps) {
   const content = (message as CommentMessage).content
 
   return (
-    <div className="flex items-start gap-3 py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors">
+    <div className="ui-hover-item flex items-start gap-3 rounded-lg px-3 py-2">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium text-foreground truncate max-w-[120px]">
@@ -112,8 +112,8 @@ export default function DanmuMonitor() {
         </div>
       </CardHeader>
 
-      <CardContent className="flex-1 p-0 min-h-0">
-        <ScrollArea className="h-[25rem]">
+      <CardContent className="flex-1 min-h-0 p-0">
+        <ScrollArea className="h-full">
           <div className="py-2 space-y-0.5 px-4">
             {filteredDanmu.length === 0 ? (
               <div className="flex items-center justify-center h-32 text-muted-foreground">

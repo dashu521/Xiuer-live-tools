@@ -147,12 +147,12 @@ export const BrowserGuide = React.memo(
 
           {/* 平台特殊提示 */}
           {platform === 'taobao' && (
-            <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="mt-6 rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">
               <div className="flex items-start gap-3">
-                <HelpCircle className="w-5 h-5 text-amber-600 mt-0.5" />
+                <HelpCircle className="mt-0.5 h-5 w-5 text-amber-300" />
                 <div>
-                  <div className="text-sm font-medium text-amber-800">淘宝平台特别提示</div>
-                  <ul className="text-sm text-amber-700 mt-1 space-y-1">
+                  <div className="text-sm font-medium text-amber-100">淘宝平台特别提示</div>
+                  <ul className="mt-1 space-y-1 text-sm text-amber-100/85">
                     <li>• 除登录和人机验证外，请尽量不要操作浏览器</li>
                     <li>• 如遇人机验证，请按要求完成验证</li>
                     <li>• 验证完成后请等待自动跳转</li>
@@ -163,12 +163,12 @@ export const BrowserGuide = React.memo(
           )}
 
           {platform === 'wxchannel' && (
-            <div className="mt-6 p-4 border border-blue-200 rounded-lg">
+            <div className="mt-6 rounded-lg border border-sky-500/20 bg-sky-500/10 p-4">
               <div className="flex items-start gap-3">
-                <HelpCircle className="w-5 h-5 text-blue-600 mt-0.5" />
+                <HelpCircle className="mt-0.5 h-5 w-5 text-sky-300" />
                 <div>
-                  <div className="text-sm font-medium text-blue-800">视频号平台特别提示</div>
-                  <ul className="text-sm text-blue-700 mt-1 space-y-1">
+                  <div className="text-sm font-medium text-sky-100">视频号平台特别提示</div>
+                  <ul className="mt-1 space-y-1 text-sm text-sky-100/85">
                     <li>• 请确保已在视频号助手开播</li>
                     <li>• 视频号助手不支持一号多登</li>
                     <li>• 在别处登录会中断当前连接</li>

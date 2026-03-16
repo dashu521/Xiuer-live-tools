@@ -19,15 +19,19 @@ export default function Settings() {
   }, [location.hash])
 
   return (
-    <div className="w-full py-6 flex flex-col gap-6 min-h-0 overflow-auto">
-      <div className="shrink-0">
-        <Title title="设置" description="管理应用程序设置和偏好" />
-      </div>
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="flex min-h-full flex-col gap-6 py-6">
+          <div className="shrink-0">
+            <Title title="设置" description="管理应用程序设置和偏好" />
+          </div>
 
-      <div className="flex flex-col gap-6 min-w-0 flex-1 min-h-0">
-        <CoreConfigCard />
-        <GeneralAboutCard />
-        <OtherSetting />
+          <div className="flex min-h-0 flex-1 flex-col gap-6 min-w-0">
+            <CoreConfigCard />
+            <GeneralAboutCard />
+            <OtherSetting />
+          </div>
+        </div>
       </div>
     </div>
   )

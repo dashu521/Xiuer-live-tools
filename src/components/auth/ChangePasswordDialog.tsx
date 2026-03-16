@@ -1,6 +1,7 @@
 import { Eye, EyeOff, Lock, X } from 'lucide-react'
 import { useCallback, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/useToast'
@@ -37,23 +38,43 @@ export function ChangePasswordDialog({ isOpen, onClose }: ChangePasswordDialogPr
 
   const validateForm = useCallback(() => {
     if (!oldPassword.trim()) {
-      toast.error('请输入旧密码')
+      toast.warning({
+        title: '请输入旧密码',
+        description: '填写当前密码后才能继续修改。',
+        dedupeKey: 'change-password-old-required',
+      })
       return false
     }
     if (!newPassword.trim()) {
-      toast.error('请输入新密码')
+      toast.warning({
+        title: '请输入新密码',
+        description: '填写新密码后才能继续修改。',
+        dedupeKey: 'change-password-new-required',
+      })
       return false
     }
     if (newPassword.length < 6) {
-      toast.error('新密码长度至少为6位')
+      toast.warning({
+        title: '新密码过短',
+        description: '新密码长度至少为 6 位。',
+        dedupeKey: 'change-password-too-short',
+      })
       return false
     }
     if (newPassword !== confirmPassword) {
-      toast.error('两次输入的新密码不一致')
+      toast.warning({
+        title: '两次密码不一致',
+        description: '请重新确认两次输入的新密码。',
+        dedupeKey: 'change-password-mismatch',
+      })
       return false
     }
     if (oldPassword === newPassword) {
-      toast.error('新密码不能与旧密码相同')
+      toast.warning({
+        title: '新旧密码不能相同',
+        description: '请设置一个不同于旧密码的新密码。',
+        dedupeKey: 'change-password-same',
+      })
       return false
     }
     return true
@@ -66,13 +87,25 @@ export function ChangePasswordDialog({ isOpen, onClose }: ChangePasswordDialogPr
     try {
       const result = await changePassword(oldPassword, newPassword)
       if (result.ok) {
-        toast.success('密码修改成功')
+        toast.success({
+          title: '密码已修改',
+          description: '下次登录请使用新密码。',
+          dedupeKey: 'change-password-success',
+        })
         handleClose()
       } else {
-        toast.error(result.error?.message || '密码修改失败')
+        toast.error({
+          title: '密码修改失败',
+          description: result.error?.message || '密码修改失败，请稍后重试。',
+          dedupeKey: 'change-password-failed',
+        })
       }
     } catch {
-      toast.error('密码修改失败，请稍后重试')
+      toast.error({
+        title: '密码修改失败',
+        description: '密码修改失败，请稍后重试。',
+        dedupeKey: 'change-password-error',
+      })
     } finally {
       setIsLoading(false)
     }
@@ -81,18 +114,21 @@ export function ChangePasswordDialog({ isOpen, onClose }: ChangePasswordDialogPr
   if (!isOpen) return null
 
   return (
-    <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-200"
-      onClick={handleClose}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="change-password-title"
-    >
-      <div
-        className="w-[24rem] max-w-[92vw] bg-[var(--surface)] rounded-2xl border border-[hsl(var(--border))] overflow-hidden animate-in zoom-in-95 duration-200"
-        style={{ boxShadow: 'var(--shadow-modal)' }}
-        onClick={e => e.stopPropagation()}
-        role="document"
+    <Dialog open={isOpen} onOpenChange={open => !open && handleClose()}>
+      <DialogContent
+        aria-labelledby="change-password-title"
+        aria-describedby="change-password-description"
+        className="w-[24rem] max-w-[92vw] overflow-hidden rounded-2xl border p-0"
+        onPointerDownOutside={event => {
+          if (isLoading) {
+            event.preventDefault()
+          }
+        }}
+        onEscapeKeyDown={event => {
+          if (isLoading) {
+            event.preventDefault()
+          }
+        }}
       >
         {/* Header */}
         <div className="relative px-6 pt-6 pb-4 border-b border-[hsl(var(--border))]">
@@ -113,7 +149,9 @@ export function ChangePasswordDialog({ isOpen, onClose }: ChangePasswordDialogPr
               <h2 id="change-password-title" className="text-lg font-bold text-foreground">
                 修改密码
               </h2>
-              <p className="text-xs text-muted-foreground">请确保新密码安全性</p>
+              <p id="change-password-description" className="text-sm text-muted-foreground">
+                请确保新密码安全性
+              </p>
             </div>
           </div>
         </div>
@@ -141,7 +179,7 @@ export function ChangePasswordDialog({ isOpen, onClose }: ChangePasswordDialogPr
               <button
                 type="button"
                 onClick={() => setShowOldPassword(!showOldPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
                 aria-label={showOldPassword ? '隐藏密码' : '显示密码'}
               >
                 {showOldPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -170,7 +208,7 @@ export function ChangePasswordDialog({ isOpen, onClose }: ChangePasswordDialogPr
               <button
                 type="button"
                 onClick={() => setShowNewPassword(!showNewPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
                 aria-label={showNewPassword ? '隐藏密码' : '显示密码'}
               >
                 {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -199,7 +237,7 @@ export function ChangePasswordDialog({ isOpen, onClose }: ChangePasswordDialogPr
               <button
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
                 aria-label={showConfirmPassword ? '隐藏密码' : '显示密码'}
               >
                 {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -211,12 +249,12 @@ export function ChangePasswordDialog({ isOpen, onClose }: ChangePasswordDialogPr
           <div className="text-xs text-muted-foreground space-y-1">
             <p>密码要求：</p>
             <ul className="list-disc list-inside space-y-0.5">
-              <li className={newPassword.length >= 6 ? 'text-green-500' : ''}>至少6个字符</li>
-              <li className={newPassword !== oldPassword && newPassword ? 'text-green-500' : ''}>
+              <li className={newPassword.length >= 6 ? 'text-emerald-300' : ''}>至少6个字符</li>
+              <li className={newPassword !== oldPassword && newPassword ? 'text-emerald-300' : ''}>
                 不能与旧密码相同
               </li>
               <li
-                className={newPassword === confirmPassword && newPassword ? 'text-green-500' : ''}
+                className={newPassword === confirmPassword && newPassword ? 'text-emerald-300' : ''}
               >
                 两次输入一致
               </li>
@@ -240,7 +278,7 @@ export function ChangePasswordDialog({ isOpen, onClose }: ChangePasswordDialogPr
             )}
           </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

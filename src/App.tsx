@@ -11,12 +11,13 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Toaster } from '@/components/ui/toaster'
 import { useAppIpcBootstrap } from '@/hooks/useAppIpcBootstrap'
 import { useDevMode } from '@/hooks/useDevMode'
 import { Header } from './components/common/Header'
 import './App.css'
-import React, { Suspense, useEffect, useState } from 'react'
+import React, { lazy, Suspense, useEffect, useState } from 'react'
 import { AuthProvider } from '@/components/auth/AuthProvider'
 // 新用户引导组件
 import { QuickStartDialog, WelcomeDialog } from '@/components/onboarding'
@@ -31,7 +32,6 @@ import { initializePlatformPreferenceService } from '@/services/platformPreferen
 import { useAuthCheckDone, useIsAuthenticated } from '@/stores/authStore'
 // 初始化统一存储系统
 import { initializeStorage } from '@/utils/storage'
-import { UpdateDialog } from './components/update/UpdateDialog'
 import { useAccounts } from './hooks/useAccounts'
 import { useLoadAutoMessageOnLogin } from './hooks/useAutoMessage'
 import { useLoadAutoPopUpOnLogin } from './hooks/useAutoPopUp'
@@ -43,6 +43,11 @@ import { useLoadSubAccountOnLogin } from './hooks/useSubAccount'
 import { useTaskConnectionGuard } from './hooks/useTaskConnectionGuard'
 import { useToast } from './hooks/useToast'
 import { cn } from './lib/utils'
+
+const UpdateDialog = lazy(async () => {
+  const module = await import('./components/update/UpdateDialog')
+  return { default: module.UpdateDialog }
+})
 
 function AppContent() {
   const { enabled: devMode } = useDevMode()
@@ -165,7 +170,7 @@ function AppContent() {
               <Sidebar />
 
               <main
-                className="min-h-0 flex-1 flex flex-col overflow-hidden p-6"
+                className="min-h-0 flex-1 flex flex-col overflow-hidden p-3 md:p-6"
                 style={{
                   backgroundColor: 'var(--content-bg)',
                   borderTopLeftRadius: '1rem',
@@ -176,11 +181,13 @@ function AppContent() {
                   <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
                     <Suspense
                       fallback={
-                        <div className="flex items-center justify-center flex-1 min-h-0">
-                          <div className="flex flex-col items-center gap-3">
-                            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-                            <span className="text-sm text-muted-foreground">加载中...</span>
+                        <div className="flex flex-1 min-h-0 flex-col gap-4 py-2">
+                          <Skeleton className="h-8 w-48 rounded-lg" />
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <Skeleton className="h-40 rounded-2xl" />
+                            <Skeleton className="h-40 rounded-2xl" />
                           </div>
+                          <Skeleton className="h-56 rounded-2xl" />
                         </div>
                       }
                     >
@@ -209,7 +216,9 @@ function AppContent() {
                 onToggleCollapsed={() => setLogCollapsed(prev => !prev)}
               />
             </div>
-            <UpdateDialog />
+            <Suspense fallback={null}>
+              <UpdateDialog />
+            </Suspense>
           </div>
         </ContextMenuTrigger>
         {devMode && (

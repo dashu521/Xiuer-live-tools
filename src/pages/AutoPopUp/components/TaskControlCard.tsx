@@ -38,13 +38,13 @@ export default function TaskControlCard({ isRunning, gate, onStartStop }: TaskCo
         </CardTitle>
       </CardHeader>
       <CardContent className="p-6">
-        <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-center gap-3">
             <div
-              className={`h-12 w-12 rounded-xl flex items-center justify-center border ${isRunning ? 'border-green-500/30' : 'border-primary/30'}`}
+              className={`flex h-12 w-12 items-center justify-center rounded-xl border ${isRunning ? 'border-emerald-500/25 bg-emerald-500/10' : 'border-primary/30 bg-primary/6'}`}
             >
               {isRunning ? (
-                <div className="h-4 w-4 rounded-full border-2 border-green-500 animate-pulse" />
+                <div className="h-4 w-4 rounded-full border-2 border-emerald-400 animate-pulse" />
               ) : (
                 <Activity className="h-6 w-6 text-primary" />
               )}
@@ -58,17 +58,17 @@ export default function TaskControlCard({ isRunning, gate, onStartStop }: TaskCo
           </div>
 
           <TooltipProvider>
-            <div className="flex items-center gap-5">
+            <div className="flex flex-wrap items-center gap-3 xl:justify-end">
               {/* 弹窗间隔 */}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex items-center gap-2.5 cursor-pointer border rounded-lg px-4 py-3 bg-muted/30 -my-1.5">
+                  <div className="flex h-11 items-center gap-2.5 rounded-lg border border-border/70 bg-muted/30 px-4">
                     <Timer className="h-5 w-5 text-muted-foreground" />
                     <Input
                       type="number"
                       value={minInterval}
                       onChange={e => handleIntervalChange(0, e.target.value)}
-                      className="w-16 h-8 text-base text-center bg-background"
+                      className="h-8 w-16 border-border/70 bg-background text-center text-base"
                       min="1"
                     />
                     <span className="text-base text-muted-foreground">-</span>
@@ -90,7 +90,7 @@ export default function TaskControlCard({ isRunning, gate, onStartStop }: TaskCo
               {/* 随机弹窗 */}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="flex items-center gap-2 cursor-pointer">
+                  <div className="flex h-11 items-center gap-2 rounded-lg border border-border/70 bg-muted/20 px-3">
                     <Switch
                       id="random-popup"
                       checked={random}
@@ -112,7 +112,7 @@ export default function TaskControlCard({ isRunning, gate, onStartStop }: TaskCo
                 onStart={onStartStop}
                 onStop={onStartStop}
                 gate={gate}
-                size="sm"
+                size="default"
                 startText="开始任务"
                 stopText="停止任务"
               />

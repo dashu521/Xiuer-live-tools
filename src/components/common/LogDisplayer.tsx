@@ -150,13 +150,13 @@ export default function LogDisplayer({
             {collapsed ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </Button>
           <Button
-            variant="ghost"
+            variant="subtle"
             size="sm"
             onClick={() => {
               setLogMessages([])
               scrollToBottom()
             }}
-            className="text-xs h-7 px-2 text-muted-foreground hover:text-destructive"
+            className="text-xs h-7 px-2 text-muted-foreground"
           >
             清空
           </Button>
@@ -187,13 +187,13 @@ function LogItem({ log, index }: { log: ParsedLog; index: number }) {
       case 'WARN':
         return 'text-warning font-medium'
       case 'DEBUG':
-        return 'text-blue-600'
+        return 'text-sky-300'
       case 'INFO':
         return 'text-muted-foreground'
       case 'SUCCESS':
-        return 'text-emerald-600'
+        return 'text-emerald-300'
       case 'NOTE':
-        return 'text-purple-600'
+        return 'text-violet-300'
       default:
         return 'text-muted-foreground'
     }

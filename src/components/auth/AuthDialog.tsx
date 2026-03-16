@@ -1,7 +1,14 @@
 import { Eye, EyeOff, Loader2, LogIn, Smartphone } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import { FeatureCarousel } from '@/components/onboarding/FeatureCarousel'
 import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -10,6 +17,7 @@ import {
   BLOCKED_TEST_IDENTIFIERS,
   getSanitizedLastIdentifier,
 } from '@/constants/authStorageKeys'
+import { useFriendlyError } from '@/hooks/useFriendlyError'
 import { useToast } from '@/hooks/useToast'
 import { useAuthStore } from '@/stores/authStore'
 import { PhoneAuthDialog } from './PhoneAuthDialog'
@@ -36,6 +44,7 @@ export function AuthDialog({ isOpen, onClose, feature }: AuthDialogProps) {
 
   const { login, isLoading, error, clearError } = useAuthStore()
   const { toast } = useToast()
+  const { showError } = useFriendlyError()
 
   const hasAutoFilledRef = useRef(false)
 
@@ -114,7 +123,6 @@ export function AuthDialog({ isOpen, onClose, feature }: AuthDialogProps) {
     const validationErr = validateLoginForm()
     if (validationErr) {
       setValidationError(validationErr)
-      toast.error(validationErr)
       return
     }
 
@@ -135,7 +143,11 @@ export function AuthDialog({ isOpen, onClose, feature }: AuthDialogProps) {
       }
 
       window.dispatchEvent(new CustomEvent('auth:success', { detail: { feature } }))
-      toast.success('登录成功')
+      toast.success({
+        title: '登录成功',
+        description: '欢迎回来，已完成账号登录。',
+        dedupeKey: 'auth-login-success',
+      })
       onClose()
       setLoginForm({ username: '', password: '', rememberMe: false })
     } else {
@@ -144,7 +156,6 @@ export function AuthDialog({ isOpen, onClose, feature }: AuthDialogProps) {
       setValidationError(userMessage)
       setLastLoginRawError(result.rawError ?? null)
       setDevDetailsOpen(false)
-      toast.error(userMessage)
       setTimeout(() => {
         const passwordInput = document.getElementById('login-password') as HTMLInputElement | null
         if (passwordInput) passwordInput.focus()
@@ -169,214 +180,239 @@ export function AuthDialog({ isOpen, onClose, feature }: AuthDialogProps) {
   const displayError = error || validationError
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div
-        className="w-full max-w-[26.25rem] rounded-xl border p-6"
-        style={{
-          backgroundColor: 'var(--surface)',
-          borderColor: 'var(--border)',
-          boxShadow: 'var(--shadow-modal)',
-        }}
-      >
-        {/* Header */}
-        <div className="text-center mb-5">
-          <h1
-            className="text-xl font-semibold mb-0"
-            style={{
-              color: 'var(--text-primary)',
-              fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-            }}
-          >
-            登录
-          </h1>
-        </div>
-
-        {/* Content */}
-        <div>
-          {displayError && (
-            <div className="mb-4 p-3 border border-destructive/20 rounded-lg space-y-2">
-              <p
-                className="text-[13px] text-destructive"
-                style={{
-                  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                }}
-              >
-                {displayError}
-              </p>
-              {import.meta.env.DEV && lastLoginRawError && (
-                <div className="mt-2">
+    <>
+      <Dialog open={isOpen} onOpenChange={open => !open && onClose()}>
+        <DialogContent
+          aria-describedby="auth-dialog-description"
+          className="w-full max-w-[26.25rem] rounded-xl border p-6"
+          onPointerDownOutside={event => {
+            if (isLoading) {
+              event.preventDefault()
+            }
+          }}
+          onEscapeKeyDown={event => {
+            if (isLoading) {
+              event.preventDefault()
+            }
+          }}
+        >
+          <DialogHeader className="mb-5 text-center">
+            <DialogTitle
+              className="text-xl font-semibold"
+              style={{
+                color: 'var(--text-primary)',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+              }}
+            >
+              登录
+            </DialogTitle>
+            <DialogDescription
+              id="auth-dialog-description"
+              style={{ color: 'var(--text-secondary)' }}
+            >
+              使用手机号和密码登录秀儿直播助手。
+            </DialogDescription>
+          </DialogHeader>
+          <div>
+            {displayError && (
+              <div className="mb-4 p-3 border border-destructive/20 rounded-lg space-y-2">
+                <p
+                  role="alert"
+                  aria-live="polite"
+                  className="text-[13px] text-destructive"
+                  style={{
+                    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+                  }}
+                >
+                  {displayError}
+                </p>
+                {import.meta.env.DEV && lastLoginRawError && (
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setDevDetailsOpen(prev => !prev)}
+                      className="text-[12px] text-muted-foreground hover:text-foreground underline"
+                    >
+                      {devDetailsOpen ? '收起' : '更多信息'}
+                    </button>
+                    {devDetailsOpen && (
+                      <pre className="mt-1 p-2 bg-muted/50 rounded text-[11px] overflow-auto max-h-24 break-all whitespace-pre-wrap">
+                        {lastLoginRawError}
+                      </pre>
+                    )}
+                  </div>
+                )}
+                {!import.meta.env.DEV && lastLoginRawError && (
                   <button
                     type="button"
-                    onClick={() => setDevDetailsOpen(prev => !prev)}
+                    onClick={() =>
+                      showError(lastLoginRawError, {
+                        title: '登录失败',
+                        showSolution: true,
+                      })
+                    }
                     className="text-[12px] text-muted-foreground hover:text-foreground underline"
                   >
-                    {devDetailsOpen ? '收起' : '更多信息'}
+                    查看排查建议
                   </button>
-                  {devDetailsOpen && (
-                    <pre className="mt-1 p-2 bg-muted/50 rounded text-[11px] overflow-auto max-h-24 break-all whitespace-pre-wrap">
-                      {lastLoginRawError}
-                    </pre>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )}
 
-          {/* Login Form */}
-          <form onSubmit={handleLogin} className="space-y-3">
-            <Input
-              id="login-username"
-              type="text"
-              placeholder="手机号"
-              value={loginForm.username}
-              onChange={e => setLoginForm(prev => ({ ...prev, username: e.target.value }))}
-              onKeyDown={handleKeyDown}
-              className="h-10 rounded-lg text-sm pr-12 focus-visible:ring-2 focus-visible:ring-ring/30"
-              style={{
-                backgroundColor: 'var(--input-bg)',
-                borderColor: 'var(--input-border)',
-                color: 'var(--text-primary)',
-              }}
-              required
-              autoFocus
-            />
-
-            <div className="relative">
-              <Input
-                id="login-password"
-                type={showPassword ? 'text' : 'password'}
-                placeholder="密码"
-                value={loginForm.password}
-                onChange={e => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
-                onKeyDown={handleKeyDown}
-                className="h-10 rounded-lg text-sm pr-12 focus-visible:ring-2 focus-visible:ring-ring/30"
-                style={{
-                  backgroundColor: 'var(--input-bg)',
-                  borderColor: 'var(--input-border)',
-                  color: 'var(--text-primary)',
-                }}
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors duration-150 p-1 rounded focus:outline-none focus:ring-2 focus:ring-ring/50"
-                aria-label={showPassword ? '隐藏密码' : '显示密码'}
-              >
-                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between pt-0.5">
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="remember-me"
-                  checked={loginForm.rememberMe}
-                  onChange={e => setLoginForm(prev => ({ ...prev, rememberMe: e.target.checked }))}
-                  className="h-4 w-4 rounded border focus:ring-2 focus:ring-ring/30"
-                  style={{
-                    borderColor: 'var(--input-border)',
-                    backgroundColor: 'var(--input-bg)',
-                  }}
-                />
-                <Label
-                  htmlFor="remember-me"
-                  className="text-[13px] cursor-pointer"
-                  style={{ color: 'var(--text-muted)' }}
-                >
-                  记住登录状态
+            {/* Login Form */}
+            <form onSubmit={handleLogin} className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="login-username" style={{ color: 'var(--text-secondary)' }}>
+                  手机号
                 </Label>
+                <Input
+                  id="login-username"
+                  type="text"
+                  placeholder="请输入手机号"
+                  value={loginForm.username}
+                  onChange={e => setLoginForm(prev => ({ ...prev, username: e.target.value }))}
+                  onKeyDown={handleKeyDown}
+                  className="h-10 rounded-lg text-sm pr-12 focus-visible:ring-2 focus-visible:ring-ring/30"
+                  style={{
+                    backgroundColor: 'var(--input-bg)',
+                    borderColor: 'var(--input-border)',
+                    color: 'var(--text-primary)',
+                  }}
+                  required
+                  autoFocus
+                />
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setPhoneAuthMode('reset')
-                  setShowPhoneAuth(true)
-                }}
-                className="text-[13px] text-primary hover:opacity-80 transition-colors duration-150"
+
+              <div className="space-y-1.5">
+                <Label htmlFor="login-password" style={{ color: 'var(--text-secondary)' }}>
+                  密码
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="login-password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="请输入密码"
+                    value={loginForm.password}
+                    onChange={e => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
+                    onKeyDown={handleKeyDown}
+                    className="h-10 rounded-lg text-sm pr-12 focus-visible:ring-2 focus-visible:ring-ring/30"
+                    style={{
+                      backgroundColor: 'var(--input-bg)',
+                      borderColor: 'var(--input-border)',
+                      color: 'var(--text-primary)',
+                    }}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors duration-150 p-1 rounded focus:outline-none focus:ring-2 focus:ring-ring/50"
+                    aria-label={showPassword ? '隐藏密码' : '显示密码'}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-0.5">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="remember-me"
+                    checked={loginForm.rememberMe}
+                    onCheckedChange={checked =>
+                      setLoginForm(prev => ({ ...prev, rememberMe: checked === true }))
+                    }
+                    className="border-[color:var(--input-border)] bg-[color:var(--input-bg)] data-[state=checked]:border-primary"
+                  />
+                  <Label
+                    htmlFor="remember-me"
+                    className="cursor-pointer text-[13px]"
+                    style={{ color: 'var(--text-muted)' }}
+                  >
+                    记住登录状态
+                  </Label>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPhoneAuthMode('reset')
+                    setShowPhoneAuth(true)
+                  }}
+                  className="text-[13px] text-primary hover:opacity-80 transition-colors duration-150"
+                >
+                  忘记密码？
+                </button>
+              </div>
+
+              <Button
+                type="submit"
+                className="w-full h-10 rounded-lg text-sm font-medium mt-4"
+                disabled={isLoading}
               >
-                忘记密码？
-              </button>
-            </div>
+                {isLoading ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    登录中...
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <LogIn className="h-4 w-4" />
+                    登录
+                  </div>
+                )}
+              </Button>
 
-            <Button
-              type="submit"
-              className="w-full h-10 rounded-lg text-sm font-medium mt-4"
-              disabled={isLoading}
-            >
-              {isLoading ? (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  登录中...
+              {/* Footer */}
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-center gap-2 text-[14px]">
+                  <span className="text-muted-foreground">还没有账号？</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPhoneAuthMode('register')
+                      setShowPhoneAuth(true)
+                    }}
+                    className="text-primary hover:opacity-80 font-medium transition-colors duration-150"
+                  >
+                    手机号注册
+                  </button>
                 </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <LogIn className="h-4 w-4" />
-                  登录
+
+                <div className="flex items-center justify-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPhoneAuthMode('login')
+                      setShowPhoneAuth(true)
+                    }}
+                    className="text-[13px] text-muted-foreground hover:text-foreground transition-colors duration-150 flex items-center gap-1"
+                  >
+                    <Smartphone className="h-3 w-3" />
+                    验证码登录
+                  </button>
                 </div>
-              )}
-            </Button>
-
-            {/* Footer */}
-            <div className="mt-4 space-y-2">
-              <div className="flex items-center justify-center gap-2 text-[14px]">
-                <span className="text-muted-foreground">还没有账号？</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPhoneAuthMode('register')
-                    setShowPhoneAuth(true)
-                  }}
-                  className="text-primary hover:opacity-80 font-medium transition-colors duration-150"
-                >
-                  手机号注册
-                </button>
               </div>
+            </form>
 
-              <div className="flex items-center justify-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPhoneAuthMode('login')
-                    setShowPhoneAuth(true)
-                  }}
-                  className="text-[13px] text-muted-foreground hover:text-foreground transition-colors duration-150 flex items-center gap-1"
-                >
-                  <Smartphone className="h-3 w-3" />
-                  验证码登录
-                </button>
-              </div>
+            {/* Cancel Button */}
+            <div className="mt-4 text-center">
+              <Button
+                variant="ghost"
+                onClick={onClose}
+                className="text-[13px] text-muted-foreground hover:text-foreground h-auto p-0"
+              >
+                取消
+              </Button>
             </div>
-          </form>
-
-          {/* Cancel Button */}
-          <div className="mt-4 text-center">
-            <Button
-              variant="ghost"
-              onClick={onClose}
-              className="text-[13px] text-muted-foreground hover:text-foreground h-auto p-0"
-            >
-              取消
-            </Button>
           </div>
-
-          {/* 功能轮播 - 让用户了解产品价值 */}
-          <div className="mt-6 pt-4 border-t border-border">
-            <p className="text-xs text-muted-foreground text-center mb-3">
-              ✨ 登录后可使用以下超酷功能
-            </p>
-            <FeatureCarousel />
-          </div>
-        </div>
-      </div>
-
+        </DialogContent>
+      </Dialog>
       <PhoneAuthDialog
         isOpen={showPhoneAuth}
         onClose={() => setShowPhoneAuth(false)}
         feature={feature}
         initialMode={phoneAuthMode}
       />
-    </div>
+    </>
   )
 }

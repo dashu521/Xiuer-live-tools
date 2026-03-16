@@ -51,7 +51,7 @@ export function HelpSupportContent() {
               <BookOpen className="h-6 w-6 text-primary" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium mb-1">快速上手直播工具</div>
+              <div className="mb-1 text-base font-medium">快速上手直播工具</div>
               <p className="text-sm text-muted-foreground mb-4">
                 详细了解各功能模块的使用方法，包括直播控制台连接、自动发言、自动弹窗、自动回复等功能的使用步骤。
               </p>
@@ -84,17 +84,22 @@ export function HelpSupportContent() {
               邮箱支持
             </div>
             <div className="pl-3">
-              <div className="flex items-center justify-between gap-4 p-4 bg-muted/30 rounded-lg">
+              <div className="flex flex-col gap-4 rounded-lg bg-muted/30 p-4 md:flex-row md:items-center md:justify-between">
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
                     <Mail className="h-5 w-5 text-primary" />
                   </div>
                   <div>
                     <div className="text-sm font-medium">发送邮件</div>
-                    <div className="text-xs text-muted-foreground">{SUPPORT_EMAIL}</div>
+                    <div className="text-sm text-muted-foreground">{SUPPORT_EMAIL}</div>
                   </div>
                 </div>
-                <Button variant="outline" size="sm" className="h-9 px-4" onClick={handleCopyEmail}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-9 px-4 self-start md:self-auto"
+                  onClick={handleCopyEmail}
+                >
                   <Copy className="mr-2 h-4 w-4" />
                   复制邮箱
                 </Button>
@@ -143,7 +148,7 @@ export function HelpSupportContent() {
                   </div>
                 </CollapsibleContent>
               </Collapsible>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 添加微信时，请备注【{SUPPORT_PRODUCT_NAME} + 问题简述】，以便更快处理。
               </p>
             </div>

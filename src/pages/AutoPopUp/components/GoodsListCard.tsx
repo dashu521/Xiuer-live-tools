@@ -3,6 +3,7 @@ import { AlertCircle, Clock, Keyboard, Package, Plus, Trash2 } from 'lucide-reac
 import React, { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -105,12 +106,10 @@ const GoodsItemEditDialog: React.FC<GoodsItemEditDialogProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
+            <Checkbox
               id="custom-interval"
               checked={useCustomInterval}
-              onChange={e => setUseCustomInterval(e.target.checked)}
-              className="rounded border-gray-300"
+              onCheckedChange={checked => setUseCustomInterval(checked === true)}
             />
             <Label htmlFor="custom-interval" className="text-sm cursor-pointer">
               使用自定义弹窗间隔
@@ -327,12 +326,7 @@ const GoodsListCard = React.memo(() => {
                         添加示例
                       </Button>
                       {goods.length > 0 && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 text-destructive hover:text-destructive"
-                          onClick={handleClear}
-                        >
+                        <Button variant="subtle" size="sm" className="h-8" onClick={handleClear}>
                           <Trash2 className="mr-1.5 h-3.5 w-3.5" />
                           清空
                         </Button>
@@ -361,7 +355,7 @@ const GoodsListCard = React.memo(() => {
               ) : (
                 <div
                   onClick={handleStartEdit}
-                  className="min-h-[120px] p-4 border rounded-lg bg-muted/30 cursor-text hover:bg-muted/50 transition-colors"
+                  className="ui-hover-surface min-h-[120px] cursor-text rounded-lg border bg-muted/30 p-4"
                 >
                   {goods.length > 0 ? (
                     <TooltipProvider>
@@ -374,7 +368,7 @@ const GoodsListCard = React.memo(() => {
                                   e.stopPropagation()
                                   setEditingItem(item)
                                 }}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary/10 text-primary text-sm font-medium cursor-pointer hover:bg-primary/20 transition-colors"
+                                className="ui-hover-item inline-flex cursor-pointer items-center gap-1 rounded-md bg-primary/10 px-2.5 py-1 text-sm font-medium text-primary"
                               >
                                 {item.id}
                                 {item.interval && <Clock className="h-3 w-3 text-primary/70" />}

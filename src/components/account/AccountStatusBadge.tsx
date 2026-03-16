@@ -99,11 +99,11 @@ export const AccountStatusBadge = memo(function AccountStatusBadge({
 
   // 颜色样式映射
   const colorStyles = {
-    green: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    blue: 'bg-blue-50 text-blue-700 border-blue-200',
-    yellow: 'bg-amber-50 text-amber-700 border-amber-200',
-    red: 'bg-red-50 text-red-700 border-red-200',
-    gray: 'bg-gray-50 text-gray-600 border-gray-200',
+    green: 'border-emerald-500/25 bg-emerald-500/12 text-emerald-100',
+    blue: 'border-sky-500/25 bg-sky-500/12 text-sky-100',
+    yellow: 'border-amber-500/25 bg-amber-500/12 text-amber-100',
+    red: 'border-red-500/25 bg-red-500/12 text-red-100',
+    gray: 'border-border/70 bg-muted/55 text-muted-foreground',
   }
 
   const sizeStyles = {

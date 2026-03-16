@@ -234,7 +234,7 @@ export function OneClickStartButton({ variant = 'default' }: OneClickStartButton
                 <li>自动发言 - 按设定间隔自动发送消息</li>
                 <li>自动弹窗 - 自动展示商品弹窗</li>
               </ul>
-              <p className="text-sm text-amber-500 mt-4">请确保已配置好各功能的设置后再开启。</p>
+              <p className="mt-4 text-sm text-amber-200">请确保已配置好各功能的设置后再开启。</p>
             </DialogDescription>
           </DialogHeader>
           <div className="flex items-center space-x-2 py-4">

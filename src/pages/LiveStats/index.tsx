@@ -1,5 +1,6 @@
 import { useMemoizedFn } from 'ahooks'
 import { useState } from 'react'
+import { Title } from '@/components/common/Title'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAccounts } from '@/hooks/useAccounts'
 import { useAutoReplyConfig } from '@/hooks/useAutoReplyConfig'
@@ -132,12 +133,24 @@ export default function LiveStats() {
       const result = await exportLiveStats(data)
 
       if (result.success) {
-        toast.success(`数据已导出到：${result.filePath}`)
+        toast.success({
+          title: '导出完成',
+          description: '监控数据已导出，可点击“打开导出目录”查看文件。',
+          dedupeKey: `live-stats-export:${currentAccountId}`,
+        })
       } else {
-        toast.error(result.error || '导出失败')
+        toast.error({
+          title: '导出失败',
+          description: result.error || '数据导出失败，请稍后重试。',
+          dedupeKey: `live-stats-export-failed:${currentAccountId}`,
+        })
       }
     } catch (error) {
-      toast.error('导出失败')
+      toast.error({
+        title: '导出失败',
+        description: '数据导出失败，请稍后重试。',
+        dedupeKey: `live-stats-export-error:${currentAccountId}`,
+      })
       console.error('[LiveStats] Export failed:', error)
     } finally {
       setIsExporting(false)
@@ -157,7 +170,7 @@ export default function LiveStats() {
         const data = buildExportData()
         const result = await exportLiveStats(data)
         if (result.success) {
-          toast.success(`数据已自动保存到：${result.filePath}`)
+          console.log('[LiveStats] Auto save success:', result.filePath)
         }
       } catch (error) {
         console.error('[LiveStats] Auto save failed:', error)
@@ -166,40 +179,48 @@ export default function LiveStats() {
   }
 
   return (
-    <div className="h-full flex flex-col gap-4 p-4 overflow-auto">
-      {/* 顶部统计卡片 */}
-      <StatsOverview
-        stats={stats}
-        isListening={isListening}
-        onStart={startListening}
-        onStop={doStopListening}
-        onReset={handleReset}
-        onExport={handleExport}
-        onOpenFolder={handleOpenFolder}
-        isExporting={isExporting}
-        gate={gate}
-      />
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="flex min-h-full flex-col gap-6 py-6">
+          <div className="shrink-0">
+            <Title title="数据监控" description="查看直播间的实时数据变化与事件记录" />
+          </div>
 
-      {/* 标签页内容 */}
-      <Tabs defaultValue="danmu" className="flex-1 flex flex-col min-h-0">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="danmu">弹幕监控</TabsTrigger>
-          <TabsTrigger value="fansclub">粉丝团变化</TabsTrigger>
-          <TabsTrigger value="timeline">事件时间线</TabsTrigger>
-        </TabsList>
+          <div className="flex min-h-0 flex-1 flex-col gap-6">
+            <StatsOverview
+              stats={stats}
+              isListening={isListening}
+              onStart={startListening}
+              onStop={doStopListening}
+              onReset={handleReset}
+              onExport={handleExport}
+              onOpenFolder={handleOpenFolder}
+              isExporting={isExporting}
+              gate={gate}
+            />
 
-        <TabsContent value="danmu" className="flex-1 mt-4">
-          <DanmuMonitor />
-        </TabsContent>
+            <Tabs defaultValue="danmu" className="flex min-h-0 flex-1 flex-col">
+              <TabsList className="grid w-full grid-cols-3 shrink-0">
+                <TabsTrigger value="danmu">弹幕监控</TabsTrigger>
+                <TabsTrigger value="fansclub">粉丝团变化</TabsTrigger>
+                <TabsTrigger value="timeline">事件时间线</TabsTrigger>
+              </TabsList>
 
-        <TabsContent value="fansclub" className="flex-1 mt-4">
-          <FansGroupChanges />
-        </TabsContent>
+              <TabsContent value="danmu" className="mt-4 flex-1 min-h-0">
+                <DanmuMonitor />
+              </TabsContent>
 
-        <TabsContent value="timeline" className="flex-1 mt-4">
-          <EventTimeline />
-        </TabsContent>
-      </Tabs>
+              <TabsContent value="fansclub" className="mt-4 flex-1 min-h-0">
+                <FansGroupChanges />
+              </TabsContent>
+
+              <TabsContent value="timeline" className="mt-4 flex-1 min-h-0">
+                <EventTimeline />
+              </TabsContent>
+            </Tabs>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

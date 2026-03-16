@@ -23,32 +23,29 @@ interface StatsCardProps {
   value: string | number
   subValue?: string
   icon: React.ReactNode
-  color: string
-  bgColor: string
 }
 
 /**
  * StatsCard 组件 - 已优化
  * 使用 memo 避免不必要的重渲染
  */
-const StatsCard = memo(function StatsCard({
-  title,
-  value,
-  subValue,
-  icon,
-  color,
-  bgColor,
-}: StatsCardProps) {
+const StatsCard = memo(function StatsCard({ title, value, subValue, icon }: StatsCardProps) {
   return (
-    <Card className={cn('relative overflow-hidden', bgColor)}>
+    <Card className="relative overflow-hidden border-primary/20 bg-card/90 shadow-[0_14px_30px_-22px_rgba(0,0,0,0.55)]">
       <CardContent className="p-4">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1">
+        <div className="flex items-start justify-between gap-3">
+          <div className="space-y-1.5">
             <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <p className={cn('text-2xl font-bold', color)}>{value}</p>
+            <p className="text-2xl font-semibold tracking-tight text-foreground">{value}</p>
             {subValue && <p className="text-xs text-muted-foreground">{subValue}</p>}
           </div>
-          <div className={cn('p-2 rounded-lg', bgColor)}>{icon}</div>
+          <div
+            className={cn(
+              'flex h-11 w-11 items-center justify-center rounded-xl border border-primary/30 bg-primary/8 text-primary shadow-sm',
+            )}
+          >
+            {icon}
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -126,19 +123,21 @@ const StatsOverview = memo(function StatsOverview({
   return (
     <div className="space-y-4">
       {/* 控制栏 */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold">数据监控</h2>
-          {isListening && (
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex min-h-7 items-center gap-3">
+          <span className="text-sm font-medium text-muted-foreground">监控总览</span>
+          {isListening ? (
             <div className="flex items-center gap-2">
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-300" />
               </span>
               <span className="text-sm text-muted-foreground">
                 监听中 · {formatDuration(duration)}
               </span>
             </div>
+          ) : (
+            <span className="text-sm text-muted-foreground">尚未开始监控</span>
           )}
         </div>
 
@@ -161,6 +160,7 @@ const StatsOverview = memo(function StatsOverview({
                 <Button
                   variant="ghost"
                   size="sm"
+                  aria-label="导出数据"
                   onClick={onExport}
                   disabled={isExporting || stats.commentCount === 0}
                 >
@@ -175,7 +175,7 @@ const StatsOverview = memo(function StatsOverview({
             {/* 打开导出目录按钮 */}
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" onClick={onOpenFolder}>
+                <Button variant="ghost" size="sm" aria-label="打开导出目录" onClick={onOpenFolder}>
                   <FolderOpen className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
@@ -188,7 +188,7 @@ const StatsOverview = memo(function StatsOverview({
             {stats.commentCount > 0 && (
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" size="sm" onClick={handleReset}>
+                  <Button variant="ghost" size="sm" aria-label="重置数据" onClick={handleReset}>
                     <RotateCcw className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
@@ -207,33 +207,25 @@ const StatsOverview = memo(function StatsOverview({
           title="点赞"
           value={formatCount(stats.likeCount)}
           subValue="次"
-          icon={<Heart className="h-5 w-5 text-pink-500" />}
-          color="text-pink-600"
-          bgColor="border border-pink-500/20"
+          icon={<Heart className="h-5 w-5" />}
         />
         <StatsCard
           title="弹幕"
           value={formatCount(stats.commentCount)}
           subValue="条"
-          icon={<MessageSquare className="h-5 w-5 text-blue-500" />}
-          color="text-blue-600"
-          bgColor="border border-blue-500/20"
+          icon={<MessageSquare className="h-5 w-5" />}
         />
         <StatsCard
           title="进入直播间"
           value={formatCount(stats.enterCount)}
           subValue="人次"
-          icon={<Users className="h-5 w-5 text-green-500" />}
-          color="text-green-600"
-          bgColor="border border-green-500/20"
+          icon={<Users className="h-5 w-5" />}
         />
         <StatsCard
           title="新增关注"
           value={formatCount(stats.followCount)}
           subValue="人"
-          icon={<UserPlus className="h-5 w-5 text-purple-500" />}
-          color="text-purple-600"
-          bgColor="border border-purple-500/20"
+          icon={<UserPlus className="h-5 w-5" />}
         />
       </div>
 
@@ -243,33 +235,25 @@ const StatsOverview = memo(function StatsOverview({
           title="粉丝团"
           value={formatCount(stats.fansClubCount)}
           subValue="新加入"
-          icon={<Users className="h-5 w-5 text-amber-500" />}
-          color="text-amber-600"
-          bgColor="bg-amber-50/50"
+          icon={<Users className="h-5 w-5" />}
         />
         <StatsCard
           title="品牌会员"
           value={formatCount(stats.brandVipCount)}
           subValue="新加入"
-          icon={<UserPlus className="h-5 w-5 text-indigo-500" />}
-          color="text-indigo-600"
-          bgColor="bg-indigo-50/50"
+          icon={<UserPlus className="h-5 w-5" />}
         />
         <StatsCard
           title="订单"
           value={formatCount(stats.orderCount)}
           subValue={`已付款 ${stats.paidOrderCount}`}
-          icon={<MessageSquare className="h-5 w-5 text-emerald-500" />}
-          color="text-emerald-600"
-          bgColor="bg-emerald-50/50"
+          icon={<MessageSquare className="h-5 w-5" />}
         />
         <StatsCard
           title="监控时长"
           value={formatDuration(duration)}
           subValue={isListening ? '实时更新' : '未开始'}
-          icon={<Play className="h-5 w-5 text-slate-500" />}
-          color="text-slate-600"
-          bgColor="bg-slate-50/50"
+          icon={<Play className="h-5 w-5" />}
         />
       </div>
     </div>

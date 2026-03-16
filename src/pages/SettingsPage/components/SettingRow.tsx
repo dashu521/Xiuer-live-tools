@@ -24,7 +24,7 @@ export function SettingRow({
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium leading-tight">{label}</div>
         {description && (
-          <div className="text-xs text-muted-foreground mt-0.5 leading-snug">{description}</div>
+          <div className="mt-1 text-sm leading-snug text-muted-foreground">{description}</div>
         )}
       </div>
       <div className="shrink-0">{children}</div>

@@ -38,13 +38,13 @@ interface AccountStatusDockProps {
 function getTaskStatusColor(status: string): string {
   switch (status) {
     case 'running':
-      return 'bg-emerald-500'
+      return 'bg-emerald-400'
     case 'error':
-      return 'bg-red-500'
+      return 'bg-red-400'
     case 'connecting':
-      return 'bg-amber-500'
+      return 'bg-amber-400'
     default:
-      return 'bg-gray-300'
+      return 'bg-muted-foreground/40'
   }
 }
 
@@ -412,10 +412,10 @@ export const AccountStatusDock = React.memo(function AccountStatusDock({
         <div
           className={cn(
             'overflow-hidden transition-all duration-300 ease-in-out',
-            isExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0',
+            isExpanded ? 'max-h-[60vh] opacity-100' : 'max-h-0 opacity-0',
           )}
         >
-          <div className="px-4 py-3 border-b">
+          <div className="max-h-[60vh] overflow-y-auto border-b px-4 py-3">
             <div className="max-w-6xl mx-auto">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold flex items-center gap-2">

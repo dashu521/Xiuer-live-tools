@@ -174,7 +174,7 @@ const ShortcutListItem: React.FC<ShortcutListItemProps> = ({
   // 渲染查看模式
   if (!isEditing) {
     return (
-      <div className="border rounded-md p-3 shadow-sm hover:shadow transition-shadow">
+      <div className="ui-hover-surface rounded-md border p-3 shadow-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="flex gap-2 items-center">

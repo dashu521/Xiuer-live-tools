@@ -10,14 +10,14 @@ interface FansClubItemProps {
 
 function FansClubItem({ change }: FansClubItemProps) {
   return (
-    <div className="flex items-center gap-3 py-3 px-3 rounded-lg hover:bg-muted/50 transition-colors border-b last:border-0">
-      <div className="flex items-center justify-center w-10 h-10 rounded-full bg-amber-100">
-        <UserPlus className="h-5 w-5 text-amber-600" />
+    <div className="ui-hover-item flex items-center gap-3 rounded-lg px-3 py-3">
+      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-amber-500/20 bg-amber-500/10 text-amber-300 shadow-sm">
+        <UserPlus className="h-5 w-5" />
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="font-medium text-foreground truncate">{change.nickName}</span>
-          <Badge variant="secondary" className="text-xs bg-amber-100 text-amber-700">
+          <Badge variant="warning" className="text-xs">
             加入粉丝团
           </Badge>
         </div>
@@ -47,9 +47,9 @@ export default function FansGroupChanges() {
         </div>
       </CardHeader>
 
-      <CardContent className="flex-1 p-0 min-h-0">
-        <ScrollArea className="h-[25rem]">
-          <div className="py-2 px-4">
+      <CardContent className="flex-1 min-h-0 p-0">
+        <ScrollArea className="h-full">
+          <div className="space-y-1 px-4 py-2">
             {fansClubChanges.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-32 text-muted-foreground">
                 <UserPlus className="h-8 w-8 mb-2 opacity-50" />

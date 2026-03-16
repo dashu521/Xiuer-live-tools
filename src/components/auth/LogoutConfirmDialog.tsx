@@ -1,5 +1,6 @@
 import { AlertTriangle, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 
 interface LogoutConfirmDialogProps {
   isOpen: boolean
@@ -17,18 +18,21 @@ export function LogoutConfirmDialog({
   if (!isOpen) return null
 
   return (
-    <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4 animate-in fade-in duration-200"
-      onClick={onCancel}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="logout-confirm-title"
-    >
-      <div
-        className="w-[20rem] max-w-[92vw] bg-[var(--surface)] rounded-2xl border border-[hsl(var(--border))] overflow-hidden animate-in zoom-in-95 duration-200"
-        style={{ boxShadow: 'var(--shadow-modal)' }}
-        onClick={e => e.stopPropagation()}
-        role="document"
+    <Dialog open={isOpen} onOpenChange={open => !open && onCancel()}>
+      <DialogContent
+        aria-labelledby="logout-confirm-title"
+        aria-describedby="logout-confirm-description"
+        className="w-[20rem] max-w-[92vw] overflow-hidden rounded-2xl border p-0"
+        onPointerDownOutside={event => {
+          if (isLoading) {
+            event.preventDefault()
+          }
+        }}
+        onEscapeKeyDown={event => {
+          if (isLoading) {
+            event.preventDefault()
+          }
+        }}
       >
         {/* Header */}
         <div className="relative px-6 pt-6 pb-4">
@@ -48,7 +52,9 @@ export function LogoutConfirmDialog({
             <h2 id="logout-confirm-title" className="text-lg font-bold text-foreground">
               确认退出登录？
             </h2>
-            <p className="text-sm text-muted-foreground mt-1">退出后需要重新登录才能使用完整功能</p>
+            <p id="logout-confirm-description" className="mt-1 text-sm text-muted-foreground">
+              退出后需要重新登录才能使用完整功能
+            </p>
           </div>
         </div>
 
@@ -68,7 +74,7 @@ export function LogoutConfirmDialog({
             )}
           </Button>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

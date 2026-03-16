@@ -16,7 +16,7 @@ const GoodsListItem = React.memo(function GoodsListItem({
   onDelete: () => void
 }) {
   return (
-    <div className="flex gap-2 items-center group">
+    <div className="ui-hover-item group flex items-center gap-2 rounded-lg px-2 py-1">
       <Input
         type="number"
         value={id}
@@ -29,7 +29,7 @@ const GoodsListItem = React.memo(function GoodsListItem({
         variant="ghost"
         size="icon"
         onClick={onDelete}
-        className="opacity-0 group-hover:opacity-100 h-8 w-8 shrink-0"
+        className="h-8 w-8 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"
       >
         <TrashIcon className="h-3.5 w-3.5" />
       </Button>

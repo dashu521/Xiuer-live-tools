@@ -37,8 +37,8 @@ export const AUTH_ERROR_TEXT_CLASSES = 'text-sm text-destructive'
 
 // 链接样式
 export const AUTH_LINK_CLASSES =
-  'text-blue-400 hover:text-blue-300 hover:underline text-sm font-medium transition-colors'
-export const AUTH_LINK_TEXT_CLASSES = 'text-sm text-gray-400'
+  'text-primary hover:text-primary/80 hover:underline text-sm font-medium transition-colors'
+export const AUTH_LINK_TEXT_CLASSES = 'text-sm text-muted-foreground'
 
 // 表单间距
 export const AUTH_FORM_SPACING = 'space-y-4' // 从 space-y-5 改为 space-y-4，更紧凑

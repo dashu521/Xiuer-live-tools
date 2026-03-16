@@ -55,9 +55,11 @@ const PreviewList = memo(function PreviewList({
                 return (
                   <div
                     key={reply.commentId}
-                    className="group px-2 py-1.5 text-sm hover:bg-muted/50 rounded-lg transition-all hover:-translate-y-0.5"
+                    className="ui-hover-item group rounded-lg px-2 py-1.5 text-sm"
                     onMouseEnter={() => setHighLight(reply.commentId)}
                     onMouseLeave={() => setHighLight(null)}
+                    onFocus={() => setHighLight(reply.commentId)}
+                    onBlur={() => setHighLight(null)}
                   >
                     <div className="flex flex-col gap-0.5">
                       {relatedComment && (
@@ -72,8 +74,8 @@ const PreviewList = memo(function PreviewList({
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="invisible group-hover:visible h-6 w-6 shrink-0"
-                          title="发送"
+                          aria-label={`发送回复给${relatedComment?.nick_name ?? '当前用户'}`}
+                          className="h-8 w-8 shrink-0 opacity-70 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100"
                           onClick={() => handleSendReply(reply.replyContent, reply.commentId)}
                         >
                           <SendHorizontalIcon className="h-3.5 w-3.5" />

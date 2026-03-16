@@ -100,7 +100,7 @@ export const ConnectionProgress = React.memo(
                     className={cn(
                       'w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-300 z-10 bg-background',
                       isCompleted && 'border-primary bg-primary text-primary-foreground',
-                      isCurrent && !isError && 'border-green-500 text-green-500',
+                      isCurrent && !isError && 'border-emerald-400 text-emerald-300',
                       isError && isCurrent && 'border-destructive text-destructive',
                       isPending && 'border-muted-foreground/30 text-muted-foreground',
                     )}
@@ -122,7 +122,7 @@ export const ConnectionProgress = React.memo(
                       className={cn(
                         'text-sm font-medium transition-colors',
                         isCompleted && 'text-primary',
-                        isCurrent && !isError && 'text-green-600',
+                        isCurrent && !isError && 'text-emerald-300',
                         isCurrent && isError && 'text-destructive',
                         isPending && 'text-muted-foreground',
                       )}

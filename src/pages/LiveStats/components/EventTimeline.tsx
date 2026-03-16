@@ -1,6 +1,6 @@
 import { Heart, LogIn, MessageSquare, ShoppingCart, Star, UserPlus, Users } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { Badge } from '@/components/ui/badge'
+import { Badge, type BadgeProps } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -14,69 +14,69 @@ const EVENT_CONFIG: Record<
   {
     label: string
     icon: React.ReactNode
-    color: string
-    bgColor: string
+    variant: BadgeProps['variant']
+    accentClass: string
   }
 > = {
   comment: {
     label: '评论',
     icon: <MessageSquare className="h-4 w-4" />,
-    color: 'text-blue-600',
-    bgColor: 'border border-blue-500/30',
+    variant: 'info',
+    accentClass: 'border-sky-500/20 bg-sky-500/10 text-sky-300',
   },
   wechat_channel_live_msg: {
     label: '评论',
     icon: <MessageSquare className="h-4 w-4" />,
-    color: 'text-blue-600',
-    bgColor: 'border border-blue-500/30',
+    variant: 'info',
+    accentClass: 'border-sky-500/20 bg-sky-500/10 text-sky-300',
   },
   xiaohongshu_comment: {
     label: '评论',
     icon: <MessageSquare className="h-4 w-4" />,
-    color: 'text-blue-600',
-    bgColor: 'border border-blue-500/30',
+    variant: 'info',
+    accentClass: 'border-sky-500/20 bg-sky-500/10 text-sky-300',
   },
   taobao_comment: {
     label: '评论',
     icon: <MessageSquare className="h-4 w-4" />,
-    color: 'text-blue-600',
-    bgColor: 'border border-blue-500/30',
+    variant: 'info',
+    accentClass: 'border-sky-500/20 bg-sky-500/10 text-sky-300',
   },
   room_enter: {
     label: '进入直播间',
     icon: <LogIn className="h-4 w-4" />,
-    color: 'text-green-600',
-    bgColor: 'border border-green-500/30',
+    variant: 'success',
+    accentClass: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300',
   },
   room_like: {
     label: '点赞',
     icon: <Heart className="h-4 w-4" />,
-    color: 'text-pink-600',
-    bgColor: 'border border-pink-500/30',
+    variant: 'secondary',
+    accentClass: 'border-pink-500/20 bg-pink-500/10 text-pink-300',
   },
   room_follow: {
     label: '关注',
     icon: <UserPlus className="h-4 w-4" />,
-    color: 'text-purple-600',
-    bgColor: 'border border-purple-500/30',
+    variant: 'secondary',
+    accentClass: 'border-violet-500/20 bg-violet-500/10 text-violet-300',
   },
   ecom_fansclub_participate: {
     label: '加入粉丝团',
     icon: <Users className="h-4 w-4" />,
-    color: 'text-amber-600',
-    bgColor: 'bg-amber-100',
+    variant: 'warning',
+    accentClass: 'border-amber-500/20 bg-amber-500/10 text-amber-300',
   },
   live_order: {
     label: '下单',
     icon: <ShoppingCart className="h-4 w-4" />,
-    color: 'text-emerald-600',
-    bgColor: 'bg-emerald-100',
+    variant: 'success',
+    accentClass: 'border-teal-500/20 bg-teal-500/10 text-teal-300',
   },
   subscribe_merchant_brand_vip: {
     label: '品牌会员',
     icon: <Star className="h-4 w-4" />,
-    color: 'text-indigo-600',
-    bgColor: 'bg-indigo-100',
+    variant: 'secondary',
+    accentClass: 'border-indigo-500/20 bg-indigo-500/10 text-indigo-300',
   },
 }
 
@@ -88,23 +88,28 @@ function EventItem({ event }: EventItemProps) {
   const config = EVENT_CONFIG[event.type] || {
     label: '未知事件',
     icon: <MessageSquare className="h-4 w-4" />,
-    color: 'text-gray-600',
-    bgColor: 'bg-gray-100',
+    variant: 'neutral' as const,
+    accentClass: 'border-border/70 bg-muted/55 text-muted-foreground',
   }
 
   const orderStatus = event.extra?.orderStatus as string | undefined
 
   return (
-    <div className="flex items-start gap-3 py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors">
-      <div className={cn('flex items-center justify-center w-8 h-8 rounded-full', config.bgColor)}>
-        <span className={config.color}>{config.icon}</span>
+    <div className="ui-hover-item flex items-start gap-3 rounded-lg px-3 py-2">
+      <div
+        className={cn(
+          'flex h-8 w-8 items-center justify-center rounded-full border shadow-sm',
+          config.accentClass,
+        )}
+      >
+        <span>{config.icon}</span>
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="font-medium text-foreground truncate max-w-[120px]">
             {event.nickName}
           </span>
-          <Badge variant="secondary" className={cn('text-xs', config.bgColor, config.color)}>
+          <Badge variant={config.variant} className="text-xs">
             {config.label}
           </Badge>
           <span className="text-xs text-muted-foreground ml-auto shrink-0">{event.time}</span>
@@ -113,15 +118,7 @@ function EventItem({ event }: EventItemProps) {
           <p className="mt-0.5 text-sm text-muted-foreground truncate">{event.content}</p>
         )}
         {orderStatus && (
-          <Badge
-            variant="outline"
-            className={cn(
-              'mt-1 text-xs',
-              orderStatus === '已付款'
-                ? 'border-green-500/30 text-green-600'
-                : 'border-blue-500/30 text-blue-600',
-            )}
-          >
+          <Badge variant={orderStatus === '已付款' ? 'success' : 'info'} className="mt-1 text-xs">
             {orderStatus}
           </Badge>
         )}
@@ -189,8 +186,8 @@ export default function EventTimeline() {
         </div>
       </CardHeader>
 
-      <CardContent className="flex-1 p-0 min-h-0">
-        <ScrollArea className="h-[22.5rem]">
+      <CardContent className="flex-1 min-h-0 p-0">
+        <ScrollArea className="h-full">
           <div className="py-2 space-y-0.5 px-4">
             {filteredEvents.length === 0 ? (
               <div className="flex items-center justify-center h-32 text-muted-foreground">

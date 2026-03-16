@@ -2,6 +2,13 @@ import { Eye, EyeOff, KeyRound, Loader2, LogIn, Smartphone, UserPlus } from 'luc
 import { useEffect, useState } from 'react'
 import { SetPasswordDialog } from '@/components/auth/SetPasswordDialog'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useAccounts } from '@/hooks/useAccounts'
@@ -9,6 +16,7 @@ import { useAutoMessageStore } from '@/hooks/useAutoMessage'
 import { useAutoPopUpStore } from '@/hooks/useAutoPopUp'
 import { useAutoReplyConfigStore } from '@/hooks/useAutoReplyConfig'
 import { useChromeConfigStore } from '@/hooks/useChromeConfig'
+import { useFriendlyError } from '@/hooks/useFriendlyError'
 import { useLiveControlStore } from '@/hooks/useLiveControl'
 import { useSubAccountStore } from '@/hooks/useSubAccount'
 import { useToast } from '@/hooks/useToast'
@@ -66,6 +74,7 @@ export function PhoneAuthDialog({
 
   const { setUser, setToken, setRefreshToken } = useAuthStore()
   const { toast } = useToast()
+  const { showError } = useFriendlyError()
 
   const mode = initialMode
 
@@ -112,7 +121,6 @@ export function PhoneAuthDialog({
     const err = validatePhone()
     if (err) {
       setValidationError(err)
-      toast.error(err)
       return
     }
 
@@ -125,12 +133,24 @@ export function PhoneAuthDialog({
         if (devCode) {
           setCode(devCode)
           if (smsFailed) {
-            toast.success(`短信发送失败，验证码已填入：${devCode}，请直接登录`)
+            toast.warning({
+              title: '验证码已生成',
+              description: `短信发送失败，系统已自动填入验证码 ${devCode}，可直接继续登录。`,
+              dedupeKey: 'sms-code-dev-fallback',
+            })
           } else {
-            toast.success(`验证码已填入：${devCode}（若未收到短信可直接使用）`)
+            toast.success({
+              title: '验证码已发送',
+              description: `系统已自动填入验证码 ${devCode}，若未收到短信可直接使用。`,
+              dedupeKey: 'sms-code-dev-prefill',
+            })
           }
         } else {
-          toast.success('验证码已发送')
+          toast.success({
+            title: '验证码已发送',
+            description: '请查看手机短信并在 60 秒内完成验证。',
+            dedupeKey: 'sms-code-sent',
+          })
         }
         setCountdown(60)
         setValidationError(null)
@@ -145,16 +165,26 @@ export function PhoneAuthDialog({
         }
 
         setValidationError(errorMsg)
-        toast.error(errorMsg)
+        showError(errorMsg, {
+          title: '发送验证码失败',
+          showSolution: true,
+        })
       } else {
         setValidationError('发送失败了，稍后再试')
-        toast.error('发送失败了，稍后再试')
+        showError('发送失败了，稍后再试', {
+          title: '发送验证码失败',
+          showSolution: true,
+        })
       }
     } catch (error) {
       console.error('[PhoneAuthDialog] Send code error:', error)
       const errorMsg = '发送失败了，稍后再试'
       setValidationError(errorMsg)
-      toast.error(errorMsg)
+      showError(error, {
+        title: '发送验证码失败',
+        message: errorMsg,
+        showSolution: true,
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -165,12 +195,10 @@ export function PhoneAuthDialog({
     const codeErr = validateCode()
     if (phoneErr) {
       setValidationError(phoneErr)
-      toast.error(phoneErr)
       return
     }
     if (codeErr) {
       setValidationError(codeErr)
-      toast.error(codeErr)
       return
     }
 
@@ -195,7 +223,11 @@ export function PhoneAuthDialog({
         !!authAPI?.loginWithSms,
       )
       if (!authAPI?.loginWithSms) {
-        toast.error('登录功能暂时不可用，请重启软件')
+        setValidationError('登录功能暂时不可用，请重启软件')
+        showError('登录功能暂时不可用，请重启软件', {
+          title: '登录暂不可用',
+          showSolution: true,
+        })
         setIsSubmitting(false)
         return
       }
@@ -278,7 +310,11 @@ export function PhoneAuthDialog({
         window.dispatchEvent(new CustomEvent('auth:success', { detail: { feature } }))
 
         const isRegister = mode === 'register'
-        toast.success(isRegister ? '注册成功' : '登录成功')
+        toast.success({
+          title: isRegister ? '注册成功' : '登录成功',
+          description: isRegister ? '账号已创建并完成登录。' : '欢迎回来，已完成登录。',
+          dedupeKey: isRegister ? 'sms-register-success' : 'sms-login-success',
+        })
 
         if (needs_password || isRegister) {
           setShowSetPassword(true)
@@ -289,16 +325,18 @@ export function PhoneAuthDialog({
       } else if (!result.success) {
         const errorMsg = result.error || '验证码不对，请重新输入'
         setValidationError(errorMsg)
-        toast.error(errorMsg)
       } else {
         setValidationError('验证码不对，请重新输入')
-        toast.error('验证码不对，请重新输入')
       }
     } catch (err) {
       console.error('[PhoneAuthDialog] 短信登录异常:', err)
       const errorMsg = '操作失败了，稍后再试'
       setValidationError(errorMsg)
-      toast.error(errorMsg)
+      showError(err, {
+        title: '登录失败',
+        message: errorMsg,
+        showSolution: true,
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -310,17 +348,14 @@ export function PhoneAuthDialog({
     const pwdErr = validateResetFields()
     if (phoneErr) {
       setValidationError(phoneErr)
-      toast.error(phoneErr)
       return
     }
     if (codeErr) {
       setValidationError(codeErr)
-      toast.error(codeErr)
       return
     }
     if (pwdErr) {
       setValidationError(pwdErr)
-      toast.error(pwdErr)
       return
     }
 
@@ -328,17 +363,28 @@ export function PhoneAuthDialog({
     try {
       const result = await resetPasswordWithSms(phone, code, newPassword)
       if (result.ok) {
-        toast.success('密码重置成功，可以用新密码登录了')
+        toast.success({
+          title: '密码已重置',
+          description: '可以使用新密码重新登录了。',
+          dedupeKey: 'password-reset-success',
+        })
         onClose()
         window.dispatchEvent(new CustomEvent('auth:closeMainDialog'))
       } else {
         const msg = result.error?.message || '重置失败了，稍后再试'
         setValidationError(msg)
-        toast.error(msg)
+        showError(msg, {
+          title: '重置密码失败',
+          showSolution: true,
+        })
       }
-    } catch {
+    } catch (error) {
       setValidationError('重置失败了，稍后再试')
-      toast.error('重置失败了，稍后再试')
+      showError(error, {
+        title: '重置密码失败',
+        message: '重置失败了，稍后再试',
+        showSolution: true,
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -359,207 +405,225 @@ export function PhoneAuthDialog({
   const Icon = cfg.icon
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div
-        className="w-full max-w-[26.25rem] rounded-xl border p-6"
-        style={{
-          backgroundColor: 'var(--surface)',
-          borderColor: 'var(--border)',
-          boxShadow: 'var(--shadow-modal)',
-        }}
-      >
-        <div className="text-center mb-5">
-          <div className="flex justify-center mb-2">
-            <div className="p-3 rounded-full bg-primary/10">
-              <Icon className="h-6 w-6 text-primary" />
+    <>
+      <Dialog open={isOpen} onOpenChange={open => !open && onClose()}>
+        <DialogContent
+          aria-describedby="phone-auth-description"
+          className="w-full max-w-[26.25rem] rounded-xl border p-6"
+          onPointerDownOutside={event => {
+            if (isSubmitting) {
+              event.preventDefault()
+            }
+          }}
+          onEscapeKeyDown={event => {
+            if (isSubmitting) {
+              event.preventDefault()
+            }
+          }}
+        >
+          <DialogHeader className="mb-5 text-center">
+            <div className="mb-2 flex justify-center">
+              <div className="rounded-full bg-primary/10 p-3">
+                <Icon className="h-6 w-6 text-primary" />
+              </div>
             </div>
-          </div>
-          <h1
-            className="text-xl font-semibold mb-0"
-            style={{
-              color: 'var(--text-primary)',
-              fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-            }}
-          >
-            {cfg.title}
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">{cfg.subtitle}</p>
-        </div>
+            <DialogTitle
+              className="text-xl font-semibold"
+              style={{
+                color: 'var(--text-primary)',
+                fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+              }}
+            >
+              {cfg.title}
+            </DialogTitle>
+            <DialogDescription id="phone-auth-description">{cfg.subtitle}</DialogDescription>
+          </DialogHeader>
+          <div>
+            {validationError && (
+              <div className="mb-4 p-3 border border-destructive/20 rounded-lg">
+                <p role="alert" aria-live="polite" className="text-[13px] text-destructive">
+                  {validationError}
+                </p>
+              </div>
+            )}
 
-        <div>
-          {validationError && (
-            <div className="mb-4 p-3 border border-destructive/20 rounded-lg">
-              <p className="text-[13px] text-destructive">{validationError}</p>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-3">
-            <div>
-              <Label htmlFor="phone" className="text-[13px]" style={{ color: 'var(--text-muted)' }}>
-                手机号
-              </Label>
-              <Input
-                id="phone"
-                type="tel"
-                placeholder="请输入手机号"
-                value={phone}
-                onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
-                className="h-10 rounded-lg text-sm mt-1"
-                style={{
-                  backgroundColor: 'var(--input-bg)',
-                  borderColor: 'var(--input-border)',
-                  color: 'var(--text-primary)',
-                }}
-                maxLength={11}
-                required
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="code" className="text-[13px]" style={{ color: 'var(--text-muted)' }}>
-                验证码
-              </Label>
-              <div className="flex gap-2 mt-1">
+            <form onSubmit={handleSubmit} className="space-y-3">
+              <div>
+                <Label
+                  htmlFor="phone"
+                  className="text-[13px]"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  手机号
+                </Label>
                 <Input
-                  id="code"
-                  type="text"
-                  placeholder="请输入验证码"
-                  value={code}
-                  onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  className="h-10 rounded-lg text-sm flex-1"
+                  id="phone"
+                  type="tel"
+                  placeholder="请输入手机号"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                  className="h-10 rounded-lg text-sm mt-1"
                   style={{
                     backgroundColor: 'var(--input-bg)',
                     borderColor: 'var(--input-border)',
                     color: 'var(--text-primary)',
                   }}
-                  maxLength={6}
+                  maxLength={11}
                   required
                 />
-                <Button
-                  type="button"
-                  onClick={handleSendCode}
-                  disabled={countdown > 0 || isSubmitting || phone.length !== 11}
-                  className="h-10 rounded-lg text-sm whitespace-nowrap"
-                  style={{ minWidth: '100px' }}
-                >
-                  {countdown > 0 ? `${countdown}秒` : '发送验证码'}
-                </Button>
               </div>
-            </div>
 
-            {mode === 'reset' && (
-              <>
-                <div>
-                  <Label
-                    htmlFor="new-pwd"
-                    className="text-[13px]"
-                    style={{ color: 'var(--text-muted)' }}
+              <div>
+                <Label
+                  htmlFor="code"
+                  className="text-[13px]"
+                  style={{ color: 'var(--text-muted)' }}
+                >
+                  验证码
+                </Label>
+                <div className="flex gap-2 mt-1">
+                  <Input
+                    id="code"
+                    type="text"
+                    placeholder="请输入验证码"
+                    value={code}
+                    onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    className="h-10 rounded-lg text-sm flex-1"
+                    style={{
+                      backgroundColor: 'var(--input-bg)',
+                      borderColor: 'var(--input-border)',
+                      color: 'var(--text-primary)',
+                    }}
+                    maxLength={6}
+                    required
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleSendCode}
+                    disabled={countdown > 0 || isSubmitting || phone.length !== 11}
+                    className="h-10 rounded-lg text-sm whitespace-nowrap"
+                    style={{ minWidth: '100px' }}
                   >
-                    新密码
-                  </Label>
-                  <div className="relative mt-1">
-                    <Input
-                      id="new-pwd"
-                      type={showNewPwd ? 'text' : 'password'}
-                      placeholder="请输入新密码（至少6位）"
-                      value={newPassword}
-                      onChange={e => setNewPassword(e.target.value)}
-                      className="h-10 rounded-lg text-sm pr-10"
-                      style={{
-                        backgroundColor: 'var(--input-bg)',
-                        borderColor: 'var(--input-border)',
-                        color: 'var(--text-primary)',
-                      }}
-                      minLength={6}
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowNewPwd(!showNewPwd)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showNewPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </button>
-                  </div>
+                    {countdown > 0 ? `${countdown}秒` : '发送验证码'}
+                  </Button>
                 </div>
+              </div>
 
-                <div>
-                  <Label
-                    htmlFor="confirm-pwd"
-                    className="text-[13px]"
-                    style={{ color: 'var(--text-muted)' }}
-                  >
-                    确认密码
-                  </Label>
-                  <div className="relative mt-1">
-                    <Input
-                      id="confirm-pwd"
-                      type={showConfirmPwd ? 'text' : 'password'}
-                      placeholder="请再次输入密码"
-                      value={confirmPassword}
-                      onChange={e => setConfirmPassword(e.target.value)}
-                      className="h-10 rounded-lg text-sm pr-10"
-                      style={{
-                        backgroundColor: 'var(--input-bg)',
-                        borderColor: 'var(--input-border)',
-                        color: 'var(--text-primary)',
-                      }}
-                      minLength={6}
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirmPwd(!showConfirmPwd)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              {mode === 'reset' && (
+                <>
+                  <div>
+                    <Label
+                      htmlFor="new-pwd"
+                      className="text-[13px]"
+                      style={{ color: 'var(--text-muted)' }}
                     >
-                      {showConfirmPwd ? (
-                        <EyeOff className="h-4 w-4" />
-                      ) : (
-                        <Eye className="h-4 w-4" />
-                      )}
-                    </button>
+                      新密码
+                    </Label>
+                    <div className="relative mt-1">
+                      <Input
+                        id="new-pwd"
+                        type={showNewPwd ? 'text' : 'password'}
+                        placeholder="请输入新密码（至少6位）"
+                        value={newPassword}
+                        onChange={e => setNewPassword(e.target.value)}
+                        className="h-10 rounded-lg text-sm pr-10"
+                        style={{
+                          backgroundColor: 'var(--input-bg)',
+                          borderColor: 'var(--input-border)',
+                          color: 'var(--text-primary)',
+                        }}
+                        minLength={6}
+                        required
+                      />
+                      <button
+                        type="button"
+                        aria-label={showNewPwd ? '隐藏新密码' : '显示新密码'}
+                        onClick={() => setShowNewPwd(!showNewPwd)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                      >
+                        {showNewPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
 
-            <Button
-              type="submit"
-              className="w-full h-10 rounded-lg text-sm font-medium mt-4"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  {cfg.submittingText}
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  {mode === 'reset' ? (
-                    <KeyRound className="h-4 w-4" />
-                  ) : mode === 'register' ? (
-                    <UserPlus className="h-4 w-4" />
-                  ) : (
-                    <LogIn className="h-4 w-4" />
-                  )}
-                  {cfg.submitText}
-                </div>
+                  <div>
+                    <Label
+                      htmlFor="confirm-pwd"
+                      className="text-[13px]"
+                      style={{ color: 'var(--text-muted)' }}
+                    >
+                      确认密码
+                    </Label>
+                    <div className="relative mt-1">
+                      <Input
+                        id="confirm-pwd"
+                        type={showConfirmPwd ? 'text' : 'password'}
+                        placeholder="请再次输入密码"
+                        value={confirmPassword}
+                        onChange={e => setConfirmPassword(e.target.value)}
+                        className="h-10 rounded-lg text-sm pr-10"
+                        style={{
+                          backgroundColor: 'var(--input-bg)',
+                          borderColor: 'var(--input-border)',
+                          color: 'var(--text-primary)',
+                        }}
+                        minLength={6}
+                        required
+                      />
+                      <button
+                        type="button"
+                        aria-label={showConfirmPwd ? '隐藏确认密码' : '显示确认密码'}
+                        onClick={() => setShowConfirmPwd(!showConfirmPwd)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+                      >
+                        {showConfirmPwd ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </>
               )}
-            </Button>
-          </form>
 
-          <div className="mt-4 text-center">
-            <Button
-              variant="ghost"
-              onClick={onClose}
-              className="text-[13px] text-muted-foreground hover:text-foreground h-auto p-0"
-            >
-              取消
-            </Button>
+              <Button
+                type="submit"
+                className="w-full h-10 rounded-lg text-sm font-medium mt-4"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {cfg.submittingText}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    {mode === 'reset' ? (
+                      <KeyRound className="h-4 w-4" />
+                    ) : mode === 'register' ? (
+                      <UserPlus className="h-4 w-4" />
+                    ) : (
+                      <LogIn className="h-4 w-4" />
+                    )}
+                    {cfg.submitText}
+                  </div>
+                )}
+              </Button>
+            </form>
+
+            <div className="mt-4 text-center">
+              <Button
+                variant="ghost"
+                onClick={onClose}
+                className="text-[13px] text-muted-foreground hover:text-foreground h-auto p-0"
+              >
+                取消
+              </Button>
+            </div>
           </div>
-        </div>
-      </div>
-
+        </DialogContent>
+      </Dialog>
       {mode !== 'reset' && (
         <SetPasswordDialog
           isOpen={showSetPassword}
@@ -571,6 +635,6 @@ export function PhoneAuthDialog({
           mode="set"
         />
       )}
-    </div>
+    </>
   )
 }

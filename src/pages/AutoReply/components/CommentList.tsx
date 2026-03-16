@@ -1,6 +1,6 @@
 import { motion } from 'framer-motion'
 import { memo, useId, useMemo, useState } from 'react'
-import { Badge } from '@/components/ui/badge'
+import { Badge, type BadgeProps } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
@@ -9,22 +9,22 @@ import { type Message, useAutoReply } from '@/hooks/useAutoReply'
 import { useCurrentLiveControl } from '@/hooks/useLiveControl'
 import { cn } from '@/lib/utils'
 
-const getMessageColor = (type: Message['msg_type']) => {
+const getMessageBadgeVariant = (type: Message['msg_type']): BadgeProps['variant'] => {
   switch (type) {
     case 'room_enter':
-      return 'text-blue-500'
+      return 'info'
     case 'room_like':
-      return 'text-pink-500'
+      return 'secondary'
     case 'room_follow':
-      return 'text-purple-500'
+      return 'secondary'
     case 'subscribe_merchant_brand_vip':
-      return 'text-amber-500'
+      return 'warning'
     case 'live_order':
-      return 'text-green-500'
+      return 'success'
     case 'ecom_fansclub_participate':
-      return 'text-purple-500'
+      return 'warning'
     default:
-      return 'text-foreground'
+      return 'neutral'
   }
 }
 
@@ -47,14 +47,40 @@ const getMessageText = (message: Message) => {
   }
 }
 
-const getOrderStatusColor = (status: LiveOrderMessage['order_status']) => {
+const getMessageDetail = (message: Message) => {
+  if ('content' in message && typeof message.content === 'string') {
+    return message.content
+  }
+  return getMessageText(message)
+}
+
+const getMessageLabel = (type: Message['msg_type']) => {
+  switch (type) {
+    case 'room_enter':
+      return '进入直播间'
+    case 'room_like':
+      return '点赞'
+    case 'room_follow':
+      return '关注'
+    case 'subscribe_merchant_brand_vip':
+      return '品牌会员'
+    case 'live_order':
+      return '下单'
+    case 'ecom_fansclub_participate':
+      return '粉丝团'
+    default:
+      return '评论'
+  }
+}
+
+const getOrderStatusVariant = (status?: string): BadgeProps['variant'] => {
   switch (status) {
     case '已下单':
-      return 'text-blue-600 border border-blue-500/30' // 待付款状态显示蓝色
+      return 'info'
     case '已付款':
-      return 'text-green-600 border border-green-500/30' // 已付款状态显示绿色
+      return 'success'
     default:
-      return 'text-foreground'
+      return 'neutral'
   }
 }
 
@@ -65,17 +91,23 @@ const MessageItem = memo(
     return (
       <div
         className={cn(
-          'flex items-start gap-3 py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors',
-          isHighlighted ? 'border border-primary/30 bg-primary/5' : 'hover:bg-muted/50',
+          'ui-hover-item flex items-start gap-3 rounded-lg px-3 py-2',
+          isHighlighted ? 'border-primary/30 bg-primary/5 shadow-none' : '',
         )}
       >
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="truncate text-sm text-muted-foreground">{displayName}</span>
+            <Badge
+              variant={getMessageBadgeVariant(message.msg_type)}
+              className="px-2 py-0 text-[11px]"
+            >
+              {getMessageLabel(message.msg_type)}
+            </Badge>
             {message.msg_type === 'live_order' && (
               <Badge
-                variant="outline"
-                className={cn('text-xs px-1.5 py-0', getOrderStatusColor(message.order_status))}
+                variant={getOrderStatusVariant(message.order_status)}
+                className="text-xs px-1.5 py-0"
               >
                 {message.order_status}
               </Badge>
@@ -86,11 +118,13 @@ const MessageItem = memo(
           <div className="mt-0.5 text-sm">
             <p
               className={cn(
-                getMessageColor(message.msg_type),
+                'text-foreground/88',
                 message.msg_type === 'live_order' ? 'font-medium' : '',
               )}
             >
-              {getMessageText(message)}
+              {message.msg_type === 'live_order'
+                ? message.product_title
+                : getMessageDetail(message)}
             </p>
           </div>
         </div>
@@ -118,7 +152,9 @@ const _EnterRoomMessage = ({ message }: { message: Message }) => {
       className="flex items-center gap-2 p-2 rounded-md border border-primary/30 bg-primary/5"
     >
       <span className="font-medium">{displayName}</span>
-      <span className="text-sm text-blue-500">进入直播间</span>
+      <Badge variant="info" className="text-xs">
+        进入直播间
+      </Badge>
     </motion.div>
   )
 }

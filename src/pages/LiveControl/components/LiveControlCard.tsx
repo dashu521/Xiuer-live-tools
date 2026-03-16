@@ -16,7 +16,7 @@ export const LiveControlCard = React.memo(() => {
         {/* 第二行：无头模式 + 连接按钮并排，按钮突出 */}
         <div className="flex items-center gap-3 flex-wrap">
           <HeadlessSetting />
-          <div className="flex-1 min-w-[12.5rem] flex justify-end">
+          <div className="flex w-full flex-1 justify-end sm:w-auto sm:min-w-[12.5rem]">
             <ConnectToLiveControl />
           </div>
         </div>

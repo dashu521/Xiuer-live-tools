@@ -51,10 +51,18 @@ export function CoreConfigCard() {
       const p = await window.ipcRenderer.invoke(IPC_CHANNELS.chrome.selectPath)
       if (p) {
         setPath(p)
-        toast.success('Chrome 路径设置成功')
+        toast.success({
+          title: '浏览器路径已更新',
+          description: '已保存浏览器可执行文件路径。',
+          dedupeKey: 'chrome-path-selected',
+        })
       }
     } catch {
-      toast.error('选择 Chrome 路径失败')
+      toast.error({
+        title: '选择路径失败',
+        description: '未能读取浏览器路径，请重试。',
+        dedupeKey: 'chrome-path-select-failed',
+      })
     }
   }
 
@@ -64,12 +72,24 @@ export function CoreConfigCard() {
       const result = await window.ipcRenderer.invoke(IPC_CHANNELS.chrome.getPath, edgeFirst)
       if (result) {
         setPath(result)
-        toast.success('已自动检测到路径')
+        toast.success({
+          title: '已自动检测到浏览器',
+          description: '浏览器路径已自动填入。',
+          dedupeKey: 'chrome-path-detected',
+        })
       } else {
-        toast.error('未检测到 Chrome，请确保 Chrome 已打开')
+        toast.warning({
+          title: '未检测到浏览器',
+          description: '请先打开 Chrome 或 Edge，再点击自动检测。',
+          dedupeKey: 'chrome-path-not-found',
+        })
       }
     } catch {
-      toast.error('检测 Chrome 路径失败')
+      toast.error({
+        title: '自动检测失败',
+        description: '浏览器路径检测失败，请稍后重试。',
+        dedupeKey: 'chrome-path-detect-failed',
+      })
     } finally {
       setIsDetecting(false)
     }
@@ -77,7 +97,11 @@ export function CoreConfigCard() {
 
   const handleCookiesReset = () => {
     setStorageState('')
-    toast.success('登录状态已重置')
+    toast.info({
+      title: '登录状态已重置',
+      description: '已清除当前账号的浏览器登录状态。',
+      dedupeKey: 'chrome-storage-reset',
+    })
   }
 
   const { accounts, removeAccount, currentAccountId, defaultAccountId } = useAccounts()
@@ -94,7 +118,11 @@ export function CoreConfigCard() {
     }
     removeAccount(currentAccountId)
     setIsDeleteDialogOpen(false)
-    toast.success('删除账号成功')
+    toast.info({
+      title: '账号已删除',
+      description: '当前直播账号已移除。',
+      dedupeKey: `account-deleted:${currentAccountId}`,
+    })
   })
 
   return (
@@ -115,7 +143,7 @@ export function CoreConfigCard() {
 
           <div className="pl-3 space-y-4">
             {/* 检测按钮和 Edge 优先 */}
-            <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex flex-wrap items-center gap-4">
               <Button
                 variant="default"
                 size="sm"
@@ -138,7 +166,7 @@ export function CoreConfigCard() {
             </div>
 
             {/* 路径输入和浏览 */}
-            <div className="flex gap-3 items-center">
+            <div className="flex flex-col items-stretch gap-3 md:flex-row md:items-center">
               <Input
                 value={path}
                 onChange={e => setPath(e.target.value)}
@@ -157,7 +185,7 @@ export function CoreConfigCard() {
             </div>
 
             {/* 支持的浏览器提示 */}
-            <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
+            <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
               <span>支持：</span>
               <span className="flex items-center gap-1">
                 <SimpleIconsGooglechrome className="w-3.5 h-3.5" />
@@ -278,10 +306,18 @@ function ClearLocalLoginButton() {
       localStorage.removeItem(AUTH_LAST_IDENTIFIER_KEY)
       localStorage.removeItem(AUTH_ZUSTAND_PERSIST_KEY)
       clearTokensAndUnauth()
-      toast.success('已清除本地登录数据')
+      toast.info({
+        title: '本地登录数据已清除',
+        description: '下次打开登录框时将不再自动填充登录信息。',
+        dedupeKey: 'clear-local-login-data',
+      })
     } catch (e) {
       console.error(e)
-      toast.error('清除失败，请重试')
+      toast.error({
+        title: '清除失败',
+        description: '本地登录数据清除失败，请重试。',
+        dedupeKey: 'clear-local-login-data-failed',
+      })
     }
   }
   return (

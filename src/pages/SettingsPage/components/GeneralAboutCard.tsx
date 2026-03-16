@@ -46,9 +46,17 @@ export function GeneralAboutCard() {
   const handleToggleDevMode = async (checked: boolean) => {
     try {
       setDevMode(checked)
-      toast.success(checked ? '已开启开发者模式' : '已关闭开发者模式')
+      toast.info({
+        title: checked ? '开发者模式已开启' : '开发者模式已关闭',
+        description: checked ? '现在可以通过右键打开开发者工具。' : '已恢复普通使用模式。',
+        dedupeKey: 'dev-mode-toggle',
+      })
     } catch {
-      toast.error('切换开发者模式失败')
+      toast.error({
+        title: '切换失败',
+        description: '开发者模式切换失败，请重试。',
+        dedupeKey: 'dev-mode-toggle-failed',
+      })
     }
   }
 
@@ -92,20 +100,20 @@ export function GeneralAboutCard() {
           </div>
 
           <div className="pl-3">
-            <div className="flex items-center justify-between gap-4 p-4 bg-muted/30 rounded-lg">
+            <div className="flex flex-col gap-4 rounded-lg bg-muted/30 p-4 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center gap-3">
                 <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
                   <Sparkles className="h-5 w-5 text-primary" />
                 </div>
                 <div>
                   <div className="text-sm font-medium">当前版本</div>
-                  <div className="text-xs text-muted-foreground">v{version}</div>
+                  <div className="text-sm text-muted-foreground">v{version}</div>
                 </div>
               </div>
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 px-4"
+                className="h-9 px-4 self-start md:self-auto"
                 disabled={updateStatus === 'checking'}
                 onClick={checkUpdate}
               >

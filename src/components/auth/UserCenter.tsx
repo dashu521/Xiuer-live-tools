@@ -5,7 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatGiftCardCode, isValidGiftCardCode, PLAN_DESCRIPTION_MAP } from '@/config/userCenter'
-import { PLAN_TEXT_MAP, useAccessContext } from '@/domain/access'
+import { useAccessContext } from '@/domain/access/AccessControl'
+import { PLAN_TEXT_MAP } from '@/domain/access/AccessPolicy'
 import { useToast } from '@/hooks/useToast'
 import { type RedeemGiftCardResponse, redeemGiftCard } from '@/services/apiClient'
 import { useAuthStore } from '@/stores/authStore'
@@ -129,12 +130,24 @@ export function UserCenter({ isOpen, onClose }: UserCenterProps) {
     try {
       const status = await refreshUserStatus()
       if (status) {
-        toast.success('状态已刷新')
+        toast.info({
+          title: '状态已刷新',
+          description: '会员状态和权益信息已更新。',
+          dedupeKey: 'user-status-refreshed',
+        })
       } else {
-        toast.error('状态同步失败，请稍后重试')
+        toast.error({
+          title: '状态同步失败',
+          description: '会员状态暂未刷新成功，请稍后重试。',
+          dedupeKey: 'user-status-refresh-failed',
+        })
       }
     } catch {
-      toast.error('刷新失败，请重试')
+      toast.error({
+        title: '刷新失败',
+        description: '会员状态刷新失败，请重试。',
+        dedupeKey: 'user-status-refresh-error',
+      })
     } finally {
       setIsRefreshing(false)
     }
@@ -154,12 +167,20 @@ export function UserCenter({ isOpen, onClose }: UserCenterProps) {
 
   const handleRedeemGiftCard = useCallback(async () => {
     if (!giftCardCode.trim()) {
-      toast.error('请输入兑换码')
+      toast.warning({
+        title: '请输入兑换码',
+        description: '填写有效兑换码后才能继续兑换。',
+        dedupeKey: 'gift-card-empty',
+      })
       return
     }
 
     if (!isValidGiftCardCode(giftCardCode)) {
-      toast.error('兑换码格式不正确')
+      toast.warning({
+        title: '兑换码格式不正确',
+        description: '请按 XXXX-XXXX-XXXX 的格式输入兑换码。',
+        dedupeKey: 'gift-card-invalid-format',
+      })
       return
     }
 
@@ -172,10 +193,18 @@ export function UserCenter({ isOpen, onClose }: UserCenterProps) {
       if (result.ok && result.data) {
         setRedeemResult(result.data)
         if (result.data.success) {
-          toast.success('兑换成功！')
+          toast.success({
+            title: '兑换成功',
+            description: '会员权益已到账，正在同步最新状态。',
+            dedupeKey: 'gift-card-redeem-success',
+          })
           const refreshedStatus = await refreshUserStatus()
           if (!refreshedStatus) {
-            toast.error('会员状态同步失败，请点击刷新状态重试')
+            toast.warning({
+              title: '状态同步稍后完成',
+              description: '兑换已成功，如权益未更新可点击“刷新状态”。',
+              dedupeKey: 'gift-card-refresh-delayed',
+            })
           }
         }
       } else {

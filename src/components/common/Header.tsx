@@ -24,19 +24,19 @@ export const Header = memo(function Header() {
 
   return (
     <header
-      className="w-full px-6 flex min-h-[3.75rem] h-[3.75rem] shrink-0 items-center justify-between relative z-10"
+      className="relative z-10 flex h-[3.75rem] min-h-[3.75rem] w-full shrink-0 items-center justify-between gap-3 px-3 md:px-6"
       style={{
         backgroundColor: 'var(--header-bg)',
         boxShadow: 'var(--header-top-shadow), var(--header-separator)',
       }}
     >
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         <div className="h-9 w-9 rounded-lg flex items-center justify-center overflow-hidden">
-          <img src="./favicon.svg" alt="Logo" className="h-full w-full" />
+          <img src="./favicon.svg" alt="秀儿直播助手标志" className="h-full w-full" />
         </div>
-        <div className="leading-tight">
+        <div className="min-w-0 leading-tight">
           <h1
-            className="text-base font-semibold sm:text-lg tracking-tight"
+            className="truncate text-sm font-semibold tracking-tight sm:text-lg"
             style={{ color: 'var(--text-primary)' }}
           >
             秀儿直播助手
@@ -44,9 +44,9 @@ export const Header = memo(function Header() {
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-2 md:gap-3">
         {/* 账号选择器 - 始终可见 */}
-        <div data-tour="account-switcher" className="w-[200px]">
+        <div data-tour="account-switcher" className="w-[8.5rem] md:w-[12.5rem]">
           <AccountSwitcher />
         </div>
 
@@ -75,7 +75,9 @@ export const Header = memo(function Header() {
               }}
             >
               <User className="h-4 w-4" />
-              <span className="text-sm font-medium truncate max-w-[7.5rem]">{user.username}</span>
+              <span className="max-w-[5.5rem] truncate text-sm font-medium md:max-w-[7.5rem]">
+                {user.username}
+              </span>
             </button>
           ) : (
             <button

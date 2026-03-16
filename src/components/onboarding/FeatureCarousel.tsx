@@ -7,43 +7,48 @@ const features = [
     icon: MessageCircle,
     title: '自动发言',
     desc: '预设话术自动循环发送，告别重复打字',
-    color: 'from-blue-400 to-blue-600',
-    bgColor: 'bg-blue-50',
+    gradient: 'from-[#ff6b35] to-[#f7931e]',
   },
   {
     icon: Image,
     title: '自动弹窗',
     desc: '商品自动展示，提升转化超简单',
-    color: 'from-purple-400 to-purple-600',
-    bgColor: 'bg-purple-50',
+    gradient: 'from-[#ff7f50] to-[#ff9f43]',
   },
   {
     icon: Bot,
     title: 'AI 智能回复',
     desc: '评论自动识别回复，互动永不停歇',
-    color: 'from-green-400 to-green-600',
-    bgColor: 'bg-green-50',
+    gradient: 'from-[#fb923c] to-[#f97316]',
   },
   {
     icon: BarChart3,
     title: '数据监控',
     desc: '实时数据分析，直播效果一目了然',
-    color: 'from-orange-400 to-orange-600',
-    bgColor: 'bg-orange-50',
+    gradient: 'from-[#f59e0b] to-[#ea580c]',
   },
 ]
 
 export function FeatureCarousel() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isAutoPlaying, setIsAutoPlaying] = useState(true)
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
 
   useEffect(() => {
-    if (!isAutoPlaying) return
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const syncPreference = () => setPrefersReducedMotion(mediaQuery.matches)
+    syncPreference()
+    mediaQuery.addEventListener('change', syncPreference)
+    return () => mediaQuery.removeEventListener('change', syncPreference)
+  }, [])
+
+  useEffect(() => {
+    if (!isAutoPlaying || prefersReducedMotion) return
     const timer = setInterval(() => {
       setCurrentIndex(prev => (prev + 1) % features.length)
     }, 4000)
     return () => clearInterval(timer)
-  }, [isAutoPlaying])
+  }, [isAutoPlaying, prefersReducedMotion])
 
   const handlePrev = () => {
     setIsAutoPlaying(false)
@@ -60,15 +65,20 @@ export function FeatureCarousel() {
 
   return (
     <div
-      className="relative overflow-hidden rounded-xl bg-gradient-to-br p-6 text-white shadow-lg"
-      style={{ background: 'linear-gradient(135deg, var(--tw-gradient-stops))' }}
+      className="relative overflow-hidden rounded-2xl border p-6 text-white shadow-lg"
+      style={{
+        backgroundColor: 'var(--surface-elevated)',
+        borderColor: 'hsla(var(--border), 0.9)',
+        boxShadow: 'var(--shadow-card-hover)',
+      }}
     >
       <div
         className={cn(
           'absolute inset-0 bg-gradient-to-br opacity-90 transition-all duration-500',
-          currentFeature.color,
+          currentFeature.gradient,
         )}
       />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.2),transparent_45%)]" />
 
       <div className="relative z-10">
         <div className="mb-4 flex items-center justify-between">
@@ -79,6 +89,8 @@ export function FeatureCarousel() {
             {features.map((_, index) => (
               <button
                 key={index}
+                type="button"
+                aria-label={`切换到第 ${index + 1} 个功能亮点`}
                 onClick={() => {
                   setIsAutoPlaying(false)
                   setCurrentIndex(index)
@@ -104,14 +116,18 @@ export function FeatureCarousel() {
 
         <div className="mt-4 flex justify-end gap-2">
           <button
+            type="button"
+            aria-label="查看上一个功能亮点"
             onClick={handlePrev}
-            className="rounded-full p-1.5 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
+            className="rounded-full p-1.5 text-white/70 transition-colors hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
           <button
+            type="button"
+            aria-label="查看下一个功能亮点"
             onClick={handleNext}
-            className="rounded-full p-1.5 text-white/70 transition-colors hover:bg-white/20 hover:text-white"
+            className="rounded-full p-1.5 text-white/70 transition-colors hover:bg-white/20 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
           >
             <ChevronRight className="h-4 w-4" />
           </button>

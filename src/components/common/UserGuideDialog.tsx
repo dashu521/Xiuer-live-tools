@@ -69,8 +69,8 @@ function PlatformSupportTable() {
 
 function FeatureIcon({ supported }: { supported: boolean }) {
   return supported ? (
-    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full border border-green-500/30">
-      <Check className="w-4 h-4 text-green-500" />
+    <span className="inline-flex items-center justify-center w-6 h-6 rounded-full border border-emerald-500/25 bg-emerald-500/10 text-emerald-300">
+      <Check className="w-4 h-4" />
     </span>
   ) : (
     <span className="inline-flex items-center justify-center w-6 h-6 rounded-full border border-muted">
