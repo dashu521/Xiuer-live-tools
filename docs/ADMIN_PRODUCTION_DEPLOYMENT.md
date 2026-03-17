@@ -25,7 +25,7 @@ http://121.41.179.197:8000/admin/app
 ### 1.4 管理员登录凭据
 - **用户名**：`admin`
 - **密码来源**：`.env` 文件中的 `ADMIN_PASSWORD` 变量
-- **当前密码**：`meiyoumima1`（2026-03-17 恢复为用户历史密码）
+- **密码查看方式**：`grep ADMIN_PASSWORD /opt/auth-api/.env`
 
 ---
 
@@ -41,15 +41,15 @@ http://121.41.179.197:8000/admin/app
 # 数据库连接
 DATABASE_URL=mysql+pymysql://root:password@mysql:3306/auth_db
 
-# JWT 密钥
+# JWT 密钥（生产环境必须修改为随机强密钥）
 JWT_SECRET=xiuer-live-tools-jwt-secret-key-2024
 
-# CORS 配置
+# CORS 配置（生产环境应限制为具体域名）
 CORS_ORIGINS=*
 
-# 管理员账号（生产环境必须修改）
-ADMIN_PASSWORD=meiyoumima1
-ADMIN_USERNAME=admin
+# 管理员账号（从 .env 文件读取，请勿硬编码）
+ADMIN_PASSWORD=${ADMIN_PASSWORD}
+ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
 ```
 
 ### 2.3 配置备份
@@ -92,9 +92,9 @@ cd /opt/auth-api && docker compose logs mysql --tail=100
 ## 4. 历史变更记录
 
 ### 4.1 2026-03-17 密码恢复
-- **操作**：将管理员密码从 `admin123` 恢复为 `meiyoumima1`
-- **原因**：`admin123` 是 2026-03-17 新系统部署时的默认值，非用户历史密码
-- **证据**：在 Docker overlay2 历史层中找到 `ADMIN_PASSWORD=meiyoumima1` 配置
+- **操作**：将管理员密码从默认 `admin123` 恢复为用户历史密码
+- **原因**：`admin123` 是 2026-03-17 新系统部署时的默认值
+- **证据**：在 Docker overlay2 历史层中找到历史密码配置
 - **备份文件**：`/opt/auth-api/.env.bak.20260317_221923`
 
 ### 4.2 系统迁移历史
