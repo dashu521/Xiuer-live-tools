@@ -2,15 +2,9 @@ import { User } from 'lucide-react'
 import { memo, useCallback } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { AccountSwitcher } from './AccountSwitcher'
+import { ThemeSelector } from './ThemeSelector'
 
-/**
- * Header 组件 - 已优化
- * 1. 使用 memo 避免父组件重渲染时不必要的更新
- * 2. 使用 selector 精确订阅 store 状态，避免订阅整个 store
- * 3. 使用 useCallback 缓存事件处理函数
- */
 export const Header = memo(function Header() {
-  // 使用 selector 精确订阅，避免订阅整个 store 导致不必要的重渲染
   const user = useAuthStore(state => state.user)
   const isAuthenticated = useAuthStore(state => state.isAuthenticated)
 
@@ -45,12 +39,12 @@ export const Header = memo(function Header() {
       </div>
 
       <div className="flex min-w-0 items-center gap-2 md:gap-3">
-        {/* 账号选择器 - 始终可见 */}
+        <ThemeSelector />
+
         <div data-tour="account-switcher" className="w-[8.5rem] md:w-[12.5rem]">
           <AccountSwitcher />
         </div>
 
-        {/* 用户区域 */}
         {isAuthenticated && user ? (
           <div
             className="flex h-9 items-center rounded-lg px-2"

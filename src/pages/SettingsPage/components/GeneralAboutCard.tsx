@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { useDevMode } from '@/hooks/useDevMode'
-import { themeConfig, useTheme } from '@/hooks/useTheme'
+import { type ThemeMode, themeConfig, useTheme } from '@/hooks/useTheme'
 import { useToast } from '@/hooks/useToast'
 import { useUpdateConfigStore, useUpdateStore } from '@/hooks/useUpdate'
 import { version } from '../../../../package.json'
@@ -26,7 +26,7 @@ export function GeneralAboutCard() {
   const [isUpToDate, setIsUpToDate] = useState(false)
   const { toast } = useToast()
   const { enabled: devMode, setEnabled: setDevMode } = useDevMode()
-  const [theme, setTheme] = useTheme()
+  const { themeMode, resolvedTheme, setThemeMode } = useTheme()
 
   useEffect(() => {
     const loadSetting = async () => {
@@ -88,33 +88,44 @@ export function GeneralAboutCard() {
           </div>
 
           <div className="pl-3">
-            <SettingRow label="界面主题" description={themeConfig[theme].description}>
+            <SettingRow label="界面主题" description={themeConfig[resolvedTheme].description}>
               <div className="flex items-center gap-3">
                 <div
                   className="h-8 w-8 rounded-full border border-border/70 shadow-sm"
-                  style={{ background: themeConfig[theme].color }}
+                  style={{ background: themeConfig[resolvedTheme].color }}
                   aria-hidden="true"
                 />
-                <Select
-                  value={theme}
-                  onValueChange={value => setTheme(value as keyof typeof themeConfig)}
-                >
+                <Select value={themeMode} onValueChange={value => setThemeMode(value as ThemeMode)}>
                   <SelectTrigger className="h-9 w-[12rem] bg-background">
                     <SelectValue placeholder="选择主题" />
                   </SelectTrigger>
                   <SelectContent>
-                    {Object.entries(themeConfig).map(([key, config]) => (
-                      <SelectItem key={key} value={key}>
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="h-3 w-3 rounded-full border border-border/70"
-                            style={{ background: config.color }}
-                            aria-hidden="true"
-                          />
-                          <span>{config.label}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="fashion">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-3 w-3 rounded-full border border-border/70"
+                          style={{ background: themeConfig.fashion.color }}
+                          aria-hidden="true"
+                        />
+                        <span>时尚主题</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="daylight">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-3 w-3 rounded-full border border-border/70"
+                          style={{ background: themeConfig.daylight.color }}
+                          aria-hidden="true"
+                        />
+                        <span>日间浅色</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="system">
+                      <div className="flex items-center gap-2">
+                        <span className="h-3 w-3 rounded-full border border-border/70 bg-gradient-to-r from-[#FF6B35] to-[#FFEAD7]" />
+                        <span>跟随系统</span>
+                      </div>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>

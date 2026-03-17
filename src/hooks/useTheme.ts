@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 
 const STORAGE_KEY = 'theme'
-export type Theme = 'fashion' | 'daylight'
+export type ThemeMode = 'fashion' | 'daylight' | 'system'
+type ResolvedTheme = 'fashion' | 'daylight'
 
-/**
- * 主题配置信息
- */
-export const themeConfig: Record<Theme, { label: string; description: string; color: string }> = {
+export const themeConfig: Record<
+  ResolvedTheme,
+  { label: string; description: string; color: string }
+> = {
   fashion: {
     label: '时尚主题',
     description: '现代渐变设计，彰显个性风格',
@@ -19,56 +20,76 @@ export const themeConfig: Record<Theme, { label: string; description: string; co
   },
 }
 
-/**
- * 获取存储的主题设置
- * 默认主题为时尚主题 (fashion)
- */
-function getStoredTheme(): Theme {
+export const themeModeConfig: Record<ThemeMode, { label: string; icon: string }> = {
+  fashion: { label: '时尚主题', icon: '🌙' },
+  daylight: { label: '日间浅色', icon: '☀️' },
+  system: { label: '跟随系统', icon: '💻' },
+}
+
+function getSystemTheme(): ResolvedTheme {
   if (typeof window === 'undefined') return 'fashion'
-  const stored = localStorage.getItem(STORAGE_KEY)
-  if (stored === 'fashion' || stored === 'daylight') return stored
+  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'daylight' : 'fashion'
+}
+
+function getStoredThemeMode(): ThemeMode {
+  if (typeof window === 'undefined') return 'fashion'
+  const stored = localStorage.getItem(STORAGE_KEY) as ThemeMode | null
+  if (stored === 'fashion' || stored === 'daylight' || stored === 'system') return stored
   return 'fashion'
 }
 
-/**
- * 应用主题到文档
- */
-function applyTheme(value: Theme) {
+function applyTheme(value: ResolvedTheme) {
   document.documentElement.dataset.theme = value
 }
 
-/**
- * 主题管理 Hook
- *
- * 使用说明：
- * const [theme, setTheme] = useTheme()
- *
- * - theme: 当前主题
- * - setTheme: 设置主题
- */
-export function useTheme(): [Theme, (value: Theme) => void] {
-  const [theme, setThemeState] = useState<Theme>(getStoredTheme)
+export function useTheme(): {
+  themeMode: ThemeMode
+  resolvedTheme: ResolvedTheme
+  setThemeMode: (value: ThemeMode) => void
+} {
+  const [themeMode, setThemeModeState] = useState<ThemeMode>(getStoredThemeMode)
+  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => {
+    const mode = getStoredThemeMode()
+    return mode === 'system' ? getSystemTheme() : mode
+  })
 
   useEffect(() => {
-    applyTheme(getStoredTheme())
+    const mode = getStoredThemeMode()
+    const resolved = mode === 'system' ? getSystemTheme() : mode
+    applyTheme(resolved)
+    setResolvedTheme(resolved)
   }, [])
 
-  const setTheme = useCallback((value: Theme) => {
-    if (value === 'fashion' || value === 'daylight') {
-      setThemeState(value)
-      document.documentElement.dataset.theme = value
-      localStorage.setItem(STORAGE_KEY, value)
+  useEffect(() => {
+    if (themeMode !== 'system') return
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: light)')
+    const handleChange = () => {
+      const newResolved = getSystemTheme()
+      setResolvedTheme(newResolved)
+      applyTheme(newResolved)
     }
+
+    mediaQuery.addEventListener('change', handleChange)
+    return () => mediaQuery.removeEventListener('change', handleChange)
+  }, [themeMode])
+
+  const setThemeMode = useCallback((value: ThemeMode) => {
+    setThemeModeState(value)
+    localStorage.setItem(STORAGE_KEY, value)
+
+    const resolved = value === 'system' ? getSystemTheme() : value
+    setResolvedTheme(resolved)
+    applyTheme(resolved)
   }, [])
 
-  return [theme, setTheme]
+  return { themeMode, resolvedTheme, setThemeMode }
 }
 
-/**
- * 初始化主题（在应用启动时调用）
- */
 export function initializeTheme(): void {
   if (typeof window !== 'undefined') {
-    applyTheme(getStoredTheme())
+    const mode = getStoredThemeMode()
+    const resolved = mode === 'system' ? getSystemTheme() : mode
+    applyTheme(resolved)
   }
 }
