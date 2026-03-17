@@ -19,11 +19,11 @@ const themeOptions: { value: ThemeMode; label: string; icon: React.ReactNode }[]
 function getThemeIcon(themeMode: ThemeMode) {
   switch (themeMode) {
     case 'fashion':
-      return <Moon className="h-4 w-4" />
+      return <Moon className="h-[1.125rem] w-[1.125rem]" />
     case 'daylight':
-      return <Sun className="h-4 w-4" />
+      return <Sun className="h-[1.125rem] w-[1.125rem]" />
     case 'system':
-      return <Monitor className="h-4 w-4" />
+      return <Monitor className="h-[1.125rem] w-[1.125rem]" />
   }
 }
 
@@ -42,7 +42,7 @@ export const ThemeSelector = memo(function ThemeSelector() {
       <Tooltip>
         <Select value={themeMode} onValueChange={handleValueChange}>
           <TooltipTrigger asChild>
-            <SelectTrigger size="sm" className="h-10 w-10 p-0 justify-center" aria-label="切换主题">
+            <SelectTrigger size="sm" className="h-11 w-11 p-0 justify-center" aria-label="切换主题">
               <SelectValue>{getThemeIcon(themeMode)}</SelectValue>
             </SelectTrigger>
           </TooltipTrigger>
