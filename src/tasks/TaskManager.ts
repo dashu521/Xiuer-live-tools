@@ -155,12 +155,22 @@ export class TaskManagerImpl {
       this.statusStore.set(taskId, task.status)
     }
 
-    // 【修复】检查该账号的任务是否已在运行
-    if (taskState.status === 'running' || taskState.status === 'stopping') {
+    // 【Phase 2B-1】检查该账号的任务是否已在运行
+    // 基于任务实例的真实状态，而非调度器状态
+    const isActuallyRunning = task.status === 'running' || task.status === 'stopping'
+    if (isActuallyRunning) {
       console.log(
-        `[TaskManager] Task ${taskId} for account ${accountId} is already ${taskState.status}`,
+        `[TaskManager] Task ${taskId} for account ${accountId} is actually ${task.status}, preventing duplicate start`,
       )
       return { success: false, reason: 'ALREADY_RUNNING', message: '任务已在运行中' }
+    }
+    // 如果调度器状态显示运行中但任务实例未运行，进行状态自愈
+    if (taskState.status === 'running' || taskState.status === 'stopping') {
+      console.warn(
+        `[TaskManager] Status mismatch for task ${taskId} on account ${accountId}: scheduler=${taskState.status}, actual=${task.status}, reconciling...`,
+      )
+      taskState.status = task.status
+      this.statusStore.set(taskId, task.status)
     }
 
     try {
@@ -169,22 +179,24 @@ export class TaskManagerImpl {
         ;(task as BaseTask & { reset: () => void }).reset()
       }
 
-      // 【修复】更新该账号的任务状态
+      // 启动任务（先启动，成功后再更新状态，避免状态不一致）
+      console.log(`[TaskManager] Starting task ${taskId} for account ${accountId}`)
+      await task.start(ctx)
+
+      // 【修复】任务启动成功后，更新该账号的任务状态
       taskState.status = 'running'
       task.status = 'running'
       this.statusStore.set(taskId, 'running')
 
-      // 启动任务
-      console.log(`[TaskManager] Starting task ${taskId} for account ${accountId}`)
-      await task.start(ctx)
       console.log(`[TaskManager] Task ${taskId} started successfully for account ${accountId}`)
 
       return { success: true }
     } catch (error) {
       console.error(`[TaskManager] Failed to start task ${taskId} for account ${accountId}:`, error)
-      taskState.status = 'error'
-      task.status = 'error'
-      this.statusStore.set(taskId, 'error')
+      // 【修复】启动失败时，确保状态回滚到 idle，避免"假运行"状态
+      taskState.status = 'idle'
+      task.status = 'idle'
+      this.statusStore.set(taskId, 'idle')
       return {
         success: false,
         reason: 'ERROR',

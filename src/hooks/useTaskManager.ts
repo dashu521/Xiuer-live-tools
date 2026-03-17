@@ -56,12 +56,19 @@ export function useTaskManager() {
    */
   const startTask = useMemoizedFn(async (taskId: TaskId): Promise<boolean> => {
     const ctx = createContext()
+    // 【Phase 2B-1】taskManager.start() 已基于任务实例真实状态返回 ALREADY_RUNNING
     const result = await taskManager.start(taskId, ctx)
 
     if (!result.success) {
       if (result.reason === 'NOT_CONNECTED' || result.reason === 'NOT_LIVE') {
         // Gate 检查失败，不显示 toast（由 GateButton 处理）
         console.log(`[useTaskManager] Gate check failed: ${result.message}`)
+      } else if (result.reason === 'ALREADY_RUNNING') {
+        // 【Phase 2B-1】基于真实运行状态的提示
+        console.log(
+          `[useTaskManager] Task ${taskId} is already running for account ${currentAccountId}`,
+        )
+        toast.info(result.message || '任务已在运行中')
       } else {
         toast.error(result.message || '启动任务失败')
       }
