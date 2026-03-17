@@ -119,33 +119,141 @@
   --sidebar-ring: 17 100% 60%;
 }
 
+/* ========== 日间浅色主题（Daylight Theme）========== */
+[data-theme="daylight"] {
+  /* 四层结构：暖灰米色，不走纯白 */
+  --app-bg: hsl(34, 42%, 94%);
+  --header-bg: hsl(32, 36%, 90%);
+  --sidebar-bg: hsl(34, 35%, 91%);
+  --content-bg: hsl(34, 28%, 95%);
+  --surface: hsl(32, 24%, 97%);
+  --surface-muted: hsl(34, 24%, 93%);
+  --surface-elevated: hsl(32, 30%, 99%);
+  --border: 28 18% 82%;
+
+  --text-primary: hsl(24, 20%, 14%);
+  --text-secondary: hsl(25, 14%, 26%);
+  --text-muted: hsl(24, 10%, 44%);
+  --text-disabled: hsl(24, 8%, 60%);
+
+  --primary: 21 95% 54%;
+  --primary-hover: hsl(21, 95%, 49%);
+  --primary-pressed: hsl(21, 95%, 45%);
+  --primary-subtle: hsl(21, 95%, 54%, 0.12);
+  --on-primary: hsl(0, 0%, 100%);
+
+  --success: 147 62% 36%;
+  --success-subtle: rgba(20, 131, 76, 0.12);
+  --warning: 36 90% 44%;
+  --warning-subtle: rgba(217, 119, 6, 0.14);
+  --error: 0 70% 50%;
+  --error-subtle: rgba(220, 38, 38, 0.12);
+  --info: 213 77% 50%;
+  --info-subtle: rgba(37, 99, 235, 0.12);
+
+  --shadow-card: 0 8px 24px rgba(74, 53, 31, 0.08), 0 2px 8px rgba(74, 53, 31, 0.04);
+  --shadow-card-hover: 0 16px 36px rgba(74, 53, 31, 0.11), 0 4px 16px rgba(255, 107, 53, 0.08);
+  --shadow-dropdown: 0 20px 48px rgba(60, 44, 24, 0.12), 0 6px 18px rgba(60, 44, 24, 0.08);
+  --shadow-modal: 0 28px 64px rgba(45, 35, 22, 0.16), 0 10px 26px rgba(45, 35, 22, 0.1);
+  --shadow-glow: 0 0 18px rgba(255, 107, 53, 0.12);
+  --shadow-glow-strong: 0 0 28px rgba(255, 107, 53, 0.18);
+
+  --header-top-shadow: 0 1px 0 rgba(95, 72, 44, 0.06);
+  --header-separator: 0 1px 0 rgba(95, 72, 44, 0.08);
+  --sidebar-edge-shadow: 1px 0 0 rgba(95, 72, 44, 0.06);
+  --content-edge-shadow: 0 0 0 1px rgba(95, 72, 44, 0.04);
+  --divider: rgba(95, 72, 44, 0.08);
+
+  --sidebar-item-hover: rgba(255, 107, 53, 0.08);
+  --sidebar-active-bg: rgba(255, 107, 53, 0.12);
+  --hover-overlay: rgba(79, 59, 34, 0.03);
+  --pressed-overlay: rgba(79, 59, 34, 0.06);
+  --hover-surface: rgba(255, 255, 255, 0.46);
+  --hover-border: rgba(255, 107, 53, 0.18);
+  --hover-shadow-soft: 0 10px 22px rgba(74, 53, 31, 0.08);
+
+  --header-action-bg: rgba(255, 255, 255, 0.7);
+  --header-action-border: rgba(102, 78, 47, 0.12);
+  --header-action-fg: #2a2219;
+  --header-action-select-chevron-opacity: 0.68;
+
+  --input-bg: hsl(32, 24%, 97%);
+  --input-border: hsl(28, 18%, 79%);
+  --input-border-focus: hsl(21, 95%, 54%);
+  --input-border-hover: hsl(28, 20%, 70%);
+  --input-placeholder: hsl(24, 10%, 56%);
+
+  --button-secondary-bg: hsl(34, 24%, 92%);
+  --button-secondary-hover: hsl(34, 22%, 88%);
+  --button-secondary-pressed: hsl(34, 18%, 84%);
+  --button-ghost-hover: hsl(21, 95%, 54%, 0.08);
+
+  --background: 34 28% 95%;
+  --foreground: 24 20% 14%;
+  --card: 32 24% 97%;
+  --card-foreground: 24 20% 14%;
+  --popover: 32 24% 98%;
+  --popover-foreground: 24 20% 14%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 34 24% 92%;
+  --secondary-foreground: 24 18% 20%;
+  --muted: 34 18% 92%;
+  --muted-foreground: 24 10% 44%;
+  --accent: 21 95% 54%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 70% 50%;
+  --destructive-foreground: 0 0% 100%;
+  --input: 28 18% 79%;
+  --ring: 21 95% 54%;
+  --sidebar-background: 34 35% 91%;
+  --sidebar-foreground: 24 18% 18%;
+  --sidebar-primary: 21 95% 54%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 21 95% 54% / 0.1;
+  --sidebar-accent-foreground: 24 20% 14%;
+  --sidebar-border: 28 18% 82%;
+  --sidebar-ring: 21 95% 54%;
+}
+
 /* ========== 时尚主题特定样式优化 ========== */
 
 /* 渐变主按钮样式 */
 [data-theme="fashion"] .btn-primary-gradient,
 [data-theme="fashion"] button[data-variant="default"],
-[data-theme="fashion"] .bg-primary {
+[data-theme="fashion"] .bg-primary,
+[data-theme="daylight"] .btn-primary-gradient,
+[data-theme="daylight"] button[data-variant="default"],
+[data-theme="daylight"] .bg-primary {
   background: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%);
   transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 [data-theme="fashion"] .btn-primary-gradient:hover,
 [data-theme="fashion"] button[data-variant="default"]:hover,
-[data-theme="fashion"] .bg-primary:hover {
+[data-theme="fashion"] .bg-primary:hover,
+[data-theme="daylight"] .btn-primary-gradient:hover,
+[data-theme="daylight"] button[data-variant="default"]:hover,
+[data-theme="daylight"] .bg-primary:hover {
   background: linear-gradient(135deg, #ff8050 0%, #f7a040 100%);
   transform: translateY(-1px);
 }
 
 [data-theme="fashion"] .btn-primary-gradient:active,
 [data-theme="fashion"] button[data-variant="default"]:active,
-[data-theme="fashion"] .bg-primary:active {
+[data-theme="fashion"] .bg-primary:active,
+[data-theme="daylight"] .btn-primary-gradient:active,
+[data-theme="daylight"] button[data-variant="default"]:active,
+[data-theme="daylight"] .bg-primary:active {
   transform: translateY(0);
 }
 
 /* 渐变按钮禁用样式 */
 [data-theme="fashion"] .btn-primary-gradient:disabled,
 [data-theme="fashion"] button[data-variant="default"]:disabled,
-[data-theme="fashion"] .bg-primary:disabled {
+[data-theme="fashion"] .bg-primary:disabled,
+[data-theme="daylight"] .btn-primary-gradient:disabled,
+[data-theme="daylight"] button[data-variant="default"]:disabled,
+[data-theme="daylight"] .bg-primary:disabled {
   background: linear-gradient(135deg, #5a5a65 0%, #4a4a55 100%);
   box-shadow: none;
   opacity: 0.6;
@@ -160,6 +268,13 @@
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+[data-theme="daylight"] .glass {
+  background: rgba(255, 251, 245, 0.72);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(102, 78, 47, 0.1);
+}
+
 [data-theme="fashion"] .glass-strong {
   background: rgba(28, 28, 33, 0.85);
   backdrop-filter: blur(20px);
@@ -167,21 +282,44 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+[data-theme="daylight"] .glass-strong {
+  background: rgba(255, 250, 243, 0.88);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(102, 78, 47, 0.12);
+}
+
 /* 光晕效果 */
 [data-theme="fashion"] .glow {
   box-shadow: 0 0 20px rgba(255, 107, 53, 0.3);
+}
+
+[data-theme="daylight"] .glow {
+  box-shadow: 0 0 18px rgba(255, 107, 53, 0.12);
 }
 
 [data-theme="fashion"] .glow-strong {
   box-shadow: 0 0 30px rgba(255, 107, 53, 0.4);
 }
 
+[data-theme="daylight"] .glow-strong {
+  box-shadow: 0 0 26px rgba(255, 107, 53, 0.16);
+}
+
 [data-theme="fashion"] .glow-text {
   text-shadow: 0 0 20px rgba(255, 107, 53, 0.5);
 }
 
+[data-theme="daylight"] .glow-text {
+  text-shadow: 0 0 14px rgba(255, 107, 53, 0.18);
+}
+
 /* 卡片悬停效果 */
 [data-theme="fashion"] .card-hover {
+  transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[data-theme="daylight"] .card-hover {
   transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -193,10 +331,21 @@
   transform: translateY(-2px);
 }
 
+[data-theme="daylight"] .card-hover:hover {
+  border-color: rgba(255, 107, 53, 0.22);
+  box-shadow:
+    0 14px 30px rgba(74, 53, 31, 0.1),
+    0 0 16px rgba(255, 107, 53, 0.08);
+  transform: translateY(-2px);
+}
+
 /* 输入框焦点光晕 */
 [data-theme="fashion"] input:focus,
 [data-theme="fashion"] textarea:focus,
-[data-theme="fashion"] select:focus {
+[data-theme="fashion"] select:focus,
+[data-theme="daylight"] input:focus,
+[data-theme="daylight"] textarea:focus,
+[data-theme="daylight"] select:focus {
   box-shadow: 0 0 0 3px hsl(17, 100%, 60%, 0.2);
   border-color: var(--input-border-focus);
 }
@@ -204,7 +353,10 @@
 /* 输入框悬停状态 */
 [data-theme="fashion"] input:hover:not(:focus):not(:disabled),
 [data-theme="fashion"] textarea:hover:not(:focus):not(:disabled),
-[data-theme="fashion"] select:hover:not(:focus):not(:disabled) {
+[data-theme="fashion"] select:hover:not(:focus):not(:disabled),
+[data-theme="daylight"] input:hover:not(:focus):not(:disabled),
+[data-theme="daylight"] textarea:hover:not(:focus):not(:disabled),
+[data-theme="daylight"] select:hover:not(:focus):not(:disabled) {
   border-color: var(--input-border-hover);
 }
 
@@ -214,8 +366,18 @@
   border-left: 3px solid #ff6b35;
 }
 
+[data-theme="daylight"] .sidebar-item-active {
+  background: linear-gradient(90deg, rgba(255, 107, 53, 0.1) 0%, rgba(255, 255, 255, 0.35) 100%);
+  border-left: 3px solid #ff6b35;
+}
+
 /* 滚动条样式 */
 [data-theme="fashion"] ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+[data-theme="daylight"] ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
@@ -224,13 +386,26 @@
   background: #131316;
 }
 
+[data-theme="daylight"] ::-webkit-scrollbar-track {
+  background: #f3ebe0;
+}
+
 [data-theme="fashion"] ::-webkit-scrollbar-thumb {
   background: #2e2e35;
   border-radius: 4px;
 }
 
+[data-theme="daylight"] ::-webkit-scrollbar-thumb {
+  background: #d7c3af;
+  border-radius: 4px;
+}
+
 [data-theme="fashion"] ::-webkit-scrollbar-thumb:hover {
   background: #3e3e47;
+}
+
+[data-theme="daylight"] ::-webkit-scrollbar-thumb:hover {
+  background: #c8b099;
 }
 
 /* 选中文字样式 */
@@ -239,17 +414,31 @@
   color: #ffffff;
 }
 
+[data-theme="daylight"] ::selection {
+  background: rgba(255, 107, 53, 0.2);
+  color: #24180f;
+}
+
 /* 焦点环样式 - 已移除全局 outline，由组件自行控制 */
 
 /* 禁用状态 */
 [data-theme="fashion"] :disabled,
-[data-theme="fashion"] [disabled] {
+[data-theme="fashion"] [disabled],
+[data-theme="daylight"] :disabled,
+[data-theme="daylight"] [disabled] {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
 /* 渐变文字效果 */
 [data-theme="fashion"] .text-gradient {
+  background: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+[data-theme="daylight"] .text-gradient {
   background: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -348,7 +537,10 @@ html [data-slot="button"] {
 @media (prefers-reduced-motion: reduce) {
   [data-theme="fashion"] *,
   [data-theme="fashion"] *::before,
-  [data-theme="fashion"] *::after {
+  [data-theme="fashion"] *::after,
+  [data-theme="daylight"] *,
+  [data-theme="daylight"] *::before,
+  [data-theme="daylight"] *::after {
     animation-duration: 0.01ms;
     animation-iteration-count: 1;
     transition-duration: 0.01ms;
@@ -356,7 +548,10 @@ html [data-slot="button"] {
 
   [data-theme="fashion"] .card-hover:hover,
   [data-theme="fashion"] .btn-primary-gradient:hover,
-  [data-theme="fashion"] button[data-variant="default"]:hover {
+  [data-theme="fashion"] button[data-variant="default"]:hover,
+  [data-theme="daylight"] .card-hover:hover,
+  [data-theme="daylight"] .btn-primary-gradient:hover,
+  [data-theme="daylight"] button[data-variant="default"]:hover {
     transform: none;
   }
 

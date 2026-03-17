@@ -3,23 +3,15 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { RouterProvider } from 'react-router'
 import { ElectronErrorBoundary } from './components/common/ElectronErrorBoundary'
+import { initializeTheme } from './hooks/useTheme'
 import { router } from './router'
 import './index.css'
 
 // 启动诊断：若 Console 有 [UI] 日志说明页面已加载到我们的应用
 console.log('[UI] main.tsx 执行中')
 
-// 应用持久化主题，避免首屏闪烁（内联脚本确保在 CSS 加载前执行）
-// 注意：深色主题已被移除，现在只支持时尚主题
-;(function applyStoredTheme() {
-  // 始终应用时尚主题
-  document.documentElement.dataset.theme = 'fashion'
-  // 清理localStorage中可能存在的旧主题设置
-  const stored = localStorage.getItem('theme')
-  if (stored && stored !== 'fashion') {
-    localStorage.setItem('theme', 'fashion')
-  }
-})()
+// 应用持久化主题，避免首屏闪烁
+initializeTheme()
 
 const rootEl = document.getElementById('root')
 if (!rootEl) {

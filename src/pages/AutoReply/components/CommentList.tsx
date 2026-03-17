@@ -206,11 +206,16 @@ export default function CommentList({
   const userCommentOnlyId = useId()
 
   return (
-    <Card className="shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden">
+    <Card className="shadow-sm flex h-full flex-col min-h-0 overflow-hidden">
       <CardHeader className="pb-2 shrink-0">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <CardTitle className="text-sm">评论列表</CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              <CardTitle className="text-sm">评论列表</CardTitle>
+              <Badge variant={statusVariant} className="text-xs">
+                {statusLabel}
+              </Badge>
+            </div>
             <CardDescription className="text-xs">实时显示直播间的评论内容</CardDescription>
           </div>
           <div className="flex flex-wrap items-center gap-1.5 shrink-0">
@@ -223,11 +228,6 @@ export default function CommentList({
               </div>
             )}
           </div>
-        </div>
-        <div className="mt-2">
-          <Badge variant={statusVariant} className="text-xs">
-            {statusLabel}
-          </Badge>
         </div>
       </CardHeader>
       <Separator className="shrink-0" />

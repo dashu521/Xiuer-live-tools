@@ -36,7 +36,7 @@ const PreviewList = memo(function PreviewList({
   )
 
   return (
-    <Card className="shadow-sm flex flex-col flex-1 min-h-0 overflow-hidden">
+    <Card className="shadow-sm flex h-full flex-col min-h-0 overflow-hidden">
       <CardHeader className="pb-2 shrink-0">
         <CardTitle className="text-sm">回复预览</CardTitle>
         <CardDescription className="text-xs">AI 生成的回复内容</CardDescription>

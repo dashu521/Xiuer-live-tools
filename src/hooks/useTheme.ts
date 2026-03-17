@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
 const STORAGE_KEY = 'theme'
-export type Theme = 'fashion'
+export type Theme = 'fashion' | 'daylight'
 
 /**
  * 主题配置信息
@@ -12,6 +12,11 @@ export const themeConfig: Record<Theme, { label: string; description: string; co
     description: '现代渐变设计，彰显个性风格',
     color: 'linear-gradient(135deg, #FF6B35 0%, #F7931E 100%)',
   },
+  daylight: {
+    label: '日间浅色',
+    description: '暖米色浅底，明亮但不刺眼',
+    color: 'linear-gradient(135deg, #FFEAD7 0%, #FFF7EF 100%)',
+  },
 }
 
 /**
@@ -21,9 +26,7 @@ export const themeConfig: Record<Theme, { label: string; description: string; co
 function getStoredTheme(): Theme {
   if (typeof window === 'undefined') return 'fashion'
   const stored = localStorage.getItem(STORAGE_KEY)
-  // 只支持时尚主题，如果存储的是其他值，也返回fashion
-  if (stored === 'fashion') return stored
-  // 默认返回时尚主题
+  if (stored === 'fashion' || stored === 'daylight') return stored
   return 'fashion'
 }
 
@@ -40,8 +43,8 @@ function applyTheme(value: Theme) {
  * 使用说明：
  * const [theme, setTheme] = useTheme()
  *
- * - theme: 当前主题，固定为 'fashion'
- * - setTheme: 设置主题（首发版仅支持 'fashion'）
+ * - theme: 当前主题
+ * - setTheme: 设置主题
  */
 export function useTheme(): [Theme, (value: Theme) => void] {
   const [theme, setThemeState] = useState<Theme>(getStoredTheme)
@@ -51,8 +54,7 @@ export function useTheme(): [Theme, (value: Theme) => void] {
   }, [])
 
   const setTheme = useCallback((value: Theme) => {
-    // 只接受fashion主题，忽略其他值
-    if (value === 'fashion') {
+    if (value === 'fashion' || value === 'daylight') {
       setThemeState(value)
       document.documentElement.dataset.theme = value
       localStorage.setItem(STORAGE_KEY, value)

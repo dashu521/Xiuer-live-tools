@@ -96,7 +96,7 @@ export default function AutoReply() {
             </div>
           </div>
 
-          <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-4 2xl:grid-cols-2">
+          <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 grid-rows-[minmax(20rem,1.35fr)_minmax(16rem,1fr)] gap-4 xl:grid-cols-2 xl:grid-rows-1">
             <CommentList highlight={highlightedCommentId} />
             <PreviewList setHighLight={setHighlightedCommentId} />
           </div>
