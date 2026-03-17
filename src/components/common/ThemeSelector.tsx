@@ -42,7 +42,7 @@ export const ThemeSelector = memo(function ThemeSelector() {
       <Tooltip>
         <Select value={themeMode} onValueChange={handleValueChange}>
           <TooltipTrigger asChild>
-            <SelectTrigger size="sm" className="h-9 w-9 p-0 justify-center" aria-label="切换主题">
+            <SelectTrigger size="sm" className="h-10 w-10 p-0 justify-center" aria-label="切换主题">
               <SelectValue>{getThemeIcon(themeMode)}</SelectValue>
             </SelectTrigger>
           </TooltipTrigger>
