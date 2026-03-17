@@ -460,6 +460,30 @@
   </div>
 </div>
 
+<!-- Modal: User Live Accounts -->
+<div id="modalLiveAccounts" class="modal">
+  <div class="modal-content" style="min-width:500px;">
+    <div class="modal-title">用户直播账号</div>
+    <p style="margin-bottom:12px;">用户：<strong id="liveAccountsUsername"></strong></p>
+    <div id="liveAccountsLoading" class="hidden" style="text-align:center;padding:20px;color:var(--gray-500);"><span class="spinner"></span> 加载中...</div>
+    <div id="liveAccountsEmpty" class="hidden" style="text-align:center;padding:20px;color:var(--gray-500);">该用户暂无直播账号</div>
+    <div id="liveAccountsContent" class="hidden">
+      <table style="width:100%;">
+        <thead>
+          <tr>
+            <th>账号 ID</th>
+            <th>账号名称</th>
+          </tr>
+        </thead>
+        <tbody id="liveAccountsBody"></tbody>
+      </table>
+    </div>
+    <div class="modal-actions">
+      <button class="primary" id="btnCloseLiveAccountsModal">关闭</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API = window.location.origin;
 let token = '';
@@ -719,6 +743,7 @@ async function loadUsers() {
 
       var actionCell = document.createElement('td');
       actionCell.style.whiteSpace = 'nowrap';
+      actionCell.appendChild(createActionButton('账号', 'sm', function() { openLiveAccountsModal(u.username); }));
       actionCell.appendChild(createActionButton('重置密码', 'sm', function() { openResetModal(u.username); }));
       actionCell.appendChild(createActionButton('临时密码', 'sm', function() { genTempPw(u.username); }));
       actionCell.appendChild(createActionButton(u.disabled ? '启用' : '禁用', 'sm', function() { openToggle(u.username, u.disabled); }));
@@ -1168,6 +1193,52 @@ function copyGcCodes() {
   if (copyToClipboard(_gcCodes.join('\n'))) toast('已复制 ' + _gcCodes.length + ' 个兑换码'); else toast('复制失败，请手动选择复制', 'error');
 }
 
+/* ======================== User Live Accounts ======================== */
+let _liveAccountsUser = '';
+
+function openLiveAccountsModal(username) {
+  _liveAccountsUser = username;
+  $('liveAccountsUsername').textContent = username;
+  $('liveAccountsLoading').classList.remove('hidden');
+  $('liveAccountsEmpty').classList.add('hidden');
+  $('liveAccountsContent').classList.add('hidden');
+  clearNode($('liveAccountsBody'));
+  openModal('modalLiveAccounts');
+  loadLiveAccounts(username);
+}
+
+async function loadLiveAccounts(username) {
+  try {
+    const r = await fetch(API + '/admin/users/' + encodeURIComponent(username) + '/live-accounts', { headers: hdrs() });
+    $('liveAccountsLoading').classList.add('hidden');
+    if (r.status === 401) { doLogout(); closeModal('modalLiveAccounts'); return; }
+    const data = await r.json();
+    if (!data.success) {
+      toast(data.message || '获取失败', 'error');
+      closeModal('modalLiveAccounts');
+      return;
+    }
+    
+    const accounts = data.accounts || [];
+    if (accounts.length === 0) {
+      $('liveAccountsEmpty').classList.remove('hidden');
+      return;
+    }
+    
+    $('liveAccountsContent').classList.remove('hidden');
+    accounts.forEach(function(acc) {
+      var tr = document.createElement('tr');
+      tr.appendChild(el('td', { text: acc.id || '-', attrs: { style: 'font-family:monospace;font-size:11px;' } }));
+      tr.appendChild(el('td', { text: acc.name || '-' }));
+      $('liveAccountsBody').appendChild(tr);
+    });
+  } catch (e) {
+    $('liveAccountsLoading').classList.add('hidden');
+    toast('网络错误', 'error');
+    closeModal('modalLiveAccounts');
+  }
+}
+
 function bindStaticUiEvents() {
   $('btnRefreshUsers').addEventListener('click', loadUsers);
   $('btnOpenAuditLogs').addEventListener('click', openAuditLogs);
@@ -1213,6 +1284,7 @@ function bindStaticUiEvents() {
   $('btnCopyGcCodes').addEventListener('click', copyGcCodes);
   $('btnDownloadGcTxt').addEventListener('click', downloadGcTxt);
   $('btnCloseGcResultModal').addEventListener('click', function() { closeModal('modalGcResult'); });
+  $('btnCloseLiveAccountsModal').addEventListener('click', function() { closeModal('modalLiveAccounts'); });
 }
 
 /* CSV export with auth — need to handle token in header, so use fetch + blob */

@@ -21,7 +21,7 @@ from deps import (
     get_current_admin,
     hash_password,
 )
-from models import AuditLog, RefreshToken, Subscription, User
+from models import AuditLog, RefreshToken, Subscription, User, UserConfig
 from schemas import err_wrong_password
 from schemas_admin import (
     AdminLoginBody,
@@ -572,3 +572,37 @@ def admin_audit_logs(
         for log in logs
     ]
     return PaginatedAuditLogs(items=items, total=total, page=page, size=size)
+
+
+# ----- GET /admin/users/{username}/live-accounts -----
+@router.get("/users/{username}/live-accounts")
+def admin_get_user_live_accounts(
+    username: str,
+    request: Request,
+    admin: str = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """获取用户的直播账号列表（从 user_configs 表读取）"""
+    req_id = _req_id(request)
+    user = _get_user_by_username(db, username)
+    if not user:
+        auth_audit_log(req_id, str(request.url), "get_live_accounts", username, "failure", {"reason": "not_found"})
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": "user_not_found", "message": "用户不存在"})
+    
+    # 从 user_configs 表获取用户配置
+    user_config = db.query(UserConfig).filter(UserConfig.user_id == user.id).first()
+    
+    accounts = []
+    if user_config and user_config.config_json:
+        config = user_config.config_json or {}
+        accounts = config.get("accounts", [])
+    
+    auth_audit_log(req_id, str(request.url), "get_live_accounts", _username_of(user), "success", {"count": len(accounts)})
+    
+    return {
+        "success": True,
+        "user_id": user.id,
+        "username": _username_of(user),
+        "accounts": accounts,
+        "total": len(accounts),
+    }
