@@ -53,7 +53,8 @@
     "publish:mac:full": "node scripts/publish-mac-full.js",
     "publish": "node scripts/publish.js",
     "publish:confirm": "node scripts/publish-confirm.js",
-    "publish:check": "node scripts/publish-check.js"
+    "publish:check": "node scripts/publish-check.js",
+    "icons:generate": "node scripts/generate-icons.mjs"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -123,6 +124,7 @@
     "marked": "16.4.0",
     "motion": "^12.36.0",
     "openai": "5.8.2",
+    "png-to-ico": "^3.0.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-markdown": "^10.1.0",
