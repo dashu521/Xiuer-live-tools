@@ -267,10 +267,27 @@ function AppWithOnboarding() {
     }
   }, [isAuthenticated])
 
-  // 【跨设备同步】认证完成后设置自动同步
+  // 【跨设备同步】认证完成后设置自动同步，并立即从云端加载配置
+  const hasLoadedFromCloudRef = React.useRef(false)
   useEffect(() => {
     if (authCheckDone && isAuthenticated) {
+      // 设置自动同步（监听配置变化并上传）
       const cleanup = configSyncService.setupAutoSync()
+
+      // 【修复】登录成功后立即从云端加载配置（只执行一次）
+      if (!hasLoadedFromCloudRef.current) {
+        hasLoadedFromCloudRef.current = true
+        console.log('[App] Login detected, loading config from cloud...')
+        configSyncService
+          .loadFromCloud()
+          .then(() => {
+            console.log('[App] Config loaded from cloud successfully')
+          })
+          .catch(err => {
+            console.error('[App] Failed to load config from cloud:', err)
+          })
+      }
+
       return cleanup
     }
   }, [authCheckDone, isAuthenticated])
