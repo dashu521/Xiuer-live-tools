@@ -130,19 +130,21 @@ export function PhoneAuthDialog({
       if (result.ok && result.data?.success) {
         const devCode = result.data?.dev_code
         const smsFailed = result.data?.sms_failed
+        // [SECURITY] 禁止自动填入验证码，只允许在控制台/toast中提示
         if (devCode) {
-          setCode(devCode)
+          // eslint-disable-next-line no-console
+          console.log('[DEV] SMS code (for debugging only):', devCode)
           if (smsFailed) {
             toast.warning({
-              title: '验证码已生成',
-              description: `短信发送失败，系统已自动填入验证码 ${devCode}，可直接继续登录。`,
-              dedupeKey: 'sms-code-dev-fallback',
+              title: '短信发送失败',
+              description: '短信服务暂时不可用，请稍后重试或使用其他登录方式。',
+              dedupeKey: 'sms-code-failed',
             })
           } else {
             toast.success({
               title: '验证码已发送',
-              description: `系统已自动填入验证码 ${devCode}，若未收到短信可直接使用。`,
-              dedupeKey: 'sms-code-dev-prefill',
+              description: '请查看手机短信并在 60 秒内完成验证。',
+              dedupeKey: 'sms-code-sent',
             })
           }
         } else {

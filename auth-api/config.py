@@ -47,3 +47,13 @@ if os.getenv("ADMIN_PASSWORD"):
     settings.ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 if os.getenv("ADMIN_JWT_SECRET"):
     settings.ADMIN_JWT_SECRET = os.getenv("ADMIN_JWT_SECRET")
+
+# [SECURITY] 生产环境强制检查 SMS_MODE，禁止 fallback 到 dev 模式
+ENV = os.getenv("ENV", "development").lower()
+SMS_MODE = os.getenv("SMS_MODE", "dev").strip().lower()
+if ENV == "production":
+    if SMS_MODE not in ["aliyun_dypns", "aliyun"]:
+        raise ValueError(
+            f"[SECURITY] 生产环境 SMS_MODE 必须是 'aliyun_dypns' 或 'aliyun'，"
+            f"当前值为 '{SMS_MODE}'。请正确配置环境变量后重启服务。"
+        )

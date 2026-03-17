@@ -200,39 +200,20 @@ def send_sms(
 
     mode = getattr(sms_service, "mode", "")
     has_local_code = bool(code)
+    # [SECURITY] 只有在明确测试模式下才返回 dev_code，防止生产环境泄露
+    is_test_mode = mode == "test"
 
     if not success:
         logger.error(f"[SMS][{request_id}] send failed: {error_msg}")
-        # 有本地验证码时兜底：返回 200 + dev_code
-        if has_local_code:
-            logger.warning(f"[SMS][{request_id}] returning dev_code fallback after send failure")
-            return {
-                "success": True,
-                "dev_code": code,
-                "sms_failed": True,
-                "sms_failed_message": error_msg or "sms_send_failed",
-            }
-        # aliyun_dypns 发送失败时无本地 code：生成兜底验证码并更新刚写入的记录，保证该手机号仍可登录
-        fallback_code = generate_sms_code(6)
-        latest = db.query(SMSCode).filter(SMSCode.phone == phone).order_by(SMSCode.created_at.desc()).first()
-        if latest and latest.created_at == now:
-            latest.code = fallback_code
-            db.commit()
-            logger.warning(f"[SMS][{request_id}] dypns send failed, returning dev_code fallback: phone={mask_phone(phone)}")
-            return {
-                "success": True,
-                "dev_code": fallback_code,
-                "sms_failed": True,
-                "sms_failed_message": error_msg or "sms_send_failed",
-            }
+        # [SECURITY] 发送失败时返回明确错误，不再返回 dev_code 兜底
         raise HTTPException(
             status_code=500,
             detail=error_msg if error_msg else "短信发送失败，请稍后重试",
         )
 
     logger.info(f"[SMS][{request_id}] code sent: phone={mask_phone(phone)}")
-    # 有本地验证码时均返回 dev_code：dev 模式或 aliyun 国内短信，供构建安装后界面兜底展示
-    if has_local_code:
+    # [SECURITY] 只有明确测试模式才返回 dev_code，其他模式（包括 dev）都不返回
+    if is_test_mode and has_local_code:
         return {"success": True, "dev_code": code}
     return {"success": True}
 
