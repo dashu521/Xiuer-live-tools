@@ -510,6 +510,17 @@ export class AccountSession {
       return newTask
     }
 
+    // 【P0修复】先启动任务，确认真正运行成功后才登记到 activeTasks
+    await newTask.value.start()
+
+    // 【P0修复】显式确认任务真实运行中，才允许登记 activeTasks
+    if (!newTask.value.isRunning()) {
+      this.logger.error(
+        `[startTask][${this.account.id}] Task ${task.type} failed to start: isRunning() returned false after start()`,
+      )
+      return Result.fail(new Error(`任务 ${task.type} 启动失败：任务未进入运行状态`))
+    }
+
     // 注册到运行时监控
     taskRuntimeMonitor.registerTask(this.account.id, task.type)
 
@@ -518,13 +529,14 @@ export class AccountSession {
       this.activeTasks.delete(task.type)
       taskRuntimeMonitor.unregisterTask(`${this.account.id}:${task.type}`)
     })
-    await newTask.value.start()
+
+    // 【P0修复】确认任务真正运行后才登记到 activeTasks
     this.activeTasks.set(task.type, newTask.value)
 
     // 输出当前统计
     const stats = taskRuntimeMonitor.getStatistics()
     this.logger.info(
-      `[startTask][${this.account.id}] Task ${task.type} started, running tasks: ${stats.runningTasks}, timers: ${stats.activeTimers}, listeners: ${stats.activeListeners}`,
+      `[startTask][${this.account.id}] Task ${task.type} started successfully, running tasks: ${stats.runningTasks}, timers: ${stats.activeTimers}, listeners: ${stats.activeListeners}`,
     )
 
     return Result.succeed()

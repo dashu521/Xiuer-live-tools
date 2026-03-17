@@ -23,6 +23,8 @@ export function createTask(
         await hooks.onStart?.()
       } catch (err) {
         stop(TaskStopReason.ERROR, err)
+        // 【P0修复】异常必须向上抛出，不允许静默吞掉
+        throw err
       }
     }
   }

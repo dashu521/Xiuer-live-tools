@@ -5,7 +5,6 @@ import type { ICommentListener } from '#/platforms/IPlatform'
 import { WebSocketService } from '#/services/WebSocketService'
 import windowManager from '#/windowManager'
 import { createTask } from './BaseTask'
-import { TaskStopReason } from './ITask'
 
 const TASK_NAME = '自动回复'
 
@@ -98,7 +97,10 @@ export function createCommentListenerTask(
       windowManager.send(IPC_CHANNELS.tasks.commentListener.stoppedFor(account.id), account.id)
       // 同时发送旧事件以保持兼容（后续可移除）
       windowManager.send(IPC_CHANNELS.tasks.commentListener.stopped, account.id)
-      task.stop(TaskStopReason.ERROR, err)
+      // 【P0修复】移除重复的 task.stop()，统一由 BaseTask.start() 的 catch 块处理
+      // task.stop(TaskStopReason.ERROR, err)
+      // 【P0修复】向上抛出异常，让上层感知启动失败
+      throw err
     }
   }
 
