@@ -16,6 +16,11 @@ export class AutoReplyTask extends BaseTask {
   }
 
   async start(ctx: TaskContext): Promise<void> {
+    // 【审计日志】自动回复启动开始
+    console.log(
+      `[AutoReplyTask] [AUDIT] START accountId=${ctx.accountId}, currentTaskStatus=${this.status}`,
+    )
+
     // 【修复】如果任务之前已经启动过，先清理旧的事件监听器
     // 防止重复注册导致的事件监听泄漏
     if (this.accountId && this.accountId !== ctx.accountId) {
@@ -27,6 +32,13 @@ export class AutoReplyTask extends BaseTask {
     const config =
       useAutoReplyConfigStore.getState().contexts[ctx.accountId]?.config ?? createDefaultConfig()
     const autoReplyStore = useAutoReplyStore.getState()
+
+    // 【审计日志】启动前状态
+    const beforeIsRunning = autoReplyStore.contexts[ctx.accountId]?.isRunning ?? false
+    const beforeIsListening = autoReplyStore.contexts[ctx.accountId]?.isListening ?? 'stopped'
+    console.log(
+      `[AutoReplyTask] [AUDIT] BEFORE_START accountId=${ctx.accountId}, isRunning=${beforeIsRunning}, isListening=${beforeIsListening}`,
+    )
 
     // 更新状态为 waiting
     autoReplyStore.setIsListening(ctx.accountId, 'waiting')
@@ -72,10 +84,16 @@ export class AutoReplyTask extends BaseTask {
       autoReplyStore.setIsRunning(ctx.accountId, true)
       this.status = 'running'
 
+      // 【审计日志】启动成功
+      console.log(
+        `[AutoReplyTask] [AUDIT] SUCCESS accountId=${ctx.accountId}, isRunning=true, isListening=listening`,
+      )
+
       ctx.toast.success('监听评论成功')
       console.log(`[AutoReplyTask] Started successfully for account ${ctx.accountId}`)
     } catch (error) {
-      console.error('[AutoReplyTask] Failed to start:', error)
+      // 【审计日志】启动失败
+      console.error(`[AutoReplyTask] [AUDIT] FAILED accountId=${ctx.accountId}, error=`, error)
       autoReplyStore.setIsListening(ctx.accountId, 'error')
       autoReplyStore.setIsRunning(ctx.accountId, false)
       this.status = 'error'

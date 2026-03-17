@@ -77,6 +77,11 @@ export function useAutoStartOnLive() {
     // 使用账号隔离的设置
     const isEnabled = getAccountAutoStartOnLive(currentAccountId)
 
+    // 【审计日志】状态检查
+    console.log(
+      `[AutoStartOnLive] [AUDIT] accountId=${currentAccountId}, isEnabled=${isEnabled}, streamState=${streamState}, prevState=${prevStreamStateRef.current}, hasAutoStarted=${hasAutoStartedRef.current}, pending=${pendingAutoStartRef.current}, isAnyTaskRunning=${isAnyTaskRunning}, canStart=${state.canStart}`,
+    )
+
     if (!isEnabled) return
 
     // 直播状态从非 'live' 变为 'live'
@@ -85,17 +90,27 @@ export function useAutoStartOnLive() {
 
     if (wasNotLive && isNowLive) {
       pendingAutoStartRef.current = true
+      console.log(
+        `[AutoStartOnLive] [AUDIT] Trigger pending auto-start for account ${currentAccountId}`,
+      )
     }
 
     if (pendingAutoStartRef.current && !hasAutoStartedRef.current) {
       if (isAnyTaskRunning) {
+        console.log(
+          `[AutoStartOnLive] [AUDIT] Skip auto-start: tasks already running for account ${currentAccountId}`,
+        )
         hasAutoStartedRef.current = true
         pendingAutoStartRef.current = false
       } else if (state.canStart) {
-        console.log('[AutoStartOnLive] 检测到开播，自动启动任务')
+        console.log('[AutoStartOnLive] [AUDIT] Executing auto-start for account', currentAccountId)
         hasAutoStartedRef.current = true
         pendingAutoStartRef.current = false
         void startAllTasks()
+      } else {
+        console.log(
+          `[AutoStartOnLive] [AUDIT] Cannot auto-start: canStart=false for account ${currentAccountId}`,
+        )
       }
     }
 
