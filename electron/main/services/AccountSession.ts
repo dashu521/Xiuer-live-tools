@@ -545,6 +545,16 @@ export class AccountSession {
   public stopTask(taskType: LiveControlTask['type']) {
     const task = this.activeTasks.get(taskType)
     if (task) {
+      // 【Phase 2B-2】幂等性检查：如果任务已经停止，不再重复调用 stop
+      if (!task.isRunning()) {
+        this.logger.info(
+          `[stopTask][${this.account.id}] Task ${taskType} is already stopped (isRunning=false), skipping stop call`,
+        )
+        // 确保从 activeTasks 中移除（防止残留）
+        this.activeTasks.delete(taskType)
+        return
+      }
+
       this.logger.info(`[stopTask][${this.account.id}] Stopping task ${taskType}...`)
       task.stop()
 
@@ -554,7 +564,10 @@ export class AccountSession {
         `[stopTask][${this.account.id}] Task ${taskType} stopped, running tasks: ${stats.runningTasks}, timers: ${stats.activeTimers}, listeners: ${stats.activeListeners}`,
       )
     } else {
-      this.logger.warn('[stopTask] 无法停止任务：未找到正在运行中的任务')
+      // 【Phase 2B-2】幂等性：任务不存在视为已停止，不报错
+      this.logger.info(
+        `[stopTask][${this.account.id}] Task ${taskType} not found in activeTasks, considering already stopped`,
+      )
     }
   }
 

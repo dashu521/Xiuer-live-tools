@@ -306,25 +306,34 @@ class TaskStateManager {
   }
   /**
    * 停止自动回复
+   * 【Phase 2B-2】确保幂等性：已停止时不重复调用 IPC
    */
   private async _stopAutoReply(
     accountId: string,
   ): Promise<{ stopped: boolean; alreadyStopped: boolean; error?: unknown }> {
     const store = useAutoReplyStore.getState()
     const context = store.contexts[accountId]
-    const isListening = context?.isListening === 'listening' || context?.isListening === 'waiting'
-    const isRunning = context?.isRunning === true
+    // 【Phase 2B-2】使用 Phase 2A 的统一判定：只认为 listening 是运行中
+    const isActuallyRunning = context?.isListening === 'listening'
+    const isWaiting = context?.isListening === 'waiting'
 
     // 同时检查数据监控
     const liveStatsStore = useLiveStatsStore.getState()
     const isLiveStatsRunning = liveStatsStore.contexts[accountId]?.isListening === true
 
-    if (!isListening && !isRunning && !isLiveStatsRunning) {
+    // 【Phase 2B-2】严格幂等性检查：只有真正运行中才调用 IPC
+    if (!isActuallyRunning && !isLiveStatsRunning) {
+      console.log(`${this.logPrefix} auto-reply: already stopped or not running, skipping IPC call`)
+      // 如果处于 waiting 状态，也需要清理状态
+      if (isWaiting) {
+        store.setIsListening(accountId, 'stopped')
+        store.setIsRunning(accountId, false)
+      }
       return { alreadyStopped: true, stopped: false }
     }
 
     try {
-      // 调用后台IPC停止评论监听器
+      // 【Phase 2B-2】只有真正运行中时才调用后台IPC停止评论监听器
       await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.commentListener.stop, accountId)
       console.log(`${this.logPrefix} auto-reply: IPC stop invoked`)
 
@@ -336,7 +345,7 @@ class TaskStateManager {
       return { stopped: true, alreadyStopped: false }
     } catch (error) {
       console.error(`${this.logPrefix} auto-reply: stop error:`, error)
-      // 即使出错也更新状态
+      // 即使出错也更新状态，确保状态不漂移
       store.setIsListening(accountId, 'stopped')
       store.setIsRunning(accountId, false)
       liveStatsStore.setListening(accountId, false)
