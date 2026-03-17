@@ -295,15 +295,14 @@ class TaskStateManager {
   }
   /**
    * 检查自动回复是否在运行
+   * 【Phase 2A】绿点只基于真实运行态：isListening === 'listening'
+   * 不再将 'waiting' 视为运行中
    */
   private _isAutoReplyRunning(store: any, accountId: string): boolean {
     const context = store.contexts[accountId]
     if (!context) return false
-    return (
-      context.isListening === 'listening' ||
-      context.isListening === 'waiting' ||
-      context.isRunning === true
-    )
+    // 【Phase 2A】绿点只表示真实运行中（listening），不包含 waiting
+    return context.isListening === 'listening'
   }
   /**
    * 停止自动回复

@@ -31,6 +31,8 @@ interface SidebarTab {
 const Sidebar = memo(function Sidebar() {
   const isAutoMessageRunning = useCurrentAutoMessage(context => context.isRunning)
   const isAutoPopupRunning = useCurrentAutoPopUp(context => context.isRunning)
+  // 【Phase 2A】useAutoReply() 返回的 isRunning 已经统一为 isListening === 'listening'
+  // 绿点只基于真实运行态
   const { isRunning: isAutoReplyRunning } = useAutoReply()
   const isSubAccountRunning = useCurrentSubAccount(context => context.isRunning)
   const currentAccountId = useAccounts(state => state.currentAccountId)

@@ -544,15 +544,20 @@ export function useAutoReply() {
     })()
   })
 
+  // 【Phase 2A】绿点只基于真实运行态：isListening === 'listening'
+  const isEffectivelyRunning = isListening === 'listening'
+
   return {
     // 当前账户的状态
-    isRunning,
+    // 【Phase 2A】isRunning 对外暴露为 isEffectivelyRunning，绿点只基于真实运行态
+    isRunning: isEffectivelyRunning,
     isListening,
     comments, // 当前账户的评论
     replies, // 当前账户的回复
 
     // Actions (绑定到当前账户)
     handleComment,
+    // 【Phase 2A】内部状态设置保持原样，供任务内部使用
     setIsRunning: (running: boolean) => store.setIsRunning(currentAccountId, running),
     setIsListening: (listening: ListeningStatus) =>
       store.setIsListening(currentAccountId, listening),
