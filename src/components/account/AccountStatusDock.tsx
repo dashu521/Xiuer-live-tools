@@ -115,8 +115,8 @@ function CompactAccountItem({
           onDrop={e => onDrop(e, index)}
           className={cn(
             'flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-all',
-            'hover:bg-accent/50 cursor-grab active:cursor-grabbing',
-            isCurrent && 'bg-accent',
+            'hover:bg-accent/30 cursor-grab active:cursor-grabbing',
+            isCurrent && 'bg-primary/15 border border-primary/30',
             isDragging && 'opacity-50',
           )}
         >
@@ -211,7 +211,7 @@ function ExpandedAccountRow({
     <div
       className={cn(
         'grid grid-cols-[120px_80px_1fr_140px] items-center py-2 px-3 rounded-lg transition-colors',
-        isCurrent ? 'bg-accent/50' : 'hover:bg-accent/30',
+        isCurrent ? 'bg-primary/10 border border-primary/20' : 'hover:bg-accent/30',
       )}
     >
       {/* 第一列：账号名称 - 固定宽度120px */}
