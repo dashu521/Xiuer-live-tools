@@ -16,6 +16,7 @@ import { useLiveControlStore } from '../hooks/useLiveControl'
 import { useSubAccountStore } from '../hooks/useSubAccount'
 import type { LoginResponseBackend } from '../services/apiClient'
 import { getMe, getTrialStatus, getUserStatus, startTrial } from '../services/apiClient'
+import { configSyncService } from '../services/configSyncService'
 import type {
   AuthResponse,
   AuthState,
@@ -268,6 +269,20 @@ export const useAuthStore = create<AuthStore>()(
             console.log('[AuthStore] 登录成功，加载用户数据:', userId)
             useAccounts.getState().loadUserAccounts(userId)
             usePlatformPreferenceStore.getState().loadUserPreferences(userId)
+
+            // 【跨设备同步】从云端加载用户配置
+            configSyncService
+              .loadFromCloud()
+              .then(result => {
+                if (result.success) {
+                  console.log('[AuthStore] 云端配置加载成功')
+                } else {
+                  console.warn('[AuthStore] 云端配置加载失败:', result.error)
+                }
+              })
+              .catch(err => {
+                console.error('[AuthStore] 云端配置加载异常:', err)
+              })
 
             // 【修复】同步获取用户状态，确保登录后状态完整
             try {
@@ -549,6 +564,16 @@ export const useAuthStore = create<AuthStore>()(
           // 重要：必须在设置 user: null 之前保存数据
           const currentUserId = get().user?.id
 
+          // 【跨设备同步】登出前同步配置到云端
+          if (currentUserId) {
+            try {
+              await configSyncService.syncToCloud()
+              console.log('[AuthStore] 登出前配置同步成功')
+            } catch (err) {
+              console.error('[AuthStore] 登出前配置同步失败:', err)
+            }
+          }
+
           // 先保存账号数据到 localStorage
           if (currentUserId) {
             console.log('[AuthStore] 登出前保存账号数据:', currentUserId)
@@ -716,6 +741,20 @@ export const useAuthStore = create<AuthStore>()(
             useChromeConfigStore.getState().loadUserConfigs(userId)
             useLiveControlStore.getState().loadUserContexts(userId)
             useSubAccountStore.getState().loadUserContexts(userId)
+
+            // 【跨设备同步】从云端加载用户配置
+            configSyncService
+              .loadFromCloud()
+              .then(result => {
+                if (result.success) {
+                  console.log('[AuthStore] 启动时云端配置加载成功')
+                } else {
+                  console.warn('[AuthStore] 启动时云端配置加载失败:', result.error)
+                }
+              })
+              .catch(err => {
+                console.error('[AuthStore] 启动时云端配置加载异常:', err)
+              })
 
             // 获取并同步用户状态
             getUserStatus()

@@ -308,3 +308,38 @@ class SetPasswordBody(BaseModel):
 class ChangePasswordBody(BaseModel):
     old_password: str = Field(..., min_length=1, description="旧密码")
     new_password: str = Field(..., min_length=6, description="新密码")
+
+
+# ----- 用户配置同步 -----
+class UserConfigData(BaseModel):
+    """用户配置数据结构"""
+    accounts: Optional[List[dict]] = None
+    platformPreferences: Optional[dict] = None
+    autoReplyConfigs: Optional[dict] = None
+    autoMessageConfigs: Optional[dict] = None
+    autoPopUpConfigs: Optional[dict] = None
+    chromeConfigs: Optional[dict] = None
+    liveControlConfigs: Optional[dict] = None
+    subAccountConfigs: Optional[dict] = None
+    theme: Optional[str] = None
+
+
+class SyncConfigRequest(BaseModel):
+    """同步配置请求"""
+    config: UserConfigData = Field(..., description="配置数据")
+    version: Optional[int] = Field(default=1, description="配置版本")
+
+
+class SyncConfigResponse(BaseModel):
+    """同步配置响应"""
+    success: bool = True
+    message: str = "配置同步成功"
+    synced_at: Optional[str] = None
+
+
+class GetUserConfigResponse(BaseModel):
+    """获取用户配置响应"""
+    success: bool = True
+    config: Optional[UserConfigData] = None
+    version: int = 1
+    updated_at: Optional[str] = None

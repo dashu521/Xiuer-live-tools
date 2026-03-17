@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse
 
 from config import settings
 from database import create_tables
-from routers import admin, auth, gift_card, me, sms, subscription
+from routers import admin, auth, config, gift_card, me, sms, subscription
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -56,6 +56,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(sms.router)
 app.include_router(me.router)
+app.include_router(config.router)
 app.include_router(admin.router)
 app.include_router(subscription.router)
 app.include_router(gift_card.router)

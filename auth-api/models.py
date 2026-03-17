@@ -126,3 +126,18 @@ class AuditLog(Base):
     status = Column(String(20))
     response = Column(String(2048), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class UserConfig(Base):
+    """用户配置数据表 - 用于跨设备同步"""
+    __tablename__ = "user_configs"
+
+    id = Column(String(36), primary_key=True, index=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, unique=True, index=True)
+    
+    config_json = Column(JSON, nullable=False, default=lambda: {})
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    user = relationship("User", backref="config")

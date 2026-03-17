@@ -463,3 +463,42 @@ export async function getGiftCardHistory(
     `/gift-card/history?limit=${limit}`,
   )
 }
+
+// ===================== 用户配置同步 =====================
+
+export interface UserConfigData {
+  accounts?: Array<{ id: string; name: string }>
+  platformPreferences?: Record<string, { defaultPlatform: string; updatedAt: string }>
+  autoReplyConfigs?: Record<string, unknown>
+  autoMessageConfigs?: Record<string, unknown>
+  autoPopUpConfigs?: Record<string, unknown>
+  chromeConfigs?: Record<string, unknown>
+  liveControlConfigs?: Record<string, unknown>
+  subAccountConfigs?: Record<string, unknown>
+  theme?: string
+}
+
+export interface GetUserConfigResponse {
+  success: boolean
+  config: UserConfigData | null
+  version: number
+  updated_at: string | null
+}
+
+export interface SyncConfigResponse {
+  success: boolean
+  message: string
+  synced_at: string | null
+}
+
+/** GET /config：获取用户配置（跨设备同步） */
+export async function getUserConfig(): Promise<ApiResult<GetUserConfigResponse>> {
+  return requestWithRefresh<GetUserConfigResponse>('GET', '/config')
+}
+
+/** POST /config/sync：同步用户配置到云端 */
+export async function syncUserConfig(
+  config: UserConfigData,
+): Promise<ApiResult<SyncConfigResponse>> {
+  return requestWithRefresh<SyncConfigResponse>('POST', '/config/sync', { config })
+}

@@ -1,4 +1,12 @@
-import { ExternalLinkIcon, FileTextIcon, KeyRound, LogOutIcon, Ticket } from 'lucide-react'
+import {
+  CloudIcon,
+  ExternalLinkIcon,
+  FileTextIcon,
+  KeyRound,
+  LogOutIcon,
+  RefreshCwIcon,
+  Ticket,
+} from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { SetPasswordDialog } from '@/components/auth/SetPasswordDialog'
@@ -22,6 +30,7 @@ import {
 } from '@/constants/authStorageKeys'
 import { useToast } from '@/hooks/useToast'
 import { type RedeemGiftCardResponse, redeemGiftCard } from '@/services/apiClient'
+import { configSyncService } from '@/services/configSyncService'
 import { useAuthStore } from '@/stores/authStore'
 
 interface GiftCardDialogProps {
@@ -140,6 +149,7 @@ export function OtherSetting() {
   const [hideToTrayTipEnabled, setHideToTrayTipEnabled] = useState(true)
   const [giftCardDialogOpen, setGiftCardDialogOpen] = useState(false)
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false)
+  const [syncLoading, setSyncLoading] = useState(false)
   const { toast } = useToast()
   const clearTokensAndUnauth = useAuthStore(s => s.clearTokensAndUnauth)
   const userStatus = useAuthStore(s => s.userStatus)
@@ -179,6 +189,62 @@ export function OtherSetting() {
 
   const handleOpenSupport = async () => {
     await window.ipcRenderer.invoke(IPC_CHANNELS.app.openExternal, 'mailto:support@xiuer.live')
+  }
+
+  const handleSyncToCloud = async () => {
+    setSyncLoading(true)
+    try {
+      const result = await configSyncService.syncToCloud()
+      if (result.success) {
+        toast.success({
+          title: '同步成功',
+          description: '配置已上传到云端，可在其他设备上恢复。',
+          dedupeKey: 'sync-to-cloud-success',
+        })
+      } else {
+        toast.error({
+          title: '同步失败',
+          description: result.error || '网络错误，请稍后重试',
+          dedupeKey: 'sync-to-cloud-failed',
+        })
+      }
+    } catch (_err) {
+      toast.error({
+        title: '同步失败',
+        description: '发生未知错误，请稍后重试',
+        dedupeKey: 'sync-to-cloud-error',
+      })
+    } finally {
+      setSyncLoading(false)
+    }
+  }
+
+  const handleLoadFromCloud = async () => {
+    setSyncLoading(true)
+    try {
+      const result = await configSyncService.loadFromCloud()
+      if (result.success) {
+        toast.success({
+          title: '恢复成功',
+          description: '已从云端恢复配置数据。',
+          dedupeKey: 'load-from-cloud-success',
+        })
+      } else {
+        toast.error({
+          title: '恢复失败',
+          description: result.error || '网络错误，请稍后重试',
+          dedupeKey: 'load-from-cloud-failed',
+        })
+      }
+    } catch (_err) {
+      toast.error({
+        title: '恢复失败',
+        description: '发生未知错误，请稍后重试',
+        dedupeKey: 'load-from-cloud-error',
+      })
+    } finally {
+      setSyncLoading(false)
+    }
   }
 
   const handleClearLocalLoginData = async () => {
@@ -225,6 +291,39 @@ export function OtherSetting() {
 
           {isAuthenticated && (
             <>
+              <Separator />
+
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <h4 className="text-sm font-medium leading-none">云端同步</h4>
+                  <p className="text-sm text-muted-foreground">
+                    将配置数据同步到云端，换设备登录后可自动恢复
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={handleSyncToCloud}
+                    disabled={syncLoading}
+                  >
+                    <CloudIcon className="h-4 w-4" />
+                    {syncLoading ? '同步中...' : '上传配置'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2"
+                    onClick={handleLoadFromCloud}
+                    disabled={syncLoading}
+                  >
+                    <RefreshCwIcon className="h-4 w-4" />
+                    {syncLoading ? '恢复中...' : '恢复配置'}
+                  </Button>
+                </div>
+              </div>
+
               <Separator />
 
               <div className="flex items-center justify-between">

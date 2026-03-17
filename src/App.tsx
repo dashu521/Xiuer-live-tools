@@ -20,7 +20,6 @@ import { Header } from './components/common/Header'
 import './App.css'
 import React, { lazy, Suspense, useEffect, useState } from 'react'
 import { AuthProvider } from '@/components/auth/AuthProvider'
-// 新用户引导组件
 import { QuickStartDialog, WelcomeDialog } from '@/components/onboarding'
 import {
   getQuickStartCompleted,
@@ -28,16 +27,14 @@ import {
   setQuickStartCompleted,
   setWelcomeCompleted,
 } from '@/constants/authStorageKeys'
-// 初始化平台偏好设置服务
+import { configSyncService } from '@/services/configSyncService'
 import { initializePlatformPreferenceService } from '@/services/platformPreferenceService'
 import { useAuthCheckDone, useIsAuthenticated } from '@/stores/authStore'
-// 初始化统一存储系统
 import { initializeStorage } from '@/utils/storage'
 import { useAccounts } from './hooks/useAccounts'
 import { useLoadAutoMessageOnLogin } from './hooks/useAutoMessage'
 import { useLoadAutoPopUpOnLogin } from './hooks/useAutoPopUp'
 import { useLoadAutoReplyConfigOnLogin } from './hooks/useAutoReplyConfig'
-// 加载隔离存储配置
 import { useLoadChromeConfigOnLogin } from './hooks/useChromeConfig'
 import { useLiveControlStore, useLoadLiveControlOnLogin } from './hooks/useLiveControl'
 import { useLoadSubAccountOnLogin } from './hooks/useSubAccount'
@@ -269,6 +266,14 @@ function AppWithOnboarding() {
       }
     }
   }, [isAuthenticated])
+
+  // 【跨设备同步】认证完成后设置自动同步
+  useEffect(() => {
+    if (authCheckDone && isAuthenticated) {
+      const cleanup = configSyncService.setupAutoSync()
+      return cleanup
+    }
+  }, [authCheckDone, isAuthenticated])
 
   const handleWelcomeClose = () => {
     setShowWelcome(false)
