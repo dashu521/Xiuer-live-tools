@@ -21,6 +21,7 @@ from deps import (
     create_access_token,
     create_refresh_token,
     decode_access_token,
+    decode_access_token_jti,
     decode_refresh_token,
     get_current_user,
     hash_password,
@@ -240,20 +241,21 @@ def login(body: LoginBody, db: Session = Depends(get_db)):
         RefreshToken.revoked_at.is_(None)
     ).update({"revoked_at": datetime.utcnow()})
 
-    # 生成 token
-    access_token = create_access_token(user.id)
+    # 生成 refresh_token 并保存
     refresh_token = create_refresh_token(user.id)
-
-    # 保存新的 refresh_token
+    refresh_token_id = str(uuid.uuid4())
     token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
     expires_at = datetime.utcnow() + timedelta(days=7)
     db.add(RefreshToken(
-        id=str(uuid.uuid4()),
+        id=refresh_token_id,
         token_hash=token_hash,
         user_id=user.id,
         expires_at=expires_at,
         created_at=datetime.utcnow(),
     ))
+
+    # 生成 access_token，jti = refresh_token.id 用于会话级检查
+    access_token = create_access_token(user.id, jti=refresh_token_id)
 
     # 更新最后登录时间
     user.last_login_at = datetime.utcnow()
@@ -474,8 +476,8 @@ def refresh_token(
             detail={"code": "kicked_out", "message": "您的账号已在其他设备登录，请重新登录"},
         )
 
-    # 生成新的 access_token
-    new_access_token = create_access_token(user_id)
+    # 生成新的 access_token，jti = 当前 refresh_token.id（保持会话标识连续）
+    new_access_token = create_access_token(user_id, jti=refresh_record.id)
 
     return RefreshResponse(
         access_token=new_access_token,
@@ -585,8 +587,8 @@ def session_check(
     db: Session = Depends(get_db),
 ):
     """
-    GET /auth/session-check：检查当前会话是否有效
-    用于前端心跳检测，确认用户是否在其他设备登录（会话被顶）
+    GET /auth/session-check：检查当前会话是否有效（会话级检查）
+    基于 access_token 中的 jti（即 refresh_token.id）精确检查当前会话是否被顶
     """
     # 1. 验证 access_token
     if not credentials:
@@ -595,26 +597,28 @@ def session_check(
             detail=err_token_invalid(),
         )
 
-    user_id = decode_access_token(credentials.credentials)
-    if not user_id:
+    # 2. 获取 jti（会话标识）
+    jti = decode_access_token_jti(credentials.credentials)
+    if not jti:
+        # 旧 token 无 jti，要求重新登录
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=err_token_invalid(),
+            detail={"code": "token_invalid", "message": "请重新登录"},
         )
 
-    # 2. 检查是否存在有效的 refresh_token（未被撤销且未过期）
-    refresh_exists = db.query(RefreshToken).filter(
-        RefreshToken.user_id == user_id,
-        RefreshToken.revoked_at.is_(None),
-        RefreshToken.expires_at > datetime.utcnow()
+    # 3. 【会话级检查】精确检查该 jti 对应的 refresh_token 是否仍有效
+    refresh_record = db.query(RefreshToken).filter(
+        RefreshToken.id == jti,                    # 精确匹配当前会话
+        RefreshToken.revoked_at.is_(None),          # 未被撤销
+        RefreshToken.expires_at > datetime.utcnow() # 未过期
     ).first()
 
-    if not refresh_exists:
-        # 会话已被顶掉或已过期
+    if not refresh_record:
+        # 当前会话已被顶掉（该 refresh_token 被撤销或过期）
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "kicked_out", "message": "您的账号已在其他设备登录，请重新登录"},
         )
 
-    # 3. 会话有效
-    return {"ok": True, "user_id": user_id}
+    # 4. 会话有效
+    return {"ok": True, "user_id": refresh_record.user_id}

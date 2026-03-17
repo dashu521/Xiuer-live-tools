@@ -32,9 +32,16 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
 
-def create_access_token(user_id: str) -> str:
+def create_access_token(user_id: str, jti: Optional[str] = None) -> str:
+    """
+    创建 access_token
+    :param user_id: 用户ID（sub 字段）
+    :param jti: 会话标识，等于 refresh_token.id，用于精确检查会话有效性
+    """
     expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {"sub": user_id, "exp": expire, "type": "access"}
+    if jti:
+        payload["jti"] = jti
     return jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
 
 
@@ -62,11 +69,23 @@ def decode_refresh_token(token: str) -> Optional[str]:
 
 
 def decode_access_token(token: str) -> Optional[str]:
+    """解码 access_token，返回 sub（user_id）"""
     try:
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
         if payload.get("type") != "access":
             return None
         return payload.get("sub")
+    except JWTError:
+        return None
+
+
+def decode_access_token_jti(token: str) -> Optional[str]:
+    """解码 access_token，返回 jti（会话标识，即 refresh_token.id）"""
+    try:
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=["HS256"])
+        if payload.get("type") != "access":
+            return None
+        return payload.get("jti")
     except JWTError:
         return None
 
