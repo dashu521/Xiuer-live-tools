@@ -445,19 +445,12 @@ def refresh_token(
     db: Session = Depends(get_db),
 ):
     """POST /refresh：使用 refresh_token 获取新的 access_token"""
-    # 验证 refresh_token
-    payload = decode_refresh_token(body.refresh_token)
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "invalid_refresh_token", "message": "刷新令牌无效或已过期"},
-        )
-    
-    user_id = payload.get("sub")
+    # 验证 refresh_token（decode_refresh_token 返回 user_id 或 None）
+    user_id = decode_refresh_token(body.refresh_token)
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "invalid_token", "message": "令牌格式错误"},
+            detail={"code": "invalid_refresh_token", "message": "刷新令牌无效或已过期"},
         )
     
     # 验证 token 是否存在于数据库且未被撤销
