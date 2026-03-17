@@ -234,11 +234,17 @@ def login(body: LoginBody, db: Session = Depends(get_db)):
             detail=err_wrong_password(),
         )
 
+    # 【单设备登录】撤销该用户所有旧的 refresh_token
+    db.query(RefreshToken).filter(
+        RefreshToken.user_id == user.id,
+        RefreshToken.revoked_at.is_(None)
+    ).update({"revoked_at": datetime.utcnow()})
+    
     # 生成 token
     access_token = create_access_token(user.id)
     refresh_token = create_refresh_token(user.id)
 
-    # 保存 refresh_token
+    # 保存新的 refresh_token
     token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
     expires_at = datetime.utcnow() + timedelta(days=7)
     db.add(RefreshToken(
@@ -252,6 +258,8 @@ def login(body: LoginBody, db: Session = Depends(get_db)):
     # 更新最后登录时间
     user.last_login_at = datetime.utcnow()
     db.commit()
+    
+    logger.info(f"[Auth] User {user.id} logged in, revoked all previous sessions")
 
     return AuthResponse(
         user=UserOut(
@@ -452,7 +460,7 @@ def refresh_token(
             detail={"code": "invalid_token", "message": "令牌格式错误"},
         )
     
-    # 验证 token 是否存在于数据库
+    # 验证 token 是否存在于数据库且未被撤销
     token_hash = hashlib.sha256(body.refresh_token.encode()).hexdigest()
     refresh_record = db.query(RefreshToken).filter(
         RefreshToken.token_hash == token_hash,
@@ -463,6 +471,14 @@ def refresh_token(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "token_revoked", "message": "刷新令牌已失效"},
+        )
+    
+    # 【单设备登录】检查 token 是否已被撤销（在其他设备登录时被踢下线）
+    if refresh_record.revoked_at is not None:
+        logger.info(f"[Auth] Refresh token revoked for user {user_id}, revoked_at={refresh_record.revoked_at}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "kicked_out", "message": "您的账号已在其他设备登录，请重新登录"},
         )
     
     # 生成新的 access_token

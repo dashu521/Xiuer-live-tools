@@ -80,7 +80,7 @@ export function setupAuthHandlers() {
       await clearStoredTokens()
       return {
         success: false,
-        error: refreshRes.error ?? '刷新会话失败',
+        error: refreshRes.error ?? { code: 'refresh_failed', message: '刷新会话失败' },
       }
     }
 

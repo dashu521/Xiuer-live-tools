@@ -6,6 +6,7 @@ import { useAccounts } from '@/hooks/useAccounts'
 import { useAuthInit } from '@/hooks/useAuth'
 import { useLiveControlStore } from '@/hooks/useLiveControl'
 import { useToast } from '@/hooks/useToast'
+import { KICKED_OUT_EVENT } from '@/services/apiClient'
 import {
   useAuthCheckDone,
   useAuthStore,
@@ -109,12 +110,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
     }
 
+    const handleKickedOut = (event: CustomEvent) => {
+      const { message } = event.detail
+      console.warn('[AuthProvider] User kicked out:', message)
+      toast.error({
+        title: '账号已在其他设备登录',
+        description: message || '您的账号已在其他设备登录，请重新登录',
+        duration: 5000,
+      })
+      setShowAuthDialog(true)
+    }
+
     window.addEventListener('auth:required', handleAuthRequired as EventListener)
     window.addEventListener('auth:success', handleAuthSuccess as EventListener)
     window.addEventListener('gate:subscribe-required', handleSubscribeRequired as EventListener)
     window.addEventListener('auth:license-required', handleLicenseRequired as EventListener)
     window.addEventListener('auth:account-disabled', handleAccountDisabled as EventListener)
     window.addEventListener('auth:user-center', handleUserCenterOpen as EventListener)
+    window.addEventListener(KICKED_OUT_EVENT, handleKickedOut as EventListener)
 
     return () => {
       window.removeEventListener('auth:required', handleAuthRequired as EventListener)
@@ -126,6 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('auth:license-required', handleLicenseRequired as EventListener)
       window.removeEventListener('auth:account-disabled', handleAccountDisabled as EventListener)
       window.removeEventListener('auth:user-center', handleUserCenterOpen as EventListener)
+      window.removeEventListener(KICKED_OUT_EVENT, handleKickedOut as EventListener)
     }
   }, [refreshUserStatus, runPendingActionAndClear, toast])
 

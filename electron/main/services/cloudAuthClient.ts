@@ -240,14 +240,19 @@ export async function cloudLogin(
 export async function cloudRefresh(refreshToken: string): Promise<{
   success: boolean
   access_token?: string
-  error?: CloudErrorDetail
+  error?: CloudErrorDetail & { status?: number }
 }> {
   const prefix = getAuthPathPrefix()
-  const { data, error } = await request<CloudRefreshResponse>('POST', `${prefix}/refresh`, {
+  const { data, error, status } = await request<CloudRefreshResponse>('POST', `${prefix}/refresh`, {
     body: { refresh_token: refreshToken },
   })
   if (error || !data) {
-    return { success: false, error: error ?? { code: 'refresh_failed', message: 'refresh 失败' } }
+    return {
+      success: false,
+      error: { ...error, status, message: error?.message ?? 'refresh 失败' } as CloudErrorDetail & {
+        status?: number
+      },
+    }
   }
   return { success: true, access_token: data.access_token }
 }

@@ -64,7 +64,7 @@ export interface IpcChannels {
     success: boolean
     token?: string
     refreshToken?: string | null
-    error?: string
+    error?: string | { code?: string; message?: string }
   }
   [IPC_CHANNELS.auth.getAuthSummary]: () => { isAuthenticated: boolean; hasToken: boolean }
   [IPC_CHANNELS.auth.proxyRequest]: (requestConfig: {

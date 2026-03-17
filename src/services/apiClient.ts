@@ -148,6 +148,17 @@ async function request<T>(
 
 let refreshLock: Promise<string | null> | null = null
 
+export const KICKED_OUT_EVENT = 'auth:kicked-out'
+
+function dispatchKickedOutEvent(message: string): void {
+  console.warn('[apiClient] Dispatching kicked-out event:', message)
+  window.dispatchEvent(
+    new CustomEvent(KICKED_OUT_EVENT, {
+      detail: { message },
+    }),
+  )
+}
+
 /** 通过主进程刷新会话，成功返回新 access_token 并同步 renderer 镜像状态 */
 async function doRefresh(): Promise<string | null> {
   const { setToken, clearTokensAndUnauth } = useAuthStore.getState()
@@ -160,6 +171,14 @@ async function doRefresh(): Promise<string | null> {
   try {
     const result = await authAPI.refreshSession()
     if (!result.success || !result.token) {
+      // 检查是否是被踢下线
+      const errorObj = result.error as { code?: string; message?: string } | undefined
+      const errorCode = errorObj?.code
+      const errorMessage =
+        errorObj?.message || (typeof result.error === 'string' ? result.error : '')
+      if (errorCode === 'kicked_out' || errorMessage.includes('其他设备')) {
+        dispatchKickedOutEvent(errorMessage || '您的账号已在其他设备登录')
+      }
       clearTokensAndUnauth()
       return null
     }
@@ -186,6 +205,13 @@ export async function requestWithRefresh<T>(
   const result = await request<T>(method, path, token, body)
 
   if (result.ok || result.status !== 401) return result
+
+  // 检查是否是被踢下线的错误
+  if (result.error?.code === 'kicked_out') {
+    dispatchKickedOutEvent(result.error.message || '您的账号已在其他设备登录')
+    useAuthStore.getState().clearTokensAndUnauth()
+    return result
+  }
 
   // 首发版：仅从主进程安全存储获取 refresh token
   const refreshToken = await getRefreshTokenFromMainProcess()
