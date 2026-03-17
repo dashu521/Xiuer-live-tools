@@ -25,11 +25,11 @@
   --surface-elevated: hsl(240, 9%, 16%);
   --border: 240 6% 18%;
 
-  /* 文本颜色 - 高对比度确保可读性 */
+  /* 文本颜色 - 高对比度确保可读性 (WCAG AA) */
   --text-primary: hsl(0, 0%, 98%);
   --text-secondary: hsl(240, 3%, 90%);
-  --text-muted: hsl(240, 4%, 63%);
-  --text-disabled: hsl(240, 4%, 44%);
+  --text-muted: hsl(240, 4%, 70%);
+  --text-disabled: hsl(240, 4%, 50%);
 
   /* 主色调 - 橙金渐变系 */
   --primary: 17 100% 60%;
@@ -133,8 +133,8 @@
 
   --text-primary: hsl(24, 20%, 14%);
   --text-secondary: hsl(25, 14%, 26%);
-  --text-muted: hsl(24, 10%, 44%);
-  --text-disabled: hsl(24, 8%, 60%);
+  --text-muted: hsl(24, 10%, 48%);
+  --text-disabled: hsl(24, 8%, 55%);
 
   --primary: 21 95% 54%;
   --primary-hover: hsl(21, 95%, 49%);
