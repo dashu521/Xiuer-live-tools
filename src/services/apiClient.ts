@@ -239,6 +239,21 @@ export async function getMe(): Promise<ApiResult<MeResponse>> {
   return requestWithRefresh<MeResponse>('GET', '/me')
 }
 
+/** GET /auth/session-check 返回格式：{ ok: true, user_id: string } */
+export interface SessionCheckResponse {
+  ok: boolean
+  user_id: string
+}
+
+/**
+ * GET /auth/session-check：检查当前会话是否有效（用于心跳检测）
+ * 会同时验证 access_token 和 refresh_token 是否被撤销
+ * 若会话被顶掉（其他设备登录），返回 kicked_out 错误
+ */
+export async function sessionCheck(): Promise<ApiResult<SessionCheckResponse>> {
+  return requestWithRefresh<SessionCheckResponse>('GET', '/auth/session-check')
+}
+
 /**
  * GET /status：获取当前用户状态（只读）。使用 access_token，不做 fallback/mock。
  * 失败时只记录日志，返回 null，不登出、不弹窗。

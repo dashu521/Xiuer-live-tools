@@ -73,24 +73,24 @@ def token_hash(raw: str) -> str:
 
 def build_user_status_response(user: User, db: Optional[Session] = None) -> UserStatusResponse:
     """拼装 /auth/status 返回结构（含 plan、trial）。
-    
+
     【P0-1 会员规则对齐】优先级：正式订阅(subscription) > 试用(trial) > 免费(free)
-    
+
     1. 优先查询 subscriptions 表（正式订阅）
     2. 其次查询 trials 表（试用）
     3. 最后兜底 user 表字段
-    
+
     确保 Pro/ProMax/Ultra 不会被 trial 逻辑覆盖
     """
     username = user.email or user.phone or user.id
     plan = "free"
     expire_at = None
     trial: Optional[TrialOut] = None
-    
+
     if db is not None:
         now_ts = int(time.time())
         now = datetime.utcnow()
-        
+
         # 【第1优先级】检查正式订阅 subscriptions 表
         try:
             sub_row = db.execute(
@@ -106,7 +106,7 @@ def build_user_status_response(user: User, db: Optional[Session] = None) -> User
                     expire_at = sub_end_dt
         except Exception as e:
             logger.debug(f"查询 subscriptions 表失败: {e}")
-        
+
         # 【第2优先级】如果没有正式订阅，检查试用 trials 表
         if plan == "free":
             try:
@@ -131,7 +131,7 @@ def build_user_status_response(user: User, db: Optional[Session] = None) -> User
             except Exception as e:
                 logger.debug(f"查询 trials 表失败: {e}")
                 trial = TrialOut(is_active=False, is_expired=False)
-    
+
     # 【第3优先级】兜底：从 user 对象获取（无数据库连接时）
     if plan == "free":
         user_plan = normalize_plan(getattr(user, "plan", None))
@@ -141,7 +141,7 @@ def build_user_status_response(user: User, db: Optional[Session] = None) -> User
             user_expire = getattr(user, "expire_at", None)
             if user_expire:
                 expire_at = user_expire
-        
+
         # 检查试用（从 user 表字段）
         if plan == "free" and trial is None:
             trial_start_at = getattr(user, "trial_start_at", None)
@@ -159,11 +159,11 @@ def build_user_status_response(user: User, db: Optional[Session] = None) -> User
                     plan = "trial"
             else:
                 trial = TrialOut(is_active=False, is_expired=False)
-    
+
     # 确保 trial 对象不为 None
     if trial is None:
         trial = TrialOut(is_active=False, is_expired=False)
-    
+
     # 如果有正式订阅，trial.is_active 应该为 false
     if is_paid_plan(plan):
         trial = TrialOut(is_active=False, is_expired=trial.is_expired, start_at=trial.start_at, end_at=trial.end_at)
@@ -239,7 +239,7 @@ def login(body: LoginBody, db: Session = Depends(get_db)):
         RefreshToken.user_id == user.id,
         RefreshToken.revoked_at.is_(None)
     ).update({"revoked_at": datetime.utcnow()})
-    
+
     # 生成 token
     access_token = create_access_token(user.id)
     refresh_token = create_refresh_token(user.id)
@@ -258,7 +258,7 @@ def login(body: LoginBody, db: Session = Depends(get_db)):
     # 更新最后登录时间
     user.last_login_at = datetime.utcnow()
     db.commit()
-    
+
     logger.info(f"[Auth] User {user.id} logged in, revoked all previous sessions")
 
     return AuthResponse(
@@ -421,7 +421,7 @@ def change_password(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": "wrong_password", "message": "旧密码错误"},
         )
-    
+
     # 设置新密码
     current_user.password_hash = hash_password(body.new_password)
     db.commit()
@@ -452,20 +452,20 @@ def refresh_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "invalid_refresh_token", "message": "刷新令牌无效或已过期"},
         )
-    
+
     # 验证 token 是否存在于数据库且未被撤销
     token_hash = hashlib.sha256(body.refresh_token.encode()).hexdigest()
     refresh_record = db.query(RefreshToken).filter(
         RefreshToken.token_hash == token_hash,
         RefreshToken.expires_at > datetime.utcnow()
     ).first()
-    
+
     if not refresh_record:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "token_revoked", "message": "刷新令牌已失效"},
         )
-    
+
     # 【单设备登录】检查 token 是否已被撤销（在其他设备登录时被踢下线）
     if refresh_record.revoked_at is not None:
         logger.info(f"[Auth] Refresh token revoked for user {user_id}, revoked_at={refresh_record.revoked_at}")
@@ -473,10 +473,10 @@ def refresh_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={"code": "kicked_out", "message": "您的账号已在其他设备登录，请重新登录"},
         )
-    
+
     # 生成新的 access_token
     new_access_token = create_access_token(user_id)
-    
+
     return RefreshResponse(
         access_token=new_access_token,
         token_type="bearer"
@@ -496,39 +496,39 @@ def start_trial(
         Subscription.user_id == current_user.id,
         Subscription.current_period_end > datetime.utcnow()
     ).first()
-    
+
     if existing_sub and is_paid_plan(existing_sub.plan):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": "already_paid", "message": "您已是付费会员，无需试用"},
         )
-    
+
     # 检查是否已有试用记录
     existing_trial = db.execute(
         text("SELECT end_ts FROM trials WHERE username = :u"),
         {"u": current_user.id}
     ).fetchone()
-    
+
     if existing_trial and existing_trial[0] > int(time.time()):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": "trial_active", "message": "您已有有效试用"},
         )
-    
+
     # 创建试用记录（3天）
     now_ts = int(time.time())
     end_ts = now_ts + 3 * 24 * 60 * 60  # 3天后
-    
+
     db.execute(
         text("""
-            INSERT INTO trials (username, start_ts, end_ts) 
+            INSERT INTO trials (username, start_ts, end_ts)
             VALUES (:u, :s, :e)
             ON DUPLICATE KEY UPDATE start_ts = :s, end_ts = :e
         """),
         {"u": current_user.id, "s": now_ts, "e": end_ts}
     )
     db.commit()
-    
+
     return {
         "success": True,
         "start_ts": now_ts,
@@ -550,19 +550,19 @@ def get_trial_status(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"code": "forbidden", "message": "无权查询其他用户状态"},
         )
-    
+
     row = db.execute(
         text("SELECT start_ts, end_ts FROM trials WHERE username = :u"),
         {"u": current_user.id}
     ).fetchone()
-    
+
     if not row:
         return {"has_trial": False, "active": False}
-    
+
     start_ts, end_ts = row
     now_ts = int(time.time())
     is_active = end_ts > now_ts
-    
+
     return {
         "has_trial": True,
         "active": is_active,
@@ -576,3 +576,45 @@ def get_trial_status(
 def get_server_time():
     """GET /server-time：获取服务器当前时间戳（秒）"""
     return {"server_time": int(time.time())}
+
+
+# ----- GET /auth/session-check：会话状态检查（用于心跳检测）-----
+@router.get("/auth/session-check")
+def session_check(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db),
+):
+    """
+    GET /auth/session-check：检查当前会话是否有效
+    用于前端心跳检测，确认用户是否在其他设备登录（会话被顶）
+    """
+    # 1. 验证 access_token
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=err_token_invalid(),
+        )
+
+    user_id = decode_access_token(credentials.credentials)
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=err_token_invalid(),
+        )
+
+    # 2. 检查是否存在有效的 refresh_token（未被撤销且未过期）
+    refresh_exists = db.query(RefreshToken).filter(
+        RefreshToken.user_id == user_id,
+        RefreshToken.revoked_at.is_(None),
+        RefreshToken.expires_at > datetime.utcnow()
+    ).first()
+
+    if not refresh_exists:
+        # 会话已被顶掉或已过期
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "kicked_out", "message": "您的账号已在其他设备登录，请重新登录"},
+        )
+
+    # 3. 会话有效
+    return {"ok": True, "user_id": user_id}

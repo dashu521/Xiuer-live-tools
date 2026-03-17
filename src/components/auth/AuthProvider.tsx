@@ -6,7 +6,7 @@ import { useAccounts } from '@/hooks/useAccounts'
 import { useAuthInit } from '@/hooks/useAuth'
 import { useLiveControlStore } from '@/hooks/useLiveControl'
 import { useToast } from '@/hooks/useToast'
-import { getMe, KICKED_OUT_EVENT } from '@/services/apiClient'
+import { KICKED_OUT_EVENT, sessionCheck } from '@/services/apiClient'
 import {
   useAuthCheckDone,
   useAuthStore,
@@ -165,7 +165,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * 执行单次心跳检测
-   * 调用 /me 接口检查会话是否仍然有效
+   * 调用 /auth/session-check 接口检查会话是否仍然有效
+   * 该接口会同时验证 access_token 和 refresh_token 是否被撤销
    */
   const doHeartbeat = useCallback(async () => {
     // 停止条件检查
@@ -177,7 +178,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log('[Heartbeat] Checking session...')
 
     try {
-      const result = await getMe()
+      const result = await sessionCheck()
 
       if (!result.ok) {
         console.warn('[Heartbeat] Session check failed:', result.status, result.error)
