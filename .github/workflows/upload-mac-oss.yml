@@ -1,0 +1,140 @@
+# Mac 产物上传到 OSS/CDN
+# 手动触发 workflow_dispatch，使用仓库 Secrets 中的阿里云 Key
+
+name: Upload Mac to OSS
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号 (例如: 1.3.6)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  upload-mac-oss:
+    name: Upload Mac artifacts to OSS
+    runs-on: ubuntu-latest
+    
+    steps:
+      # 1. 检出代码
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      # 2. 下载 GitHub Release 中的 Mac 产物
+      - name: Download Mac artifacts from Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          TAG="v${VERSION}"
+          
+          echo "========================================"
+          echo "下载 Mac 产物: ${TAG}"
+          echo "========================================"
+          
+          # 创建下载目录
+          mkdir -p release/${VERSION}
+          
+          # 下载 Mac 产物
+          gh release download ${TAG} \
+            --repo ${{ github.repository }} \
+            --pattern "*macos*.dmg" \
+            --pattern "*latest-mac.yml" \
+            --pattern "*macos*.blockmap" \
+            --dir release/${VERSION}
+          
+          echo "下载完成:"
+          ls -lh release/${VERSION}/
+
+      # 3. 安装 ossutil 并上传到 OSS
+      - name: Install ossutil and upload to OSS
+        env:
+          ALIYUN_ACCESS_KEY_ID: ${{ secrets.ALIYUN_ACCESS_KEY_ID }}
+          ALIYUN_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_ACCESS_KEY_SECRET }}
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          
+          echo "========================================"
+          echo "安装 ossutil"
+          echo "========================================"
+          
+          # 下载 ossutil
+          wget -q https://gosspublic.alicdn.com/ossutil/1.7.16/ossutil64
+          chmod +x ossutil64
+          
+          echo "========================================"
+          echo "配置 ossutil"
+          echo "========================================"
+          ./ossutil64 config -e oss-cn-hangzhou.aliyuncs.com -i "${ALIYUN_ACCESS_KEY_ID}" -k "${ALIYUN_ACCESS_KEY_SECRET}" -L CH
+          
+          echo "========================================"
+          echo "上传 Mac 产物到 OSS"
+          echo "========================================"
+          
+          # 上传路径
+          LATEST_PATH="oss://xiuer-live-tools-download/releases/latest/"
+          VERSION_PATH="oss://xiuer-live-tools-download/releases/v${VERSION}/"
+          
+          # 上传到 latest 目录
+          echo "上传到 latest 目录:"
+          for file in release/${VERSION}/*macos*; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              echo "上传: ${filename}"
+              ./ossutil64 cp "$file" "${LATEST_PATH}${filename}" -f
+            fi
+          done
+          
+          # 上传到版本目录
+          echo ""
+          echo "上传到版本目录:"
+          for file in release/${VERSION}/*macos*; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              echo "上传: ${filename}"
+              ./ossutil64 cp "$file" "${VERSION_PATH}${filename}" -f
+            fi
+          done
+          
+          echo "========================================"
+          echo "OSS 上传完成"
+          echo "========================================"
+          echo "Latest: https://download.xiuer.work/releases/latest/"
+          echo "Version: https://download.xiuer.work/releases/v${VERSION}/"
+
+      # 4. 验证上传结果
+      - name: Verify OSS upload
+        run: |
+          echo "========================================"
+          echo "验证 OSS 上传结果"
+          echo "========================================"
+          
+          # 检查 latest-mac.yml
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://download.xiuer.work/releases/latest/latest-mac.yml")
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ latest-mac.yml: HTTP 200"
+          else
+            echo "❌ latest-mac.yml: HTTP ${HTTP_CODE}"
+          fi
+          
+          # 检查 arm64 dmg
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_${{ github.event.inputs.version }}_macos_arm64.dmg")
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ macos_arm64.dmg: HTTP 200"
+          else
+            echo "❌ macos_arm64.dmg: HTTP ${HTTP_CODE}"
+          fi
+          
+          # 检查 x64 dmg
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_${{ github.event.inputs.version }}_macos_x64.dmg")
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ macos_x64.dmg: HTTP 200"
+          else
+            echo "❌ macos_x64.dmg: HTTP ${HTTP_CODE}"
+          fi
+          
+          echo "========================================"
