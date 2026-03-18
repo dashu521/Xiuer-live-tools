@@ -424,7 +424,7 @@ export function useAutoReply() {
     return store.contexts[currentAccountId] || createDefaultContext()
   }, [store.contexts, currentAccountId])
 
-  const { isRunning, isListening, comments, replies } = context
+  const { isListening, comments, replies } = context
 
   const handleComment = useMemoizedFn((comment: Message, accountId: string) => {
     // const context = contexts[accountId] || createDefaultContext()

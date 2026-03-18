@@ -27,7 +27,7 @@ type LatestYml = {
 }
 
 const _PRODUCT_OWNER = '秀儿直播助手'
-const PRODUCT_NAME = '秀儿直播助手'
+const _PRODUCT_NAME = '秀儿直播助手'
 const OFFICIAL_UPDATE_SOURCE = 'official'
 const GITHUB_UPDATE_SOURCE = 'github'
 const OFFICIAL_UPDATE_URL = getUpdateUrl()
@@ -101,7 +101,7 @@ async function timeoutFetch(url: string | URL, timeout = 5000) {
 }
 
 const _releaseNotes: Record<string, string> = {}
-const latestVersion: string | null = null
+const _latestVersion: string | null = null
 
 // Get latest version from GitHub Releases
 async function _getLatestVersion(): Promise<string | null> {
@@ -147,7 +147,7 @@ async function fetchChangelog(): Promise<string | undefined> {
   }
 }
 
-function getGitHubReleasePageURL(): string {
+function _getGitHubReleasePageURL(): string {
   return 'https://github.com/Xiuer-Chinese/Xiuer-live-tools/releases/latest'
 }
 

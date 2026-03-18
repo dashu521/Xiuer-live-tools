@@ -120,7 +120,7 @@ async function fetchChangelog(): Promise<string | undefined> {
   }
 }
 
-function getAssetsURL() {
+function _getAssetsURL() {
   return 'https://github.com/Xiuer-Chinese/Xiuer-live-tools/releases/latest'
 }
 
