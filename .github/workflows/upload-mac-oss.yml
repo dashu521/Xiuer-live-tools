@@ -81,7 +81,7 @@ jobs:
           
           # 上传到 latest 目录
           echo "上传到 latest 目录:"
-          for file in release/${VERSION}/*macos*; do
+          for file in release/${VERSION}/*macos* release/${VERSION}/latest-mac.yml; do
             if [ -f "$file" ]; then
               filename=$(basename "$file")
               echo "上传: ${filename}"
@@ -92,7 +92,7 @@ jobs:
           # 上传到版本目录
           echo ""
           echo "上传到版本目录:"
-          for file in release/${VERSION}/*macos*; do
+          for file in release/${VERSION}/*macos* release/${VERSION}/latest-mac.yml; do
             if [ -f "$file" ]; then
               filename=$(basename "$file")
               echo "上传: ${filename}"
