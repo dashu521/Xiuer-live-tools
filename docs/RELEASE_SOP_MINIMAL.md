@@ -49,7 +49,10 @@
 # 设置生产环境 API 地址
 export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
 
-# 执行 Mac 构建
+# 提升版本号（先定版本号）
+npm version patch  # 或 minor
+
+# 执行 Mac 构建（读取版本号生成产物）
 npm run release:mac
 ```
 
@@ -58,11 +61,9 @@ npm run release:mac
 ### 步骤 2: 创建 Tag 并推送
 
 ```bash
-# 创建 tag
-git tag v<version>
-
-# 推送 tag（触发 Windows 构建）
-git push origin v<version>
+# 推送代码和 tag（npm version 已自动创建 tag）
+git push origin main
+git push origin --tags
 ```
 
 ### 步骤 3: 创建 GitHub Release 并上传 Mac 产物
@@ -136,13 +137,13 @@ curl -I https://download.xiuer.work/releases/latest/latest.yml
 # 1. 设置环境变量
 export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
 
-# 2. 构建 Mac
-npm run release:mac
-
-# 3. 提升版本号
+# 2. 提升版本号（先定版本号）
 npm version patch  # 或 minor
 
-# 4. 创建 tag 并推送
+# 3. 构建 Mac（读取版本号生成产物）
+npm run release:mac
+
+# 4. 推送代码和 tag
 git push origin main
 git push origin --tags
 
