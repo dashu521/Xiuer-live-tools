@@ -719,6 +719,24 @@ export const useAuthStore = create<AuthStore>()(
 
           const result = await getMe()
 
+          // 【修复】旧 token（无 jti）清理，强制重新登录
+          if (!result.ok && result.error?.code === 'token_invalid') {
+            console.warn('[AuthStore] 旧 token 无效（无 jti），强制重新登录')
+            set({
+              token: null,
+              refreshToken: null,
+              isAuthenticated: false,
+              user: null,
+              isLoading: false,
+              authCheckDone: true,
+              isOffline: false,
+              error: '登录已过期，请重新登录',
+            })
+            // 触发登录对话框
+            window.dispatchEvent(new CustomEvent('auth:required'))
+            return
+          }
+
           if (result.ok && result.data?.username != null) {
             const userId = result.data.username
             set({
