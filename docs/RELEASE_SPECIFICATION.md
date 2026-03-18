@@ -529,5 +529,80 @@ curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_m
 
 ---
 
+## 附录：发布检查清单
+
+发布前请逐项确认：
+
+### 环境检查
+- [ ] Node.js >= 20.0.0
+- [ ] npm >= 10.0.0
+- [ ] Git
+- [ ] GitHub CLI (`gh`)
+- [ ] macOS 11 及以上
+
+### 配置检查
+- [ ] `VITE_AUTH_API_BASE_URL` 已设置为 `http://121.41.179.197:8000`
+- [ ] `VITE_AUTH_API_BASE_URL` 不包含 localhost/127.0.0.1
+- [ ] Release Guard 检查通过
+
+### Git 检查
+- [ ] Git 工作区干净（无未提交修改）
+- [ ] 当前分支为 main
+- [ ] Tag 未重复
+
+### 构建检查
+- [ ] macOS 安装包已本地测试
+- [ ] Windows CI 构建已完成
+- [ ] GitHub Release 已创建
+- [ ] 所有安装包已上传
+
+### 发布后验证
+- [ ] `latest.yml` 可访问
+- [ ] `latest-mac.yml` 可访问
+- [ ] Windows 安装包可下载
+- [ ] macOS 安装包可下载
+
+---
+
+## 附录：常见失败原因
+
+### 1. Git 工作区不干净
+
+**错误信息**：`Git 工作区存在未提交修改`
+
+**解决方案**：
+```bash
+git add .
+git commit -m "chore: prepare release vX.X.X"
+```
+
+### 2. 未设置 VITE_AUTH_API_BASE_URL
+
+**错误信息**：`VITE_AUTH_API_BASE_URL 未设置`
+
+**解决方案**：
+```bash
+export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
+```
+
+### 3. Localhost 风险
+
+**警告信息**：`发现高风险 localhost/127.0.0.1`
+
+**说明**：
+- `src/` 目录中的 localhost 会被视为 BLOCKER（阻止发布）
+- `electron/main/` 目录中的 localhost 会被视为 WARNING（需确认）
+- `scripts/` 目录中的 localhost 会被视为 INFO（正常）
+
+**解决方案**：确保 `VITE_AUTH_API_BASE_URL` 已设置为生产地址。
+
+---
+
 **最后更新**：2026-03-18
 **规范版本**：v2.4
+
+> **文档关系**：
+> - 本规范为发布架构与要求的权威定义
+> - 具体操作步骤请查阅 [RELEASE_SOP_MINIMAL.md](./RELEASE_SOP_MINIMAL.md)
+> - 发布失败处理请查阅 [RELEASE_TROUBLESHOOTING.md](./RELEASE_TROUBLESHOOTING.md)
+> - 本文档已吸收原 [RELEASE_PROCESS.md](./archive/2026-03-release-audit/RELEASE_PROCESS.md) 中的检查清单和故障排除内容
