@@ -127,11 +127,30 @@ npm run publish:check
 
 ### 2. 环境变量
 
-发布前必须设置生产 API 地址：
+**【发布规范】正式发布必须显式注入生产环境 API 地址。**
 
 ```bash
+# 生产环境 API 地址（固化）
 export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
 ```
+
+#### 强制要求
+
+| 要求 | 说明 |
+|------|------|
+| 正式发布必须显式设置 | 未设置时 Release Guard 会拦截发布 |
+| 禁止使用 localhost | localhost/127.0.0.1 会被 Release Guard 拦截 |
+| 禁止 fallback 进入发布包 | 代码中的 fallback 仅用于开发调试 |
+
+#### Release Guard 拦截规则
+
+| 检查项 | 级别 | 行为 |
+|--------|------|------|
+| `VITE_AUTH_API_BASE_URL` 未设置 | BLOCKER | 阻止发布 |
+| `VITE_AUTH_API_BASE_URL` 包含 localhost | BLOCKER | 阻止发布 |
+| `VITE_AUTH_API_BASE_URL` 包含 127.0.0.1 | BLOCKER | 阻止发布 |
+
+详见 [RELEASE_SPECIFICATION.md](./RELEASE_SPECIFICATION.md) 中的"生产环境 API 地址固化规范"章节。
 
 ### 3. 发布前审计
 
@@ -342,7 +361,9 @@ Windows 构建只能通过以下方式触发：
 发布前请确认：
 
 - [ ] `npm run release:audit` 无严重问题
-- [ ] `VITE_AUTH_API_BASE_URL` 已设置为生产地址
+- [ ] `VITE_AUTH_API_BASE_URL` 已设置为生产地址 `http://121.41.179.197:8000`
+- [ ] `VITE_AUTH_API_BASE_URL` 不包含 localhost/127.0.0.1
+- [ ] Release Guard 检查通过（`npm run release:guard`）
 - [ ] Git 工作区干净
 - [ ] 当前分支为 main
 - [ ] Tag 未重复

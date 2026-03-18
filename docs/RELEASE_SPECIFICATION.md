@@ -266,6 +266,75 @@ ls -la release/*/mac*/
 
 ---
 
+## 生产环境 API 地址固化规范
+
+### 规范目的
+**确保正式发布必须使用生产环境 API 地址，禁止 localhost fallback 进入发布包。**
+
+### 生产环境 API 地址
+
+| 环境变量 | 生产环境值 | 说明 |
+|----------|------------|------|
+| `VITE_AUTH_API_BASE_URL` | `http://121.41.179.197:8000` | 阿里云 ECS 生产 API 服务器 |
+
+### 强制要求
+
+#### 1. 正式发布必须显式注入环境变量
+
+```bash
+# ✅ 正确：显式设置生产环境 API 地址
+export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
+npm run release
+
+# ❌ 错误：未设置环境变量
+npm run release
+# Release Guard 会拦截并阻止发布
+```
+
+#### 2. 禁止 localhost fallback 进入发布包
+
+- 代码中的 `import.meta.env.VITE_AUTH_API_BASE_URL || 'localhost'` fallback 模式
+- **仅在开发调试时生效**
+- **正式发布必须设置环境变量**，否则 Release Guard 会拦截
+
+#### 3. Release Guard 强制拦截
+
+Release Guard (`scripts/release-guard.js`) 在发布前执行以下检查：
+
+| 检查项 | 级别 | 行为 |
+|--------|------|------|
+| `VITE_AUTH_API_BASE_URL` 未设置 | BLOCKER | 阻止发布 |
+| `VITE_AUTH_API_BASE_URL` 包含 localhost | BLOCKER | 阻止发布 |
+| `VITE_AUTH_API_BASE_URL` 包含 127.0.0.1 | BLOCKER | 阻止发布 |
+| src/ 目录中存在 localhost 引用 | BLOCKER | 阻止发布 |
+
+**任何一项检查失败，都无法执行发布。**
+
+### 违规处理
+
+| 违规场景 | 处理方式 |
+|----------|----------|
+| 未设置 VITE_AUTH_API_BASE_URL | Release Guard 拦截，提示设置生产 API 地址 |
+| 使用 localhost/127.0.0.1 | Release Guard 拦截，提示使用生产地址 |
+| 代码中存在硬编码 localhost | Release Guard 扫描并拦截 |
+
+### 快速验证
+
+发布前验证环境变量配置：
+
+```bash
+# 验证环境变量已设置
+echo $VITE_AUTH_API_BASE_URL
+
+# 预期输出
+http://121.41.179.197:8000
+
+# 执行阻断检查
+npm run release:guard
+```
+
+---
+
 ## 规则：已发布 Tag 不覆盖
 
 ### 核心原则
@@ -392,8 +461,9 @@ curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_m
 | 2025-03-12 | v2.0 | 建立三层发布结构，明确区分测试构建和正式发布构建 |
 | 2025-03-12 | v2.1 | 更新 macOS 构建说明：删除 M3 Ultra 特定表述，明确任何 Mac 均可构建，当前使用无签名方式，未来可升级至 Apple Developer 签名 |
 | 2025-03-14 | v2.2 | 添加下载页部署规范：明确 download.xiuer.work/ 为正式下载页，/releases/latest/ 为自动更新目录，两者路径独立；添加发布后必验地址清单 |
+| 2026-03-18 | v2.3 | 添加生产环境 API 地址固化规范：明确 VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000 为生产环境地址，强制要求正式发布必须显式注入，禁止 localhost fallback 进入发布包，Release Guard 强制拦截 |
 
 ---
 
-**最后更新**：2025-03-14
-**规范版本**：v2.2
+**最后更新**：2026-03-18
+**规范版本**：v2.3
