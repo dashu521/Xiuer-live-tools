@@ -1,4 +1,4 @@
-# 秀儿直播助手 - 发布规范 v2.1
+# 秀儿直播助手 - 发布规范 v2.4
 
 ## 三层发布结构
 
@@ -27,6 +27,69 @@
 │     ├── macOS 构建：本地 Mac（任何 Apple Silicon 或 Intel Mac 均可）      │
 │     ├── Windows 构建：GitHub Actions（windows-latest）                   │
 │     └── 原因：Windows 构建依赖 Windows 特定工具链，GitHub Actions 更可靠  │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 发布架构与职责边界
+
+### 核心原则
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        发布架构与职责边界                                 │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  【本地 Mac 职责】                                                        │
+│  ├── 构建 macOS 安装包                                                   │
+│  ├── 上传到 GitHub Release                                               │
+│  └── ❌ 不再依赖 OSS 正式凭证（本地无需配置阿里云密钥）                      │
+│                                                                         │
+│  【GitHub Actions 职责】                                                  │
+│  ├── 构建 Windows 安装包                                                 │
+│  ├── 上传 Windows 产物到 GitHub Release                                  │
+│  ├── 同步 Windows 产物到 OSS/CDN                                         │
+│  ├── 同步 macOS 产物到 OSS/CDN（通过 upload-mac-oss workflow）            │
+│  └── ✅ OSS 凭证统一由 GitHub Secrets 管理                                │
+│                                                                         │
+│  【手工兜底方案】                                                          │
+│  └── npm run upload:mac:oss 保留，仅在当地有 OSS 凭证时作为备用方案         │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 标准发布流程
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        标准发布流程                                       │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  步骤 1: 本地 Mac 构建                                                    │
+│  ├── export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000           │
+│  ├── npm run release:mac                                                 │
+│  └── 产物: release/<version>/*.dmg + latest-mac.yml                      │
+│                                                                         │
+│  步骤 2: 创建 GitHub Release + 上传 Mac 产物                              │
+│  ├── git tag v<version>                                                  │
+│  ├── git push origin v<version>                                          │
+│  ├── gh release create v<version> --draft                                │
+│  └── gh release upload v<version> release/<version>/*macos*              │
+│                                                                         │
+│  步骤 3: Windows 构建（自动触发）                                          │
+│  ├── 触发: build-windows.yml                                             │
+│  ├── 构建: .exe + .zip + latest.yml                                      │
+│  ├── 上传: GitHub Release                                                │
+│  └── 同步: OSS/CDN (Windows 产物)                                        │
+│                                                                         │
+│  步骤 4: Mac 产物同步 OSS（手动触发）                                       │
+│  ├── 触发: upload-mac-oss.yml                                            │
+│  └── 同步: OSS/CDN (macOS 产物)                                          │
+│                                                                         │
+│  步骤 5: 发布后验收                                                        │
+│  └── 验证: download.xiuer.work 所有资源可访问                              │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -462,8 +525,9 @@ curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_m
 | 2025-03-12 | v2.1 | 更新 macOS 构建说明：删除 M3 Ultra 特定表述，明确任何 Mac 均可构建，当前使用无签名方式，未来可升级至 Apple Developer 签名 |
 | 2025-03-14 | v2.2 | 添加下载页部署规范：明确 download.xiuer.work/ 为正式下载页，/releases/latest/ 为自动更新目录，两者路径独立；添加发布后必验地址清单 |
 | 2026-03-18 | v2.3 | 添加生产环境 API 地址固化规范：明确 VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000 为生产环境地址，强制要求正式发布必须显式注入，禁止 localhost fallback 进入发布包，Release Guard 强制拦截 |
+| 2026-03-18 | v2.4 | 明确发布架构与职责边界：本地 Mac 不再依赖 OSS 凭证，OSS 上传统一走 GitHub Actions，npm run upload:mac:oss 保留为手工兜底方案 |
 
 ---
 
 **最后更新**：2026-03-18
-**规范版本**：v2.3
+**规范版本**：v2.4

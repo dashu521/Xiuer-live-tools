@@ -12,148 +12,201 @@
 
 只推代码到仓库，不会让现有客户端弹更新。
 
-## 标准流程
+---
 
-### 1. 切到 `main` 并合并本次改动
+## 职责边界
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          发布职责边界                                    │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  【本地 Mac 职责】                                                        │
+│  ├── 构建 macOS 安装包                                                   │
+│  ├── 上传到 GitHub Release                                               │
+│  └── ❌ 不再依赖 OSS 凭证（本地无需配置阿里云密钥）                          │
+│                                                                         │
+│  【GitHub Actions 职责】                                                  │
+│  ├── 构建 Windows 安装包                                                 │
+│  ├── 上传 Windows 产物到 GitHub Release                                  │
+│  ├── 同步 Windows 产物到 OSS/CDN                                         │
+│  ├── 同步 macOS 产物到 OSS/CDN（upload-mac-oss workflow）                 │
+│  └── ✅ OSS 凭证统一由 GitHub Secrets 管理                                │
+│                                                                         │
+│  【手工兜底】                                                             │
+│  └── npm run upload:mac:oss 仅在当地有 OSS 凭证时使用                      │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 标准发布流程（完整版）
+
+### 步骤 1: 本地 Mac 构建
 
 ```bash
+# 设置生产环境 API 地址
+export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
+
+# 执行 Mac 构建
+npm run release:mac
+```
+
+产物位置：`release/<version>/*.dmg + latest-mac.yml`
+
+### 步骤 2: 创建 Tag 并推送
+
+```bash
+# 创建 tag
+git tag v<version>
+
+# 推送 tag（触发 Windows 构建）
+git push origin v<version>
+```
+
+### 步骤 3: 创建 GitHub Release 并上传 Mac 产物
+
+```bash
+# 创建 Release
+gh release create v<version> --title "v<version>" --notes-file CHANGELOG.md \
+  release/<version>/*macos*.dmg \
+  release/<version>/*macos*.dmg.blockmap \
+  release/<version>/latest-mac.yml
+```
+
+### 步骤 4: 等待 Windows CI 完成
+
+Windows CI 会自动：
+- 构建 `.exe` + `.zip` + `latest.yml`
+- 上传到 GitHub Release
+- 同步 Windows 产物到 OSS/CDN
+
+查看状态：https://github.com/Xiuer-Chinese/Xiuer-live-tools/actions
+
+### 步骤 5: 触发 Mac 产物同步 OSS
+
+```bash
+# 手动触发 upload-mac-oss workflow
+gh workflow run "Upload Mac to OSS" -f version=<version>
+
+# 等待完成
+gh run watch --exit-status
+```
+
+### 步骤 6: 发布后验收
+
+```bash
+# 验证所有资源可访问
+curl -I https://download.xiuer.work/releases/latest/latest.yml
+curl -I https://download.xiuer.work/releases/latest/latest-mac.yml
+curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_<version>_win-x64.exe
+curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_<version>_macos_arm64.dmg
+curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_<version>_macos_x64.dmg
+```
+
+---
+
+## 最简发布命令（人执行版）
+
+### 只发 Windows（最常用）
+
+```bash
+# 1. 合并代码到 main
 git checkout main
-git merge codex/split-current-work
-```
+git merge <feature-branch>
 
-### 2. 提升版本号
+# 2. 提升版本号
+npm version patch  # 或 minor
 
-补丁更新：
-
-```bash
-npm version patch
-```
-
-功能型更新：
-
-```bash
-npm version minor
-```
-
-## 3. 推送 `main` 和版本标签
-
-```bash
+# 3. 推送
 git push origin main
 git push origin --tags
+
+# 4. 等待 Windows CI 完成
+# 访问 https://github.com/Xiuer-Chinese/Xiuer-live-tools/actions
+
+# 5. 验收
+curl -I https://download.xiuer.work/releases/latest/latest.yml
 ```
 
-说明：
-
-- `npm version patch` / `minor` 会自动创建 `vX.Y.Z` tag
-- 推送 tag 后会触发 Windows 发布工作流
-
-### 4. 等 Windows 工作流完成
-
-Windows 工作流会负责：
-
-- 构建 `.exe`
-- 生成 `latest.yml`
-- 上传 GitHub Release
-- 同步到阿里云 OSS / CDN 的 `releases/latest`
-
-对应工作流：
-[build-windows.yml](/Users/xiuer/TRAE-CN/Xiuer-live-tools/.github/workflows/build-windows.yml)
-
-### 5. 如果本次需要发布 macOS，再执行本地发布
+### 同时发 macOS + Windows
 
 ```bash
-npm run publish:mac:full
+# 1. 设置环境变量
+export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
+
+# 2. 构建 Mac
+npm run release:mac
+
+# 3. 提升版本号
+npm version patch  # 或 minor
+
+# 4. 创建 tag 并推送
+git push origin main
+git push origin --tags
+
+# 5. 创建 Release 并上传 Mac 产物
+gh release create v<version> --title "v<version>" --notes-file CHANGELOG.md \
+  release/<version>/*macos*.dmg \
+  release/<version>/*macos*.dmg.blockmap \
+  release/<version>/latest-mac.yml
+
+# 6. 等待 Windows CI 完成
+gh run watch --exit-status
+
+# 7. 触发 Mac OSS 同步
+gh workflow run "Upload Mac to OSS" -f version=<version>
+gh run watch --exit-status
+
+# 8. 验收
+curl -I https://download.xiuer.work/releases/latest/latest-mac.yml
 ```
 
-这一步会把 macOS 产物同步到 CDN，并验证：
-
-- `latest-mac.yml`
-- `.dmg`
-- `https://download.xiuer.work/releases/latest/`
-
-### 6. 做发布检查
-
-```bash
-npm run publish:check
-```
-
-### 7. 部署下载首页
-
-如果这次改动影响了下载页，或者希望首页上的版本号、按钮链接立即同步到最新发布，再执行：
-
-```bash
-npm run deploy:download-page
-```
-
-说明：
-
-- 这一步会把 `download-page/index.html` 上传到 OSS 根目录
-- 不影响 `releases/latest/` 更新链路
-- 首页现在会运行时读取 `latest.yml / latest-mac.yml`，但页面本身仍然需要部署一次
+---
 
 ## 发布成功的判断标准
 
-满足下面几项，才算真正“用户可更新”：
+满足下面几项，才算真正"用户可更新"：
 
-- `package.json` 版本号已经提升
-- Windows 的 `latest.yml` 已更新
-- 如果发 macOS，`latest-mac.yml` 也已更新
-- 安装包已经同步到 `download.xiuer.work/releases/latest/`
-- 下载首页已经同步到 OSS 根目录（如本次有首页改动）
-- `npm run publish:check` 通过
+- [ ] `package.json` 版本号已提升
+- [ ] GitHub Release 已创建
+- [ ] Windows 产物已上传到 GitHub Release
+- [ ] macOS 产物已上传到 GitHub Release
+- [ ] `latest.yml` 已同步到 OSS（Windows 自动更新）
+- [ ] `latest-mac.yml` 已同步到 OSS（macOS 自动更新）
+- [ ] 所有安装包可从 `download.xiuer.work/releases/latest/` 下载
 
-## 最常用的一套命令
-
-只发 Windows / 国内用户主链路：
-
-```bash
-git checkout main
-git merge codex/split-current-work
-npm version patch
-git push origin main
-git push origin --tags
-npm run publish:check
-npm run deploy:download-page
-```
-
-同时发 macOS：
-
-```bash
-git checkout main
-git merge codex/split-current-work
-npm version patch
-git push origin main
-git push origin --tags
-npm run publish:mac:full
-npm run publish:check
-npm run deploy:download-page
-```
+---
 
 ## 常见误区
 
 ### 误区 1：只要推到 GitHub 就算发版
 
-不对。
-
-客户端检查的是版本号和更新清单，不是普通提交记录。
+不对。客户端检查的是版本号和更新清单，不是普通提交记录。
 
 ### 误区 2：代码改了但版本号不变也能更新
 
-通常不行。
+通常不行。客户端会认为当前已经是同一版本，不会提示更新。
 
-客户端会认为当前已经是同一版本，不会提示更新。
+### 误区 3：本地需要配置 OSS 凭证
 
-### 误区 3：国内用户主要走 GitHub 下载
+**不再需要**。OSS 上传统一走 GitHub Actions，本地无需配置阿里云密钥。
 
-不对。
+### 误区 4：GitHub Release 成功 = 发布完成
 
-当前正式链路是：
+不对。还需要确认 OSS/CDN 同步完成，用户才能从国内 CDN 下载。
 
-`客户端 -> download.xiuer.work -> 阿里云 CDN -> OSS`
+---
 
 ## 相关文档
 
-- [ONLINE_UPDATE_SPEC.md](/Users/xiuer/TRAE-CN/Xiuer-live-tools/docs/ONLINE_UPDATE_SPEC.md)
-- [RELEASE_PROCESS.md](/Users/xiuer/TRAE-CN/Xiuer-live-tools/docs/RELEASE_PROCESS.md)
-- [RELEASE_SPECIFICATION.md](/Users/xiuer/TRAE-CN/Xiuer-live-tools/docs/RELEASE_SPECIFICATION.md)
-- [CDN_SETUP_GUIDE.md](/Users/xiuer/TRAE-CN/Xiuer-live-tools/docs/CDN_SETUP_GUIDE.md)
+- [RELEASE_SPECIFICATION.md](./RELEASE_SPECIFICATION.md) - 发布规范
+- [RELEASE_PROCESS.md](./RELEASE_PROCESS.md) - 发布流程指南
+- [ONLINE_UPDATE_SPEC.md](./ONLINE_UPDATE_SPEC.md) - 在线更新规范
+- [CDN_SETUP_GUIDE.md](./CDN_SETUP_GUIDE.md) - CDN 配置指南
+
+---
+
+**最后更新**：2026-03-18
+**版本**：v2.0

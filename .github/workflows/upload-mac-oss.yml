@@ -1,5 +1,26 @@
 # Mac 产物上传到 OSS/CDN
-# 手动触发 workflow_dispatch，使用仓库 Secrets 中的阿里云 Key
+#
+# 【职责边界】
+# - 本地 Mac 构建 → 上传 GitHub Release（不依赖 OSS 凭证）
+# - 本 workflow → 从 GitHub Release 下载 Mac 产物 → 上传到 OSS/CDN
+# - OSS 凭证统一由 GitHub Secrets 管理
+#
+# 【触发方式】
+# 手动触发：gh workflow run "Upload Mac to OSS" -f version=<version>
+# 或访问：https://github.com/Xiuer-Chinese/Xiuer-live-tools/actions/workflows/upload-mac-oss.yml
+#
+# 【前置条件】
+# 1. Mac 产物已上传到 GitHub Release
+# 2. GitHub Secrets 已配置 ALIYUN_ACCESS_KEY_ID 和 ALIYUN_ACCESS_KEY_SECRET
+#
+# 【产物范围】
+# - *macos*.dmg（arm64 + x64）
+# - *macos*.dmg.blockmap
+# - latest-mac.yml
+#
+# 【上传路径】
+# - oss://xiuer-live-tools-download/releases/latest/（自动更新源）
+# - oss://xiuer-live-tools-download/releases/v<version>/（版本归档）
 
 name: Upload Mac to OSS
 
