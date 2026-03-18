@@ -204,8 +204,22 @@ curl -I https://download.xiuer.work/releases/latest/latest-mac.yml
 
 - [RELEASE_SPECIFICATION.md](./RELEASE_SPECIFICATION.md) - 发布规范
 - [RELEASE_PROCESS.md](./RELEASE_PROCESS.md) - 发布流程指南
+- [RELEASE_TROUBLESHOOTING.md](./RELEASE_TROUBLESHOOTING.md) - **发布失败处理指南**
 - [ONLINE_UPDATE_SPEC.md](./ONLINE_UPDATE_SPEC.md) - 在线更新规范
 - [CDN_SETUP_GUIDE.md](./CDN_SETUP_GUIDE.md) - CDN 配置指南
+
+---
+
+## 发布失败？
+
+👉 **请查阅 [RELEASE_TROUBLESHOOTING.md](./RELEASE_TROUBLESHOOTING.md)**
+
+覆盖以下失败场景：
+- `npm run release:mac` 失败
+- `gh release create` 失败
+- Windows CI 失败
+- Upload Mac to OSS workflow 失败
+- CDN / latest-mac.yml 验证失败
 
 ---
 
