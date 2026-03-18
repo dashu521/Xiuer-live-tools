@@ -66,41 +66,37 @@ export default function AutoReply() {
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="flex min-h-full flex-col gap-6 py-6">
-          <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-start md:justify-between">
-            <div className="min-w-0 shrink-0">
-              <Title title="自动回复" description="查看直播间的实时评论并自动回复" />
-            </div>
-            <div className="flex w-full shrink-0 items-center gap-2 md:w-auto">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate('settings')}
-                title="设置"
-                className="h-8 text-sm"
-              >
-                <Settings2 className="h-3.5 w-3.5" />
-                <span>设置</span>
-              </Button>
-              <TaskControlButton
-                isRunning={taskIsRunning}
-                onStart={handleAutoReplyToggle}
-                onStop={handleAutoReplyToggle}
-                gate={gate}
-                size="sm"
-                startText="开始任务"
-                stopText="停止任务"
-              />
-            </div>
-          </div>
-
-          <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 grid-rows-[minmax(20rem,1.35fr)_minmax(16rem,1fr)] gap-4 xl:grid-cols-2 xl:grid-rows-1">
-            <CommentList highlight={highlightedCommentId} />
-            <PreviewList setHighLight={setHighlightedCommentId} />
-          </div>
+    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden p-6">
+      <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-start md:justify-between shrink-0">
+        <div className="min-w-0 shrink-0">
+          <Title title="自动回复" description="查看直播间的实时评论并自动回复" />
         </div>
+        <div className="flex w-full shrink-0 items-center gap-2 md:w-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('settings')}
+            title="设置"
+            className="h-8 text-sm"
+          >
+            <Settings2 className="h-3.5 w-3.5" />
+            <span>设置</span>
+          </Button>
+          <TaskControlButton
+            isRunning={taskIsRunning}
+            onStart={handleAutoReplyToggle}
+            onStop={handleAutoReplyToggle}
+            gate={gate}
+            size="sm"
+            startText="开始任务"
+            stopText="停止任务"
+          />
+        </div>
+      </div>
+
+      <div className="grid min-h-0 min-w-0 flex-1 grid-cols-1 grid-rows-[minmax(20rem,1.35fr)_minmax(16rem,1fr)] gap-4 xl:grid-cols-2 xl:grid-rows-1">
+        <CommentList highlight={highlightedCommentId} />
+        <PreviewList setHighLight={setHighlightedCommentId} />
       </div>
     </div>
   )
