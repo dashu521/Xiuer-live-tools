@@ -314,6 +314,8 @@ class ChangePasswordBody(BaseModel):
 class UserConfigData(BaseModel):
     """用户配置数据结构"""
     accounts: Optional[List[dict]] = None
+    currentAccountId: Optional[str] = None
+    defaultAccountId: Optional[str] = None
     platformPreferences: Optional[dict] = None
     autoReplyConfigs: Optional[dict] = None
     autoMessageConfigs: Optional[dict] = None
@@ -343,3 +345,75 @@ class GetUserConfigResponse(BaseModel):
     config: Optional[UserConfigData] = None
     version: int = 1
     updated_at: Optional[str] = None
+
+
+# ----- 用户反馈相关 -----
+class FeedbackCategory:
+    """反馈类型常量"""
+    CONNECTION = "connection"  # 连接问题
+    LOGIN = "login"  # 登录问题
+    FUNCTION = "function"  # 功能异常
+    SUGGESTION = "suggestion"  # 建议反馈
+    OTHER = "other"  # 其他
+
+
+class SubmitFeedbackBody(BaseModel):
+    """提交反馈请求体"""
+    category: str = Field(..., description="问题类型: connection/login/function/suggestion/other")
+    content: str = Field(..., min_length=10, max_length=2000, description="问题描述")
+    contact: Optional[str] = Field(None, max_length=100, description="联系方式（可选）")
+    platform: Optional[str] = Field(None, description="当前平台")
+    app_version: Optional[str] = Field(None, description="软件版本")
+    os_info: Optional[str] = Field(None, description="操作系统信息")
+    diagnostic_info: Optional[dict] = Field(None, description="诊断信息摘要")
+
+
+class SubmitFeedbackResponse(BaseModel):
+    """提交反馈响应"""
+    success: bool = True
+    message: str = "反馈提交成功"
+    feedback_id: Optional[str] = None
+
+
+class FeedbackOut(BaseModel):
+    """反馈记录输出模型"""
+    id: str
+    username: Optional[str] = None
+    contact: Optional[str] = None
+    category: str
+    content: str
+    platform: Optional[str] = None
+    app_version: Optional[str] = None
+    os_info: Optional[str] = None
+    status: str
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class FeedbackListResponse(BaseModel):
+    """反馈列表响应"""
+    items: List[FeedbackOut] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    size: int = 20
+
+
+class UpdateFeedbackStatusBody(BaseModel):
+    """更新反馈状态请求体"""
+    status: str = Field(..., description="状态: pending/processing/resolved/closed")
+
+
+# ----- 反馈错误码 -----
+def err_feedback_invalid_category() -> dict:
+    return {"code": "INVALID_CATEGORY", "message": "无效的反馈类型"}
+
+
+def err_feedback_content_too_short() -> dict:
+    return {"code": "CONTENT_TOO_SHORT", "message": "问题描述至少需要10个字符"}
+
+
+def err_feedback_not_found() -> dict:
+    return {"code": "FEEDBACK_NOT_FOUND", "message": "反馈记录不存在"}

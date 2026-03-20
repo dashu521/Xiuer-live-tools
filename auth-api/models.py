@@ -22,7 +22,7 @@ class User(Base):
     plan = Column(String(32), default="free")
     trial_start_at = Column(DateTime, nullable=True)
     trial_end_at = Column(DateTime, nullable=True)
-    
+
     # 账号数量限制（新增）
     max_accounts = Column(Integer, default=1)  # 默认允许1个账号
     trial_used = Column(Integer, default=0)    # 是否已使用过试用
@@ -76,17 +76,17 @@ class GiftCard(Base):
     id = Column(String(36), primary_key=True, index=True)
     code = Column(String(14), unique=True, nullable=False, index=True)
     type = Column(String(20), default="membership")
-    
+
     # 礼品卡档位（新增）: pro/pro_max/ultra
     tier = Column(String(20), nullable=True)
-    
+
     # 权益配置（JSON格式，便于扩展）
     benefits_json = Column(JSON, nullable=True, default=lambda: {
         "max_accounts": 1,
         "features": ["all"],
         "duration_days": None
     })
-    
+
     membership_type = Column(String(20), nullable=True)  # 保留兼容
     membership_days = Column(Integer, default=0)         # 保留兼容
     status = Column(String(20), default="active", index=True)
@@ -134,10 +134,31 @@ class UserConfig(Base):
 
     id = Column(String(36), primary_key=True, index=True)
     user_id = Column(String(36), ForeignKey("users.id"), nullable=False, unique=True, index=True)
-    
+
     config_json = Column(JSON, nullable=False, default=lambda: {})
-    
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     user = relationship("User", backref="config")
+
+
+class Feedback(Base):
+    """用户反馈表"""
+    __tablename__ = "feedbacks"
+
+    id = Column(String(36), primary_key=True, index=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
+    username = Column(String(100), nullable=True, index=True)
+    contact = Column(String(100), nullable=True)
+    category = Column(String(32), nullable=False)  # 问题类型
+    content = Column(String(2000), nullable=False)  # 问题描述
+    platform = Column(String(32), nullable=True)  # 当前平台
+    app_version = Column(String(32), nullable=True)  # 软件版本
+    os_info = Column(String(100), nullable=True)  # 操作系统信息
+    diagnostic_info = Column(JSON, nullable=True)  # 诊断信息摘要
+    status = Column(String(20), default="pending", index=True)  # pending/processing/resolved/closed
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", backref="feedbacks")

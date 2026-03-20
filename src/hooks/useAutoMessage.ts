@@ -32,7 +32,7 @@ export function hasEffectiveAutoMessages(messages: Message[]): boolean {
   return getEffectiveAutoMessages(messages).length > 0
 }
 
-interface AutoMessageConfig {
+export interface AutoMessageConfig {
   scheduler: {
     interval: [number, number] // [最小间隔, 最大间隔]
   }

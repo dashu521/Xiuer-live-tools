@@ -1,5 +1,6 @@
 import { Loader2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router'
 import { useAccessContext } from '@/domain/access'
 import { GATE_ACTIONS } from '@/domain/access/gateActions'
 import { useAccounts } from '@/hooks/useAccounts'
@@ -45,9 +46,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const authCheckDone = useAuthCheckDone()
   const isAuthenticated = useIsAuthenticated()
   const isOffline = useIsOffline()
+  const navigate = useNavigate()
   const accessContext = useAccessContext()
   const { runPendingActionAndClear } = useGateStore()
   const refreshUserStatus = useAuthStore(s => s.refreshUserStatus)
+  const clearTokensAndUnauth = useAuthStore(s => s.clearTokensAndUnauth)
   const { toast } = useToast()
   const trialExpiredModalShownRef = useRef(false)
 
@@ -55,6 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const heartbeatTimerRef = useRef<NodeJS.Timeout | null>(null)
   const isPageVisibleRef = useRef(true)
   const isKickedOutRef = useRef(false)
+  const kickoutHandledRef = useRef(false)
 
   useAuthInit()
 
@@ -78,17 +82,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!wasConnectAction && !useGateStore.getState().defaultPlatformSetAfterLogin) {
         const accountId = useAccounts.getState().currentAccountId
         if (accountId) {
+          const currentPlatform =
+            useLiveControlStore.getState().contexts[accountId]?.connectState.platform || ''
           // 获取用户设置的默认平台，而不是强制设置为 dev
           const defaultPlatform = usePlatformPreferenceStore
             .getState()
             .getDefaultPlatform(accountId)
-          useLiveControlStore.getState().setConnectState(accountId, { platform: defaultPlatform })
+          if (!currentPlatform && defaultPlatform) {
+            useLiveControlStore.getState().setConnectState(accountId, {
+              platform: defaultPlatform,
+            })
+            toast.info({
+              title: '默认平台已恢复',
+              description: `当前平台：${defaultPlatform === 'dev' ? '测试平台' : defaultPlatform}`,
+              dedupeKey: `default-platform:${accountId}`,
+            })
+          }
           useGateStore.getState().setDefaultPlatformSetAfterLogin(true)
-          toast.info({
-            title: '默认平台已恢复',
-            description: `当前平台：${defaultPlatform === 'dev' ? '测试平台' : defaultPlatform}`,
-            dedupeKey: `default-platform:${accountId}`,
-          })
         }
       }
     }
@@ -120,9 +130,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
     }
 
-    const handleKickedOut = (event: CustomEvent) => {
+    const handleKickedOut = async (event: CustomEvent) => {
+      if (kickoutHandledRef.current) return
+      kickoutHandledRef.current = true
       const { message } = event.detail
       console.warn('[AuthProvider] User kicked out:', message)
+      await clearTokensAndUnauth()
+      setShowUserCenter(false)
+      setShowSubscribeDialog(false)
+      setCurrentFeature('login')
+      navigate('/', { replace: true })
       toast.error({
         title: '账号已在其他设备登录',
         description: message || '您的账号已在其他设备登录，请重新登录',
@@ -131,13 +148,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setShowAuthDialog(true)
     }
 
+    const handleKickedOutEvent: EventListener = event => {
+      void handleKickedOut(event as CustomEvent)
+    }
+
     window.addEventListener('auth:required', handleAuthRequired as EventListener)
     window.addEventListener('auth:success', handleAuthSuccess as EventListener)
     window.addEventListener('gate:subscribe-required', handleSubscribeRequired as EventListener)
     window.addEventListener('auth:license-required', handleLicenseRequired as EventListener)
     window.addEventListener('auth:account-disabled', handleAccountDisabled as EventListener)
     window.addEventListener('auth:user-center', handleUserCenterOpen as EventListener)
-    window.addEventListener(KICKED_OUT_EVENT, handleKickedOut as EventListener)
+    window.addEventListener(KICKED_OUT_EVENT, handleKickedOutEvent)
 
     return () => {
       window.removeEventListener('auth:required', handleAuthRequired as EventListener)
@@ -149,9 +170,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('auth:license-required', handleLicenseRequired as EventListener)
       window.removeEventListener('auth:account-disabled', handleAccountDisabled as EventListener)
       window.removeEventListener('auth:user-center', handleUserCenterOpen as EventListener)
-      window.removeEventListener(KICKED_OUT_EVENT, handleKickedOut as EventListener)
+      window.removeEventListener(KICKED_OUT_EVENT, handleKickedOutEvent)
     }
-  }, [refreshUserStatus, runPendingActionAndClear, toast])
+  }, [clearTokensAndUnauth, navigate, refreshUserStatus, runPendingActionAndClear, toast])
 
   // 试用已结束：进入主界面后自动弹一次试用弹窗
   useEffect(() => {
@@ -243,6 +264,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   /**
    * 处理页面可见性变化 - 后台降频
    */
+  useEffect(() => {
+    if (isAuthenticated) {
+      kickoutHandledRef.current = false
+    }
+  }, [isAuthenticated])
+
   useEffect(() => {
     const handleVisibilityChange = () => {
       const isVisible = document.visibilityState === 'visible'

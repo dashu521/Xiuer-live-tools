@@ -195,7 +195,7 @@ interface AuthStore extends AuthState {
   setToken: (token: string | null) => void
   setRefreshToken: (refreshToken: string | null) => void
   /** refresh 失败时由 apiClient 调用：清空 token/refreshToken，回到登录页 */
-  clearTokensAndUnauth: () => void
+  clearTokensAndUnauth: () => Promise<void>
   setUserStatus: (userStatus: UserStatus | null) => void
   /** 拉取 /auth/status 并写入 store，同时同步更新 user.plan */
   refreshUserStatus: () => Promise<UserStatus | null>
@@ -722,14 +722,10 @@ export const useAuthStore = create<AuthStore>()(
           // 【修复】旧 token（无 jti）清理，强制重新登录
           if (!result.ok && result.error?.code === 'token_invalid') {
             console.warn('[AuthStore] 旧 token 无效（无 jti），强制重新登录')
+            await get().clearTokensAndUnauth()
             set({
-              token: null,
-              refreshToken: null,
-              isAuthenticated: false,
-              user: null,
               isLoading: false,
               authCheckDone: true,
-              isOffline: false,
               error: '登录已过期，请重新登录',
             })
             // 触发登录对话框
@@ -790,7 +786,7 @@ export const useAuthStore = create<AuthStore>()(
           }
 
           if (result.status === 401) {
-            get().clearTokensAndUnauth()
+            await get().clearTokensAndUnauth()
             set({ isLoading: false, authCheckDone: true })
             return
           }
@@ -825,15 +821,121 @@ export const useAuthStore = create<AuthStore>()(
       setRefreshToken: (refreshToken: string | null) => set({ refreshToken }),
 
       /** refresh 失败时由 apiClient 调用：清空 token/refreshToken，回到登录页 */
-      clearTokensAndUnauth: () =>
+      clearTokensAndUnauth: async () => {
+        const currentUserId = get().user?.id ?? null
+
+        try {
+          await window.authAPI.clearTokens()
+        } catch (error) {
+          console.error('[AuthStore] Failed to clear main-process tokens:', error)
+        }
+
+        try {
+          const currentAccountId = useAccounts.getState().currentAccountId
+          if (currentAccountId) {
+            try {
+              await window.ipcRenderer.invoke(
+                IPC_CHANNELS.tasks.commentListener.stop,
+                currentAccountId,
+              )
+            } catch (e) {
+              console.log('[AuthStore] 停止评论监听失败（可能未运行）:', e)
+            }
+
+            try {
+              await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.autoMessage.stop, currentAccountId)
+            } catch (e) {
+              console.log('[AuthStore] 停止自动发言失败（可能未运行）:', e)
+            }
+
+            try {
+              await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.autoPopUp.stop, currentAccountId)
+            } catch (e) {
+              console.log('[AuthStore] 停止自动弹窗失败（可能未运行）:', e)
+            }
+
+            try {
+              await window.ipcRenderer.invoke(
+                IPC_CHANNELS.tasks.liveControl.disconnect,
+                currentAccountId,
+              )
+            } catch (e) {
+              console.log('[AuthStore] 断开连接失败（可能未连接）:', e)
+            }
+          }
+        } catch (error) {
+          console.error('[AuthStore] Failed to stop runtime tasks during unauth cleanup:', error)
+        }
+
+        if (currentUserId) {
+          console.log('[AuthStore] 失效会话清理前保存账号数据:', currentUserId)
+          const accountsState = useAccounts.getState()
+          const storageKey = `accounts-storage-${currentUserId}`
+          const dataToSave = {
+            state: {
+              accounts: accountsState.accounts,
+              currentAccountId: accountsState.currentAccountId,
+              defaultAccountId: accountsState.defaultAccountId,
+            },
+            version: 0,
+          }
+          localStorage.setItem(storageKey, JSON.stringify(dataToSave))
+        }
+
         set({
           isAuthenticated: false,
           user: null,
           token: null,
           refreshToken: null,
           userStatus: null,
+          isLoading: false,
+          error: null,
           isOffline: false,
-        }),
+          authCheckDone: true,
+        })
+
+        if (currentUserId) {
+          const prefixesToRemove = [
+            'account-config',
+            'chrome-config',
+            'auto-reply',
+            'auto-message',
+            'auto-popup',
+            'live-control',
+            'sub-account',
+            'account-pref',
+          ]
+
+          const keysToRemove: string[] = []
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i)
+            if (!key) continue
+            if (prefixesToRemove.some(prefix => key.startsWith(`${prefix}-${currentUserId}`))) {
+              keysToRemove.push(key)
+            }
+          }
+          for (const key of keysToRemove) {
+            localStorage.removeItem(key)
+          }
+        }
+
+        useTrialStore.getState().reset()
+        useAccounts.getState().reset()
+        useLiveControlStore.getState().resetAllContexts?.()
+        useAutoMessageStore.getState().resetAllContexts?.()
+        useAutoPopUpStore.getState().resetAllContexts?.()
+        useAutoReplyConfigStore.getState().resetAllContexts?.()
+        useChromeConfigStore.getState().resetAllContexts()
+        useSubAccountStore.getState().resetAllContexts?.()
+
+        if (
+          typeof localStorage !== 'undefined' &&
+          localStorage.getItem(AUTH_REMEMBER_ME_KEY) !== 'true'
+        ) {
+          localStorage.removeItem(AUTH_LAST_IDENTIFIER_KEY)
+          localStorage.setItem(AUTH_REMEMBER_ME_KEY, 'false')
+        }
+      },
 
       setUserStatus: (userStatus: UserStatus | null) => set({ userStatus }),
 

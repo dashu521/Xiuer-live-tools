@@ -1,8 +1,78 @@
-import { useAccounts } from '@/hooks/useAccounts'
+import { normalizeAccountSelection, useAccounts } from '@/hooks/useAccounts'
+import type { AutoMessageConfig } from '@/hooks/useAutoMessage'
+import { useAutoMessageStore } from '@/hooks/useAutoMessage'
+import type { AutoPopUpConfig, ShortcutMapping } from '@/hooks/useAutoPopUp'
+import { useAutoPopUpStore } from '@/hooks/useAutoPopUp'
+import type { AutoReplyConfig } from '@/hooks/useAutoReplyConfig'
+import { useAutoReplyConfigStore } from '@/hooks/useAutoReplyConfig'
 import { getUserConfig, syncUserConfig, type UserConfigData } from '@/services/apiClient'
 import { usePlatformPreferenceStore } from '@/stores/platformPreferenceStore'
 
 const DEBUG = import.meta.env.DEV
+
+type AccountScopedConfigMap<T> = Record<string, T>
+
+interface CloudAutoReplyContext {
+  config: AutoReplyConfig
+}
+
+interface CloudAutoMessageContext {
+  config: AutoMessageConfig
+}
+
+interface CloudAutoPopUpContext {
+  config: AutoPopUpConfig
+  shortcuts?: ShortcutMapping[]
+  isGlobalShortcut?: boolean
+}
+
+function filterAccountScopedConfig<T>(
+  configMap: AccountScopedConfigMap<T> | undefined,
+  allowedAccountIds: Set<string>,
+): AccountScopedConfigMap<T> {
+  if (!configMap) return {}
+
+  return Object.fromEntries(
+    Object.entries(configMap).filter(([accountId]) => allowedAccountIds.has(accountId)),
+  )
+}
+
+function collectAutoReplyConfigs(): AccountScopedConfigMap<CloudAutoReplyContext> {
+  const { contexts } = useAutoReplyConfigStore.getState()
+
+  return Object.fromEntries(
+    Object.entries(contexts)
+      .filter(([, context]) => !!context?.config)
+      .map(([accountId, context]) => [accountId, { config: context.config }]),
+  )
+}
+
+function collectAutoMessageConfigs(): AccountScopedConfigMap<CloudAutoMessageContext> {
+  const { contexts } = useAutoMessageStore.getState()
+
+  return Object.fromEntries(
+    Object.entries(contexts)
+      .filter(([, context]) => !!context?.config)
+      .map(([accountId, context]) => [accountId, { config: context.config }]),
+  )
+}
+
+function collectAutoPopUpConfigs(): AccountScopedConfigMap<CloudAutoPopUpContext> {
+  const { contexts } = useAutoPopUpStore.getState()
+
+  return Object.fromEntries(
+    Object.entries(contexts)
+      .filter(([, context]) => !!context?.config)
+      .map(([accountId, context]) => [
+        accountId,
+        {
+          config: context.config,
+          shortcuts: context.shortcuts,
+          isGlobalShortcut: context.isGlobalShortcut,
+        },
+      ]),
+  )
+}
 
 class ConfigSyncService {
   private syncTimeout: ReturnType<typeof setTimeout> | null = null
@@ -17,7 +87,12 @@ class ConfigSyncService {
 
     const config: UserConfigData = {
       accounts: accountsState.accounts,
+      currentAccountId: accountsState.currentAccountId || undefined,
+      defaultAccountId: accountsState.defaultAccountId || undefined,
       platformPreferences: platformPrefState.preferences,
+      autoReplyConfigs: collectAutoReplyConfigs(),
+      autoMessageConfigs: collectAutoMessageConfigs(),
+      autoPopUpConfigs: collectAutoPopUpConfigs(),
     }
 
     if (DEBUG) {
@@ -102,13 +177,22 @@ class ConfigSyncService {
   }
 
   private applyConfig(config: UserConfigData): void {
+    const allowedAccountIds = new Set(
+      (config.accounts ?? useAccounts.getState().accounts).map(account => account.id),
+    )
+
     if (config.accounts && config.accounts.length > 0) {
       const currentUserId = useAccounts.getState().currentUserId
       if (currentUserId) {
+        const normalized = normalizeAccountSelection(
+          config.accounts,
+          config.currentAccountId || '',
+          config.defaultAccountId || null,
+        )
         useAccounts.setState({
           accounts: config.accounts,
-          currentAccountId: config.accounts[0]?.id || '',
-          defaultAccountId: config.accounts[0]?.id || null,
+          currentAccountId: normalized.currentAccountId,
+          defaultAccountId: normalized.defaultAccountId,
         })
         if (DEBUG) console.log('[ConfigSync] Applied accounts:', config.accounts.length)
       }
@@ -119,6 +203,75 @@ class ConfigSyncService {
         preferences: config.platformPreferences,
       })
       if (DEBUG) console.log('[ConfigSync] Applied platform preferences')
+    }
+
+    if (config.autoReplyConfigs) {
+      const currentUserId = useAutoReplyConfigStore.getState().currentUserId
+      const filteredContexts = filterAccountScopedConfig(
+        config.autoReplyConfigs as AccountScopedConfigMap<CloudAutoReplyContext>,
+        allowedAccountIds,
+      )
+
+      useAutoReplyConfigStore.setState({
+        currentUserId,
+        contexts: Object.fromEntries(
+          Object.entries(filteredContexts).map(([accountId, context]) => [
+            accountId,
+            { config: context.config },
+          ]),
+        ),
+      })
+
+      if (DEBUG) console.log('[ConfigSync] Applied auto reply configs')
+    }
+
+    if (config.autoMessageConfigs) {
+      const currentState = useAutoMessageStore.getState()
+      const filteredContexts = filterAccountScopedConfig(
+        config.autoMessageConfigs as AccountScopedConfigMap<CloudAutoMessageContext>,
+        allowedAccountIds,
+      )
+
+      useAutoMessageStore.setState({
+        currentUserId: currentState.currentUserId,
+        contexts: Object.fromEntries(
+          Object.entries(filteredContexts).map(([accountId, context]) => [
+            accountId,
+            {
+              config: context.config,
+              isRunning: currentState.contexts[accountId]?.isRunning ?? false,
+              batchCount: currentState.contexts[accountId]?.batchCount,
+            },
+          ]),
+        ),
+      })
+
+      if (DEBUG) console.log('[ConfigSync] Applied auto message configs')
+    }
+
+    if (config.autoPopUpConfigs) {
+      const currentState = useAutoPopUpStore.getState()
+      const filteredContexts = filterAccountScopedConfig(
+        config.autoPopUpConfigs as AccountScopedConfigMap<CloudAutoPopUpContext>,
+        allowedAccountIds,
+      )
+
+      useAutoPopUpStore.setState({
+        currentUserId: currentState.currentUserId,
+        contexts: Object.fromEntries(
+          Object.entries(filteredContexts).map(([accountId, context]) => [
+            accountId,
+            {
+              config: context.config,
+              shortcuts: context.shortcuts ?? [],
+              isGlobalShortcut: context.isGlobalShortcut,
+              isRunning: currentState.contexts[accountId]?.isRunning ?? false,
+            },
+          ]),
+        ),
+      })
+
+      if (DEBUG) console.log('[ConfigSync] Applied auto popup configs')
     }
   }
 
@@ -154,6 +307,27 @@ class ConfigSyncService {
       }
     })
     unsubscribers.push(platformPrefUnsubscribe)
+
+    const autoReplyUnsubscribe = useAutoReplyConfigStore.subscribe((state, prevState) => {
+      if (state.contexts !== prevState.contexts) {
+        this.scheduleSync()
+      }
+    })
+    unsubscribers.push(autoReplyUnsubscribe)
+
+    const autoMessageUnsubscribe = useAutoMessageStore.subscribe((state, prevState) => {
+      if (state.contexts !== prevState.contexts) {
+        this.scheduleSync()
+      }
+    })
+    unsubscribers.push(autoMessageUnsubscribe)
+
+    const autoPopUpUnsubscribe = useAutoPopUpStore.subscribe((state, prevState) => {
+      if (state.contexts !== prevState.contexts) {
+        this.scheduleSync()
+      }
+    })
+    unsubscribers.push(autoPopUpUnsubscribe)
 
     if (DEBUG) console.log('[ConfigSync] Auto-sync setup complete')
 

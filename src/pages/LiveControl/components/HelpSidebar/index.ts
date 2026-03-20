@@ -1,0 +1,6 @@
+export { FeedbackDialog } from './FeedbackDialog'
+export { HelpDockTrigger } from './HelpDockTrigger'
+export { HelpDrawer } from './HelpDrawer'
+export { HelpSidebarContent } from './HelpSidebarContent'
+export { QuickStartTutorial } from './QuickStartTutorial'
+export { WechatQRDialog } from './WechatQRDialog'

@@ -29,7 +29,7 @@ export interface GoodsItemConfig {
   interval?: [number, number] // 可选：单独设置间隔（毫秒）
 }
 
-interface AutoPopUpConfig {
+export interface AutoPopUpConfig {
   scheduler: {
     interval: [number, number] // 全局默认间隔（毫秒）
   }

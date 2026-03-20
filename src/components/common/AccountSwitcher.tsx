@@ -1,32 +1,18 @@
 import { useMemoizedFn } from 'ahooks'
 import { Plus } from 'lucide-react'
-import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { useAccounts } from '@/hooks/useAccounts'
+import React, { useEffect, useMemo, useState } from 'react'
+import { normalizeAccountSelection, useAccounts } from '@/hooks/useAccounts'
 import { useCurrentLiveControl } from '@/hooks/useLiveControl'
 import { useToast } from '@/hooks/useToast'
 import { useAuthStore } from '@/stores/authStore'
 import { Button } from '../ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog'
 import { Input } from '../ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-} from '../ui/select'
+import { Select, SelectContent, SelectSeparator, SelectTrigger, SelectValue } from '../ui/select'
 import { AccountLimitDialog } from './AccountLimitDialog'
 
 export const AccountSwitcher = React.memo(() => {
-  const {
-    accounts,
-    currentAccountId,
-    defaultAccountId,
-    addAccount,
-    switchAccount,
-    setDefaultAccount,
-  } = useAccounts()
+  const { accounts, currentAccountId, addAccount, switchAccount } = useAccounts()
   const connectState = useCurrentLiveControl(state => state.connectState)
   const isAuthenticated = useAuthStore(state => state.isAuthenticated)
 
@@ -37,24 +23,19 @@ export const AccountSwitcher = React.memo(() => {
   const hasCurrent = accounts.some(a => a.id === currentAccountId)
   const normalizedAccountId = hasCurrent ? currentAccountId : (accounts[0]?.id ?? '')
 
-  // 增加一次性纠正 store（避免其它模块拿到非法 currentAccountId）
-  const didFixInvalidSelectionRef = useRef(false)
-  const firstAccountId = useMemo(() => accounts[0]?.id, [accounts])
-
   useEffect(() => {
-    if (didFixInvalidSelectionRef.current) return
     if (!accounts.length) return
     if (currentAccountId && hasCurrent) return
-    // 当前选中值不合法，纠正为第一个账号
-    if (firstAccountId) {
-      didFixInvalidSelectionRef.current = true
-      switchAccount(firstAccountId)
+    const normalized = normalizeAccountSelection(accounts, currentAccountId, null)
+    if (normalized.currentAccountId && normalized.currentAccountId !== currentAccountId) {
+      switchAccount(normalized.currentAccountId)
     }
-  }, [accounts.length, currentAccountId, hasCurrent, firstAccountId, switchAccount])
+  }, [accounts, currentAccountId, hasCurrent, switchAccount])
 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [newAccountName, setNewAccountName] = useState('')
   const [isLimitDialogOpen, setIsLimitDialogOpen] = useState(false)
+  const [isSelectOpen, setIsSelectOpen] = useState(false)
   const { toast } = useToast()
 
   // 检查是否还可以添加账号
@@ -118,6 +99,7 @@ export const AccountSwitcher = React.memo(() => {
 
   // 判断是否有账号
   const hasAccounts = accounts.length > 0
+  const selectedAccountName = accountItems.find(account => account.id === normalizedAccountId)?.name
 
   return (
     <div className="flex items-center gap-2">
@@ -125,51 +107,37 @@ export const AccountSwitcher = React.memo(() => {
         disabled={connectState.status === 'connecting'}
         value={normalizedAccountId}
         onValueChange={handleAccountSwitch}
+        open={isSelectOpen}
+        onOpenChange={setIsSelectOpen}
       >
         <SelectTrigger className="w-[11.25rem]" aria-label="选择直播账号">
           <SelectValue
             placeholder={!isAuthenticated ? '请先登录' : hasAccounts ? '选择账号' : '暂无账号'}
-          />
+          >
+            {selectedAccountName}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
           {/* 有账号时显示账号列表 */}
           {hasAccounts &&
             accountItems.map(account => {
-              const isDefault = defaultAccountId === account.id
+              const isCurrent = normalizedAccountId === account.id
               return (
-                <SelectItem
+                <div
                   key={account.id}
-                  value={account.id}
-                  className="flex items-center justify-between group"
+                  className="focus:bg-accent focus:text-accent-foreground flex w-full cursor-pointer items-center justify-between gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-hidden hover:bg-accent group"
+                  onClick={() => {
+                    handleAccountSwitch(account.id)
+                    setIsSelectOpen(false)
+                  }}
                 >
                   <span className="flex-1 truncate">{account.name}</span>
-                  <div className="flex items-center gap-1">
-                    {isDefault ? (
-                      <span className="rounded bg-primary/20 px-2 py-0.5 text-xs font-medium text-primary">
-                        默认
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        aria-label={`将 ${account.name} 设为默认账号`}
-                        onPointerDown={e => e.stopPropagation()}
-                        onClick={e => {
-                          e.stopPropagation()
-                          e.preventDefault()
-                          setDefaultAccount(account.id)
-                          toast.info({
-                            title: '默认账号已更新',
-                            description: `当前默认账号为“${account.name}”。`,
-                            dedupeKey: `default-account:${account.id}`,
-                          })
-                        }}
-                        className="ui-hover-item ml-2 rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground opacity-100 md:opacity-0 md:group-hover:opacity-100"
-                      >
-                        设为默认
-                      </button>
-                    )}
-                  </div>
-                </SelectItem>
+                  {isCurrent && (
+                    <span className="rounded bg-primary/20 px-2 py-0.5 text-xs font-medium text-primary">
+                      当前
+                    </span>
+                  )}
+                </div>
               )
             })}
 
@@ -184,10 +152,16 @@ export const AccountSwitcher = React.memo(() => {
               </div>
             </div>
           ) : (
-            <SelectItem value="__add_account__" className="flex items-center gap-2">
+            <div
+              className="focus:bg-accent focus:text-accent-foreground flex w-full cursor-pointer items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm text-primary outline-hidden hover:bg-accent"
+              onClick={() => {
+                handleAccountSwitch('__add_account__')
+                setIsSelectOpen(false)
+              }}
+            >
               <Plus className="h-4 w-4" />
               <span>添加账号…</span>
-            </SelectItem>
+            </div>
           )}
         </SelectContent>
       </Select>

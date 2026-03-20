@@ -39,9 +39,15 @@ const PlatformSelect = React.memo((props: { fullWidth?: boolean } = {}) => {
 
   // 账号切换时重置初始化状态
   useEffect(() => {
+    if (!currentAccountId) {
+      setHasInitialized(false)
+      setDefaultPlatform(null)
+      return
+    }
+
     setHasInitialized(false)
     setDefaultPlatform(null)
-  }, [])
+  }, [currentAccountId])
 
   // 初始化：加载默认平台
   useEffect(() => {

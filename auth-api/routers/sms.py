@@ -3,22 +3,19 @@ import logging
 import re
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
-from config import settings
 from database import get_db, is_mysql
 from deps import (
-    create_access_token,
-    create_refresh_token,
     hash_password,
-    token_hash,
+    issue_user_session,
 )
-from models import RefreshToken, SMSCode, Subscription, User
+from models import SMSCode, Subscription, User
 from schemas import (
     LoginResponse,
     UserOut,
@@ -273,26 +270,9 @@ def login_with_sms(
         raise HTTPException(status_code=403, detail="账号已被禁用，请联系客服")
 
     user.last_login_at = datetime.utcnow()
-    db.commit()
-
     user_id_str = str(user.id)
-    token = create_access_token(user_id_str)
-    refresh_raw = create_refresh_token(user_id_str)
-    refresh_hashed = token_hash(refresh_raw)
-    expires_at = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-
-    try:
-        from sqlalchemy import text as sa_text
-        db.execute(
-            sa_text(
-                "INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at) "
-                "VALUES (:rid, :uid, :th, :ea)"
-            ),
-            {"rid": str(uuid.uuid4()), "uid": str(user.id), "th": refresh_hashed, "ea": expires_at},
-        )
-        db.commit()
-    except Exception:
-        db.rollback()
+    token, refresh_raw, _refresh_token_id = issue_user_session(db, user_id_str)
+    db.commit()
 
     logger.info(f"[SMS] login success: phone={mask_phone(phone)}, username={user.username}")
 

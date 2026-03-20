@@ -1,8 +1,8 @@
 """JWT 与依赖：access_token 解析、get_current_user、refresh 校验；管理员 admin token 与审计日志"""
+import hashlib
 import json
 import logging
 import uuid
-import hashlib
 from datetime import datetime, timedelta
 from typing import Any, Optional
 
@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from config import settings
 from database import get_db
-from models import User
+from models import RefreshToken, User
 
 security = HTTPBearer(auto_error=False)
 logger = logging.getLogger(__name__)
@@ -45,10 +45,10 @@ def create_access_token(user_id: str, jti: Optional[str] = None) -> str:
     return jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
 
 
-def create_refresh_token(user_id: str) -> str:
+def create_refresh_token(user_id: str, jti: Optional[str] = None) -> str:
     """JWT with type=refresh，与 login 相同 SECRET+算法，较长有效期（如 7d）"""
     expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    payload = {"sub": user_id, "exp": expire, "type": "refresh"}
+    payload = {"sub": user_id, "exp": expire, "type": "refresh", "jti": jti or str(uuid.uuid4())}
     return jwt.encode(payload, settings.JWT_SECRET, algorithm="HS256")
 
 
@@ -90,6 +90,80 @@ def decode_access_token_jti(token: str) -> Optional[str]:
         return None
 
 
+def issue_user_session(
+    db: Session,
+    user_id: str,
+    *,
+    revoke_existing: bool = True,
+) -> tuple[str, str, str]:
+    """
+    为用户签发新的单设备会话。
+
+    真相源：
+    - refresh_tokens.id = 当前会话 ID
+    - access_token.jti = refresh_tokens.id
+    - 新登录时撤销该用户所有未撤销 refresh_token
+    """
+    now = datetime.utcnow()
+    if revoke_existing:
+        db.query(RefreshToken).filter(
+            RefreshToken.user_id == user_id,
+            RefreshToken.revoked_at.is_(None),
+        ).update({"revoked_at": now}, synchronize_session=False)
+
+    refresh_token_id = str(uuid.uuid4())
+    refresh_token = create_refresh_token(user_id, jti=refresh_token_id)
+    db.add(
+        RefreshToken(
+            id=refresh_token_id,
+            user_id=user_id,
+            token_hash=token_hash(refresh_token),
+            expires_at=now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+            created_at=now,
+        )
+    )
+    access_token = create_access_token(user_id, jti=refresh_token_id)
+    return access_token, refresh_token, refresh_token_id
+
+
+def require_active_access_session(token: str, db: Session) -> str:
+    """
+    校验 access_token 是否仍绑定当前有效会话。
+
+    规则：
+    - access_token 必须可解码且 type=access
+    - access_token 必须带 jti（指向 refresh_tokens.id）
+    - 该 refresh_token 必须存在、未撤销、未过期
+    """
+    user_id = decode_access_token(token)
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=err_token_invalid(),
+        )
+
+    jti = decode_access_token_jti(token)
+    if not jti:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=err_token_invalid(),
+        )
+
+    refresh_record = db.query(RefreshToken).filter(
+        RefreshToken.id == jti,
+        RefreshToken.user_id == user_id,
+        RefreshToken.revoked_at.is_(None),
+        RefreshToken.expires_at > datetime.utcnow(),
+    ).first()
+    if not refresh_record:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "kicked_out", "message": "您的账号已在其他设备登录，请重新登录"},
+        )
+
+    return user_id
+
+
 def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_db),
@@ -99,12 +173,7 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=err_token_invalid(),
         )
-    user_id = decode_access_token(credentials.credentials)
-    if not user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=err_token_invalid(),
-        )
+    user_id = require_active_access_session(credentials.credentials, db)
     user = db.query(User).filter(
         (User.id == user_id) | (User.username == user_id)
     ).first()
@@ -120,6 +189,25 @@ def get_current_user(
             db.commit()
         except Exception:
             db.rollback()
+    return user
+
+
+def get_optional_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: Session = Depends(get_db),
+) -> Optional[User]:
+    """获取当前用户，如果未登录则返回 None（不抛出异常）"""
+    if not credentials:
+        return None
+    try:
+        user_id = require_active_access_session(credentials.credentials, db)
+    except HTTPException:
+        return None
+    user = db.query(User).filter(
+        (User.id == user_id) | (User.username == user_id)
+    ).first()
+    if not user or user.status != "active":
+        return None
     return user
 
 

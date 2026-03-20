@@ -12,7 +12,7 @@
 import { useMemoizedFn } from 'ahooks'
 import { Plus, UserCircle2, Users } from 'lucide-react'
 import React, { useState } from 'react'
-import { useAccounts } from '@/hooks/useAccounts'
+import { normalizeAccountSelection, useAccounts } from '@/hooks/useAccounts'
 import { useCurrentLiveControl } from '@/hooks/useLiveControl'
 import { useToast } from '@/hooks/useToast'
 import { cn } from '@/lib/utils'
@@ -21,7 +21,7 @@ import { Button } from '../ui/button'
 import { Card } from '../ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog'
 import { Input } from '../ui/input'
-import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger } from '../ui/select'
+import { Select, SelectContent, SelectSeparator, SelectTrigger } from '../ui/select'
 import { AccountLimitDialog } from './AccountLimitDialog'
 
 // 调试日志开关
@@ -35,14 +35,7 @@ export const AccountSelector = React.memo(({ className }: AccountSelectorProps) 
   // 状态获取
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
   const _user = useAuthStore(s => s.user)
-  const {
-    accounts,
-    currentAccountId,
-    defaultAccountId,
-    addAccount,
-    switchAccount,
-    setDefaultAccount,
-  } = useAccounts()
+  const { accounts, currentAccountId, addAccount, switchAccount } = useAccounts()
   const connectState = useCurrentLiveControl(state => state.connectState)
   const { toast } = useToast()
 
@@ -50,9 +43,11 @@ export const AccountSelector = React.memo(({ className }: AccountSelectorProps) 
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [newAccountName, setNewAccountName] = useState('')
   const [isLimitDialogOpen, setIsLimitDialogOpen] = useState(false)
+  const [isSelectOpen, setIsSelectOpen] = useState(false)
 
   // 获取当前账号
-  const currentAccount = accounts.find(a => a.id === currentAccountId)
+  const normalizedSelection = normalizeAccountSelection(accounts, currentAccountId, null)
+  const currentAccount = accounts.find(a => a.id === normalizedSelection.currentAccountId)
   const hasAccounts = accounts.length > 0
 
   // 检查是否还可以添加账号
@@ -212,8 +207,10 @@ export const AccountSelector = React.memo(({ className }: AccountSelectorProps) 
     <>
       <Select
         disabled={connectState.status === 'connecting'}
-        value={currentAccountId}
+        value={normalizedSelection.currentAccountId}
         onValueChange={handleSwitchAccount}
+        open={isSelectOpen}
+        onOpenChange={setIsSelectOpen}
       >
         <SelectTrigger
           className={cn(
@@ -231,9 +228,7 @@ export const AccountSelector = React.memo(({ className }: AccountSelectorProps) 
               <span className="text-sm font-medium truncate max-w-[120px]">
                 {currentAccount?.name || '选择账号'}
               </span>
-              {defaultAccountId === currentAccountId && (
-                <span className="text-xs text-muted-foreground">默认账号</span>
-              )}
+              <span className="text-xs text-muted-foreground">当前账号</span>
             </div>
           </div>
         </SelectTrigger>
@@ -241,13 +236,16 @@ export const AccountSelector = React.memo(({ className }: AccountSelectorProps) 
           <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">切换账号</div>
 
           {accounts.map(account => {
-            const isDefault = account.id === defaultAccountId
+            const isCurrent = account.id === normalizedSelection.currentAccountId
 
             return (
-              <SelectItem
+              <div
                 key={account.id}
-                value={account.id}
-                className="flex items-center justify-between py-2 cursor-pointer group"
+                className="focus:bg-accent focus:text-accent-foreground flex w-full cursor-pointer items-center justify-between rounded-sm py-2 pr-8 pl-2 text-sm outline-hidden hover:bg-accent group"
+                onClick={() => {
+                  handleSwitchAccount(account.id)
+                  setIsSelectOpen(false)
+                }}
               >
                 <div className="flex items-center gap-2">
                   <UserCircle2 className="h-4 w-4 text-muted-foreground" />
@@ -255,40 +253,28 @@ export const AccountSelector = React.memo(({ className }: AccountSelectorProps) 
                 </div>
 
                 <div className="flex items-center gap-1">
-                  {isDefault ? (
+                  {isCurrent ? (
                     <span className="px-2 py-0.5 text-[11px] rounded bg-primary/20 text-primary font-medium">
-                      默认
+                      当前
                     </span>
-                  ) : (
-                    <button
-                      type="button"
-                      onPointerDown={e => e.stopPropagation()}
-                      onClick={e => {
-                        e.stopPropagation()
-                        e.preventDefault()
-                        setDefaultAccount(account.id)
-                        toast.success(`已将默认账号设置为：${account.name}`)
-                      }}
-                      className="ui-hover-item ml-2 rounded bg-muted px-2 py-0.5 text-[11px] text-muted-foreground opacity-0 transition-all duration-200 group-hover:opacity-100"
-                    >
-                      设为默认
-                    </button>
-                  )}
+                  ) : null}
                 </div>
-              </SelectItem>
+              </div>
             )
           })}
 
           <SelectSeparator />
 
-          <SelectItem
-            value="__add_account__"
-            className="flex items-center gap-2 text-primary cursor-pointer"
-            onClick={openAddDialog}
+          <div
+            className="focus:bg-accent focus:text-accent-foreground flex w-full cursor-pointer items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm text-primary outline-hidden hover:bg-accent"
+            onClick={() => {
+              openAddDialog()
+              setIsSelectOpen(false)
+            }}
           >
             <Plus className="h-4 w-4" />
             <span>添加新账号</span>
-          </SelectItem>
+          </div>
         </SelectContent>
       </Select>
 

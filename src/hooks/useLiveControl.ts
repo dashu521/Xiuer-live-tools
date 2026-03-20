@@ -167,8 +167,8 @@ export const useLiveControlStore = create<LiveControlStore>()(
             }
 
             accounts.forEach(account => {
-              // 【修复】跳过当前账号，保留其现有上下文
-              if (account.id === currentAccountId) {
+              // 【修复】仅在当前账号已有内存上下文时才跳过，避免启动后当前账号无法从存储恢复
+              if (account.id === currentAccountId && currentContext) {
                 console.log(
                   '[LiveControl] 保留当前账号上下文:',
                   account.id,
@@ -188,8 +188,7 @@ export const useLiveControlStore = create<LiveControlStore>()(
                   savedContext.connectState.status === 'connecting'
                     ? {
                         ...DEFAULT_CONNECT_STATE,
-                        platform:
-                          savedContext.connectState.platform || DEFAULT_CONNECT_STATE.platform,
+                        platform: savedContext.connectState.platform || '',
                       }
                     : { ...savedContext.connectState }
 

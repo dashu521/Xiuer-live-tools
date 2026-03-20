@@ -164,7 +164,7 @@ async function doRefresh(): Promise<string | null> {
   const { setToken, clearTokensAndUnauth } = useAuthStore.getState()
   const authAPI = window.authAPI
   if (!authAPI?.refreshSession) {
-    clearTokensAndUnauth()
+    await clearTokensAndUnauth()
     return null
   }
 
@@ -179,7 +179,7 @@ async function doRefresh(): Promise<string | null> {
       if (errorCode === 'kicked_out' || errorMessage.includes('其他设备')) {
         dispatchKickedOutEvent(errorMessage || '您的账号已在其他设备登录')
       }
-      clearTokensAndUnauth()
+      await clearTokensAndUnauth()
       return null
     }
 
@@ -187,7 +187,7 @@ async function doRefresh(): Promise<string | null> {
     return result.token
   } catch (err) {
     console.error('[apiClient] Failed to refresh session via main process:', err)
-    clearTokensAndUnauth()
+    await clearTokensAndUnauth()
     return null
   }
 }
@@ -209,7 +209,7 @@ export async function requestWithRefresh<T>(
   // 检查是否是被踢下线的错误
   if (result.error?.code === 'kicked_out') {
     dispatchKickedOutEvent(result.error.message || '您的账号已在其他设备登录')
-    useAuthStore.getState().clearTokensAndUnauth()
+    await useAuthStore.getState().clearTokensAndUnauth()
     return result
   }
 
@@ -509,6 +509,8 @@ export async function getGiftCardHistory(
 
 export interface UserConfigData {
   accounts?: Array<{ id: string; name: string }>
+  currentAccountId?: string
+  defaultAccountId?: string | null
   platformPreferences?: Record<string, { defaultPlatform: string; updatedAt: string }>
   autoReplyConfigs?: Record<string, unknown>
   autoMessageConfigs?: Record<string, unknown>
@@ -542,4 +544,29 @@ export async function syncUserConfig(
   config: UserConfigData,
 ): Promise<ApiResult<SyncConfigResponse>> {
   return requestWithRefresh<SyncConfigResponse>('POST', '/config/sync', { config })
+}
+
+// ===================== 用户反馈 =====================
+
+export interface SubmitFeedbackRequest {
+  category: string
+  content: string
+  contact?: string
+  platform?: string
+  app_version?: string
+  os_info?: string
+  diagnostic_info?: Record<string, unknown>
+}
+
+export interface SubmitFeedbackResponse {
+  success: boolean
+  message: string
+  feedback_id?: string
+}
+
+/** POST /feedback/submit：提交用户反馈（需要登录） */
+export async function submitFeedback(
+  data: SubmitFeedbackRequest,
+): Promise<ApiResult<SubmitFeedbackResponse>> {
+  return requestWithRefresh<SubmitFeedbackResponse>('POST', '/feedback/submit', data)
 }

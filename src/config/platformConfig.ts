@@ -119,7 +119,7 @@ export interface ConnectState {
 }
 
 export const DEFAULT_CONNECT_STATE: ConnectState = {
-  platform: 'buyin', // 默认平台：巨量百应
+  platform: '',
   status: 'disconnected',
   phase: 'idle',
   session: null,

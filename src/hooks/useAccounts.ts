@@ -10,6 +10,32 @@ interface Account {
   name: string
 }
 
+export function normalizeAccountSelection<T extends { id: string }>(
+  accounts: T[],
+  currentAccountId: string,
+  defaultAccountId: string | null,
+): { currentAccountId: string; defaultAccountId: string | null } {
+  const firstAccountId = accounts[0]?.id ?? ''
+  const accountIds = new Set(accounts.map(account => account.id))
+
+  if (!firstAccountId) {
+    return {
+      currentAccountId: '',
+      defaultAccountId: null,
+    }
+  }
+
+  const nextDefaultAccountId =
+    defaultAccountId && accountIds.has(defaultAccountId) ? defaultAccountId : firstAccountId
+  const nextCurrentAccountId =
+    currentAccountId && accountIds.has(currentAccountId) ? currentAccountId : nextDefaultAccountId
+
+  return {
+    currentAccountId: nextCurrentAccountId,
+    defaultAccountId: nextDefaultAccountId,
+  }
+}
+
 interface AccountsStore {
   accounts: Account[]
   currentAccountId: string
@@ -118,9 +144,13 @@ export const useAccounts = create<AccountsStore>()(
           id: newId,
           name,
         })
-        if (!state.defaultAccountId && state.accounts.length > 0) {
-          state.defaultAccountId = state.currentAccountId || state.accounts[0].id
-        }
+        const normalized = normalizeAccountSelection(
+          state.accounts,
+          state.currentAccountId,
+          state.defaultAccountId,
+        )
+        state.currentAccountId = normalized.currentAccountId
+        state.defaultAccountId = normalized.defaultAccountId
       })
 
       // 在 set 外部调用 saveToStorage，确保使用最新的状态
@@ -270,8 +300,13 @@ export const useAccounts = create<AccountsStore>()(
 
         if (loadedData) {
           state.accounts = loadedData.accounts || []
-          state.currentAccountId = loadedData.currentAccountId || ''
-          state.defaultAccountId = loadedData.defaultAccountId || null
+          const normalized = normalizeAccountSelection(
+            state.accounts,
+            loadedData.currentAccountId || '',
+            loadedData.defaultAccountId || null,
+          )
+          state.currentAccountId = normalized.currentAccountId
+          state.defaultAccountId = normalized.defaultAccountId
           console.log('[useAccounts] 加载完成，账号数:', state.accounts.length)
         } else {
           state.accounts = []

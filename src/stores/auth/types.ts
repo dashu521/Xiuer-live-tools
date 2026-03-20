@@ -43,7 +43,7 @@ export interface AuthStoreActions {
   setUser: (user: SafeUser | null) => void
   setToken: (token: string | null) => void
   setRefreshToken: (refreshToken: string | null) => void
-  clearTokensAndUnauth: () => void
+  clearTokensAndUnauth: () => Promise<void>
   setUserStatus: (userStatus: UserStatus | null) => void
   refreshUserStatus: () => Promise<UserStatus | null>
   startTrialAndRefresh: () => Promise<

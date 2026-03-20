@@ -1,5 +1,4 @@
 """POST /register, /login（无 /auth 前缀）；/refresh, /status, /trial/*"""
-import hashlib
 import logging
 import re
 import time
@@ -19,13 +18,13 @@ from config import settings
 from database import get_db, is_mysql
 from deps import (
     create_access_token,
-    create_refresh_token,
-    decode_access_token,
-    decode_access_token_jti,
     decode_refresh_token,
     get_current_user,
     hash_password,
+    issue_user_session,
+    require_active_access_session,
     security,
+    token_hash,
     verify_password,
 )
 from models import RefreshToken, Subscription, User
@@ -66,11 +65,6 @@ def is_email(s: str) -> bool:
 
 def is_phone(s: str) -> bool:
     return bool(re.match(r"^1[3-9]\d{9}$", s))
-
-
-def token_hash(raw: str) -> str:
-    return hashlib.sha256(raw.encode()).hexdigest()
-
 
 def build_user_status_response(user: User, db: Optional[Session] = None) -> UserStatusResponse:
     """拼装 /auth/status 返回结构（含 plan、trial）。
@@ -235,27 +229,7 @@ def login(body: LoginBody, db: Session = Depends(get_db)):
             detail=err_wrong_password(),
         )
 
-    # 【单设备登录】撤销该用户所有旧的 refresh_token
-    db.query(RefreshToken).filter(
-        RefreshToken.user_id == user.id,
-        RefreshToken.revoked_at.is_(None)
-    ).update({"revoked_at": datetime.utcnow()})
-
-    # 生成 refresh_token 并保存
-    refresh_token = create_refresh_token(user.id)
-    refresh_token_id = str(uuid.uuid4())
-    token_hash = hashlib.sha256(refresh_token.encode()).hexdigest()
-    expires_at = datetime.utcnow() + timedelta(days=7)
-    db.add(RefreshToken(
-        id=refresh_token_id,
-        token_hash=token_hash,
-        user_id=user.id,
-        expires_at=expires_at,
-        created_at=datetime.utcnow(),
-    ))
-
-    # 生成 access_token，jti = refresh_token.id 用于会话级检查
-    access_token = create_access_token(user.id, jti=refresh_token_id)
+    access_token, refresh_token, _refresh_token_id = issue_user_session(db, user.id)
 
     # 更新最后登录时间
     user.last_login_at = datetime.utcnow()
@@ -344,24 +318,12 @@ def register(body: RegisterBody, db: Session = Depends(get_db)):
         except Exception:
             db.rollback()
 
-        # 生成 token
-        token = create_access_token(user_id)
-        refresh_raw = create_refresh_token(user_id)
-        refresh_hashed = token_hash(refresh_raw)
-        expires_at = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-
-        try:
-            from sqlalchemy import text as sa_text
-            db.execute(
-                sa_text(
-                    "INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at) "
-                    "VALUES (:rid, :uid, :th, :ea)"
-                ),
-                {"rid": str(uuid.uuid4()), "uid": user_id, "th": refresh_hashed, "ea": expires_at},
-            )
-            db.commit()
-        except Exception:
-            db.rollback()
+        access_token, refresh_raw, _refresh_token_id = issue_user_session(
+            db,
+            user_id,
+            revoke_existing=False,
+        )
+        db.commit()
 
         return AuthResponse(
             user=UserOut(
@@ -372,7 +334,7 @@ def register(body: RegisterBody, db: Session = Depends(get_db)):
                 last_login_at=None,
                 status="active",
             ),
-            access_token=token,
+            access_token=access_token,
             refresh_token=refresh_raw,
             token_type="bearer",
         )
@@ -456,9 +418,9 @@ def refresh_token(
         )
 
     # 验证 token 是否存在于数据库且未被撤销
-    token_hash = hashlib.sha256(body.refresh_token.encode()).hexdigest()
+    hashed_refresh_token = token_hash(body.refresh_token)
     refresh_record = db.query(RefreshToken).filter(
-        RefreshToken.token_hash == token_hash,
+        RefreshToken.token_hash == hashed_refresh_token,
         RefreshToken.expires_at > datetime.utcnow()
     ).first()
 
@@ -597,28 +559,5 @@ def session_check(
             detail=err_token_invalid(),
         )
 
-    # 2. 获取 jti（会话标识）
-    jti = decode_access_token_jti(credentials.credentials)
-    if not jti:
-        # 旧 token 无 jti，要求重新登录
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "token_invalid", "message": "请重新登录"},
-        )
-
-    # 3. 【会话级检查】精确检查该 jti 对应的 refresh_token 是否仍有效
-    refresh_record = db.query(RefreshToken).filter(
-        RefreshToken.id == jti,                    # 精确匹配当前会话
-        RefreshToken.revoked_at.is_(None),          # 未被撤销
-        RefreshToken.expires_at > datetime.utcnow() # 未过期
-    ).first()
-
-    if not refresh_record:
-        # 当前会话已被顶掉（该 refresh_token 被撤销或过期）
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "kicked_out", "message": "您的账号已在其他设备登录，请重新登录"},
-        )
-
-    # 4. 会话有效
-    return {"ok": True, "user_id": refresh_record.user_id}
+    user_id = require_active_access_session(credentials.credentials, db)
+    return {"ok": True, "user_id": user_id}
