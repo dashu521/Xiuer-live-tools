@@ -1,3 +1,4 @@
+import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const storage = new Map<string, string>()
@@ -77,8 +78,12 @@ describe('kickout cleanup', () => {
     }
 
     useAccounts.setState({
-      accounts: [{ id: 'acc-1', name: '账号A' }],
-      currentAccountId: 'acc-1',
+      accounts: [
+        { id: 'acc-1', name: '账号A' },
+        { id: 'acc-2', name: '账号B' },
+        { id: 'acc-3', name: '账号C' },
+      ],
+      currentAccountId: 'acc-2',
       defaultAccountId: 'acc-1',
       currentUserId: 'user-1',
     })
@@ -96,6 +101,16 @@ describe('kickout cleanup', () => {
           accountName: '账号A',
           streamState: 'live',
         },
+        'acc-2': {
+          connectState: { ...DEFAULT_CONNECT_STATE, status: 'connected' },
+          accountName: '账号B',
+          streamState: 'live',
+        },
+        'acc-3': {
+          connectState: { ...DEFAULT_CONNECT_STATE, status: 'connected' },
+          accountName: '账号C',
+          streamState: 'live',
+        },
       },
     })
     useAutoMessageStore.setState({
@@ -107,6 +122,15 @@ describe('kickout cleanup', () => {
             scheduler: { interval: [1, 2] },
             messages: [],
             random: false,
+            extraSpaces: false,
+          },
+        },
+        'acc-3': {
+          isRunning: true,
+          config: {
+            scheduler: { interval: [2, 3] },
+            messages: [],
+            random: true,
             extraSpaces: false,
           },
         },
@@ -124,12 +148,24 @@ describe('kickout cleanup', () => {
           },
           shortcuts: [],
         },
+        'acc-2': {
+          isRunning: true,
+          config: {
+            scheduler: { interval: [2, 3] },
+            goods: [],
+            random: true,
+          },
+          shortcuts: [],
+        },
       },
     })
     useAutoReplyConfigStore.setState({
       currentUserId: 'user-1',
       contexts: {
         'acc-1': {
+          config: createDefaultConfig(),
+        },
+        'acc-2': {
           config: createDefaultConfig(),
         },
       },
@@ -140,6 +176,11 @@ describe('kickout cleanup', () => {
         'acc-1': {
           path: '/tmp/chrome',
           storageState: '/tmp/chrome-user',
+          headless: false,
+        },
+        'acc-2': {
+          path: '/tmp/chrome-b',
+          storageState: '/tmp/chrome-user-b',
           headless: false,
         },
       },
@@ -179,8 +220,12 @@ describe('kickout cleanup', () => {
     })
 
     useAccounts.setState({
-      accounts: [{ id: 'acc-1', name: '账号A' }],
-      currentAccountId: 'acc-1',
+      accounts: [
+        { id: 'acc-1', name: '账号A' },
+        { id: 'acc-2', name: '账号B' },
+        { id: 'acc-3', name: '账号C' },
+      ],
+      currentAccountId: 'acc-2',
       defaultAccountId: 'acc-1',
       currentUserId: 'user-1',
     })
@@ -195,7 +240,21 @@ describe('kickout cleanup', () => {
     await useAuthStore.getState().clearTokensAndUnauth()
 
     expect(clearTokensMock).toHaveBeenCalledTimes(1)
-    expect(invokeMock).toHaveBeenCalled()
+    expect(invokeMock).toHaveBeenCalledTimes(12)
+    expect(invokeMock.mock.calls).toEqual([
+      [IPC_CHANNELS.tasks.commentListener.stop, 'acc-1'],
+      [IPC_CHANNELS.tasks.autoMessage.stop, 'acc-1'],
+      [IPC_CHANNELS.tasks.autoPopUp.stop, 'acc-1'],
+      [IPC_CHANNELS.tasks.liveControl.disconnect, 'acc-1'],
+      [IPC_CHANNELS.tasks.commentListener.stop, 'acc-2'],
+      [IPC_CHANNELS.tasks.autoMessage.stop, 'acc-2'],
+      [IPC_CHANNELS.tasks.autoPopUp.stop, 'acc-2'],
+      [IPC_CHANNELS.tasks.liveControl.disconnect, 'acc-2'],
+      [IPC_CHANNELS.tasks.commentListener.stop, 'acc-3'],
+      [IPC_CHANNELS.tasks.autoMessage.stop, 'acc-3'],
+      [IPC_CHANNELS.tasks.autoPopUp.stop, 'acc-3'],
+      [IPC_CHANNELS.tasks.liveControl.disconnect, 'acc-3'],
+    ])
 
     const authState = useAuthStore.getState()
     expect(authState.isAuthenticated).toBe(false)

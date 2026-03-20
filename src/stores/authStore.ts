@@ -106,6 +106,62 @@ function buildUserFromStatus(currentUser: SafeUser, status: UserStatus): SafeUse
   }
 }
 
+function getScopedAccountIdsForCleanup(): string[] {
+  const { accounts, currentAccountId } = useAccounts.getState()
+  const scopedIds = new Set<string>()
+
+  for (const account of accounts) {
+    if (account?.id) {
+      scopedIds.add(account.id)
+    }
+  }
+
+  if (currentAccountId) {
+    scopedIds.add(currentAccountId)
+  }
+
+  return Array.from(scopedIds)
+}
+
+async function stopRuntimeTasksForAccount(accountId: string): Promise<void> {
+  try {
+    await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.commentListener.stop, accountId)
+  } catch (error) {
+    console.log(`[AuthStore] 停止评论监听失败（可能未运行）: ${accountId}`, error)
+  }
+
+  try {
+    await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.autoMessage.stop, accountId)
+  } catch (error) {
+    console.log(`[AuthStore] 停止自动发言失败（可能未运行）: ${accountId}`, error)
+  }
+
+  try {
+    await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.autoPopUp.stop, accountId)
+  } catch (error) {
+    console.log(`[AuthStore] 停止自动弹窗失败（可能未运行）: ${accountId}`, error)
+  }
+
+  try {
+    await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.liveControl.disconnect, accountId)
+  } catch (error) {
+    console.log(`[AuthStore] 断开连接失败（可能未连接）: ${accountId}`, error)
+  }
+}
+
+async function stopRuntimeTasksForAllAccounts(reason: string): Promise<void> {
+  const accountIds = getScopedAccountIdsForCleanup()
+  if (accountIds.length === 0) {
+    console.log(`[AuthStore] 跳过任务清理，未找到账号。reason=${reason}`)
+    return
+  }
+
+  console.log(`[AuthStore] 正在停止账号任务。reason=${reason}, accounts=${accountIds.join(',')}`)
+  for (const accountId of accountIds) {
+    await stopRuntimeTasksForAccount(accountId)
+  }
+}
+
 function applyUserStatusSnapshot(
   set: (
     partial: Partial<AuthStore> | ((state: AuthStore) => Partial<AuthStore>),
@@ -504,49 +560,7 @@ export const useAuthStore = create<AuthStore>()(
       // Logout action
       logout: async () => {
         try {
-          // 【修复】先停止所有正在运行的任务和断开连接
-          console.log('[AuthStore] 正在停止所有任务和断开连接...')
-          const _accounts = useAccounts.getState().accounts
-          const currentAccountId = useAccounts.getState().currentAccountId
-
-          // 停止当前账号的所有任务
-          if (currentAccountId) {
-            try {
-              // 停止评论监听（自动回复和数据监控）
-              await window.ipcRenderer.invoke(
-                IPC_CHANNELS.tasks.commentListener.stop,
-                currentAccountId,
-              )
-            } catch (e) {
-              console.log('[AuthStore] 停止评论监听失败（可能未运行）:', e)
-            }
-
-            try {
-              // 停止自动发言
-              await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.autoMessage.stop, currentAccountId)
-            } catch (e) {
-              console.log('[AuthStore] 停止自动发言失败（可能未运行）:', e)
-            }
-
-            try {
-              // 停止自动弹窗
-              await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.autoPopUp.stop, currentAccountId)
-            } catch (e) {
-              console.log('[AuthStore] 停止自动弹窗失败（可能未运行）:', e)
-            }
-
-            try {
-              // 断开直播中控台连接
-              await window.ipcRenderer.invoke(
-                IPC_CHANNELS.tasks.liveControl.disconnect,
-                currentAccountId,
-              )
-            } catch (e) {
-              console.log('[AuthStore] 断开连接失败（可能未连接）:', e)
-            }
-          }
-
-          console.log('[AuthStore] 所有任务已停止')
+          await stopRuntimeTasksForAllAccounts('logout')
 
           // [SECURITY] 调用主进程登出，清理安全存储中的 token
           try {
@@ -831,38 +845,7 @@ export const useAuthStore = create<AuthStore>()(
         }
 
         try {
-          const currentAccountId = useAccounts.getState().currentAccountId
-          if (currentAccountId) {
-            try {
-              await window.ipcRenderer.invoke(
-                IPC_CHANNELS.tasks.commentListener.stop,
-                currentAccountId,
-              )
-            } catch (e) {
-              console.log('[AuthStore] 停止评论监听失败（可能未运行）:', e)
-            }
-
-            try {
-              await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.autoMessage.stop, currentAccountId)
-            } catch (e) {
-              console.log('[AuthStore] 停止自动发言失败（可能未运行）:', e)
-            }
-
-            try {
-              await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.autoPopUp.stop, currentAccountId)
-            } catch (e) {
-              console.log('[AuthStore] 停止自动弹窗失败（可能未运行）:', e)
-            }
-
-            try {
-              await window.ipcRenderer.invoke(
-                IPC_CHANNELS.tasks.liveControl.disconnect,
-                currentAccountId,
-              )
-            } catch (e) {
-              console.log('[AuthStore] 断开连接失败（可能未连接）:', e)
-            }
-          }
+          await stopRuntimeTasksForAllAccounts('kicked_out_cleanup')
         } catch (error) {
           console.error('[AuthStore] Failed to stop runtime tasks during unauth cleanup:', error)
         }
