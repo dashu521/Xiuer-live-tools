@@ -59,7 +59,7 @@ const MEMBERSHIP_OVERVIEW: Record<
   { price: string; accountLimit: string; summary: string }
 > = {
   trial: {
-    price: '免费试用 7 天',
+    price: '免费试用 3 天',
     accountLimit: '最多添加 1 个直播账号',
     summary: '适合短期体验全部核心功能',
   },
