@@ -1,7 +1,7 @@
 # 秀儿直播助手
 
-> **版本**: v1.3.3
-> **最后更新**: 2026-03-16
+> **版本**: v1.4.2
+> **最后更新**: 2026-03-21
 > **状态**: 当前有效
 > **负责人**: TEAM
 > **当前适用性**: 项目总入口文档
@@ -50,9 +50,9 @@
 
 | 平台 | 下载地址 | 适用系统 |
 |------|----------|----------|
-| Windows | [下载 Windows 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_win-x64.exe) | Windows 10/11 64位 |
-| macOS Apple 芯片 | [下载 Apple 芯片版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_macos_arm64.dmg) | M1/M2/M3/M4 Mac |
-| macOS Intel | [下载 Intel 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_macos_x64.dmg) | Intel 处理器 Mac |
+| Windows | [下载 Windows 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.4.2_win-x64.exe) | Windows 10/11 64位 |
+| macOS Apple 芯片 | [下载 Apple 芯片版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.4.2_macos_arm64.dmg) | M1/M2/M3/M4 Mac |
+| macOS Intel | [下载 Intel 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.4.2_macos_x64.dmg) | Intel 处理器 Mac |
 
 > **安装提示**：
 > - Windows：如果浏览器提示风险，请点击"保留"或"更多信息"→"仍要运行"
@@ -123,6 +123,41 @@ npm run auth:check
 └── scripts/           # 构建和发布脚本
 ```
 
+## 仓库边界
+
+本仓库当前不是纯前端仓库，而是“桌面应用 + 认证后端 + 发布配套资产”的单仓库结构。
+
+### 应用核心
+
+- `src/`：React 渲染进程
+- `electron/`：Electron 主进程与 preload
+- `shared/`：前后端共享类型、规则和常量
+- `public/`：应用图标、静态资源
+- `auth-api/`：认证、配置同步、管理后台接口
+
+### 发布与质量保障
+
+- `.github/workflows/`：Windows 构建、OSS 上传、质量门禁
+- `scripts/`：构建、发布、校验、图标生成、更新验证脚本
+- `release-notes/`：版本发布说明
+
+### 配套资产
+
+- `docs/`：规范、架构、发布与排障文档
+- `deploy/`：服务器部署与运维脚本
+- `download-page/`：下载页静态资源
+- `website/`：官网静态资源
+
+### 历史与归档
+
+- `docs/archive/`：历史审计、修复记录、旧版评估文档
+
+判断标准：
+
+- 应用启动、打包、自动更新会直接读取的内容，属于“应用核心”或“发布与质量保障”
+- 仅用于说明、运维、官网、下载页的内容，不属于应用运行必需
+- 历史报告不再放根目录，统一归档到 `docs/archive/`
+
 ## 构建命令说明
 
 | 命令 | 说明 |
@@ -189,12 +224,12 @@ npm run auth:check
 
 ## 当前稳定版本
 
-**v1.3.3** - 当前稳定版本
+**v1.4.2** - 当前稳定版本
 
-- 延续多平台直播中控台连接与自动化能力
-- 持续完善认证、套餐权限与多账号隔离逻辑
-- 优化桌面端更新、发布和构建链路
-- 补充测试、回归和发布检查脚本
+- 新增功能需求提交流程与后台管理支持
+- 修复同账号多设备登录后旧设备下线闭环
+- 完善多账号切换、平台隔离和用户配置云同步
+- 收敛仓库结构，清理非产品必需内容并归档历史报告
 
 ## 技术支持
 
