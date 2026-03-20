@@ -15,8 +15,8 @@
 | **spec** | 规范文档，定义系统行为 | live-control-lifecycle-spec.md |
 | **architecture** | 架构文档，定义系统结构 | access-control-architecture.md |
 | **tasks** | 任务清单，跟踪开发进度 | ONLINE_UPDATE_TASKS.md |
-| **audit** | 审计报告，记录问题发现 | SECURITY_AUDIT_REPORT.md |
-| **report** | 修复报告，记录问题解决 | ACCOUNT_FIX_REPORT.md |
+| **audit** | 审计报告，记录问题发现 | docs/archive/root-reports/SECURITY_AUDIT_REPORT.md |
+| **report** | 修复报告，记录问题解决 | docs/archive/root-reports/ACCOUNT_FIX_REPORT.md |
 | **archive** | 历史归档，仅供历史参考 | docs/archive/* |
 
 ---
@@ -30,8 +30,8 @@
 | 规范文档 | `*-spec.md` 或 `SPECIFICATION.md` | live-control-lifecycle-spec.md |
 | 架构文档 | `*-architecture.md` | access-control-architecture.md |
 | 任务清单 | `*_TASKS.md` 或 `*-checklist.md` | ONLINE_UPDATE_TASKS.md |
-| 审计报告 | `*_AUDIT_REPORT.md` | SECURITY_AUDIT_REPORT.md |
-| 修复报告 | `*_FIX_REPORT.md` | ACCOUNT_FIX_REPORT.md |
+| 审计报告 | `*_AUDIT_REPORT.md` | docs/archive/root-reports/SECURITY_AUDIT_REPORT.md |
+| 修复报告 | `*_FIX_REPORT.md` | docs/archive/root-reports/ACCOUNT_FIX_REPORT.md |
 | 检查清单 | `*_CHECKLIST.md` | REGRESSION_CHECKLIST.md |
 
 ### 2.2 禁止命名

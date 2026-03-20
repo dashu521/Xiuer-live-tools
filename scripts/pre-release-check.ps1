@@ -54,4 +54,4 @@ if (Test-Path $releaseDir) {
 Write-Host ""
 
 Write-Host "=== Pre-Release Check done ===" -ForegroundColor Cyan
-Write-Host "Next: commit changes, tag (e.g. v1.0.0), run 'npm run dist', push, then create Release page. See RELEASE_PRE_FLIGHT_REPORT.md"
+Write-Host "Next: commit changes, tag (e.g. v1.0.0), run 'npm run dist', push, then create Release page. See docs/archive/root-reports/RELEASE_PRE_FLIGHT_REPORT.md"

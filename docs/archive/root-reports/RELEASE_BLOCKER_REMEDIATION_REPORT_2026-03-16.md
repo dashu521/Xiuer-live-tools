@@ -2,7 +2,7 @@
 
 - 日期：2026-03-16
 - 目标版本：`v1.3.2`
-- 关联方案：[docs/RELEASE_BLOCKER_REMEDIATION_PLAN_2026-03-16.md](docs/RELEASE_BLOCKER_REMEDIATION_PLAN_2026-03-16.md)
+- 关联方案：[docs/RELEASE_BLOCKER_REMEDIATION_PLAN_2026-03-16.md](../../RELEASE_BLOCKER_REMEDIATION_PLAN_2026-03-16.md)
 
 ## 一、已完成修复
 
@@ -83,4 +83,3 @@
 - 代码/配置类发布阻断：`已基本修复`
 - 流程状态类发布阻断：`仍需在发布前清理工作区`
 - 本轮修复未发现新的功能回归、兼容性问题或明显性能退化
-

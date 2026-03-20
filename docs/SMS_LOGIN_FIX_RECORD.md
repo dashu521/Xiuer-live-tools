@@ -105,5 +105,5 @@ const result = await authAPI.loginWithSms(phone, code)
 ## 相关文档
 
 - `docs/REGRESSION_CHECKLIST.md` - 回归验证清单（已更新修复状态）
-- `USABILITY_FIX_SUMMARY.md` - 功能可用性修复总结
-- `ERROR_FIX_SUMMARY.md` - 错误提示优化总结
+- `docs/archive/root-reports/USABILITY_FIX_SUMMARY.md` - 功能可用性修复总结
+- `docs/archive/root-reports/ERROR_FIX_SUMMARY.md` - 错误提示优化总结
