@@ -354,12 +354,16 @@ class FeedbackCategory:
     LOGIN = "login"  # 登录问题
     FUNCTION = "function"  # 功能异常
     SUGGESTION = "suggestion"  # 建议反馈
+    FEATURE_REQUEST = "feature_request"  # 功能需求
     OTHER = "other"  # 其他
 
 
 class SubmitFeedbackBody(BaseModel):
     """提交反馈请求体"""
-    category: str = Field(..., description="问题类型: connection/login/function/suggestion/other")
+    category: str = Field(
+        ...,
+        description="问题类型: connection/login/function/suggestion/feature_request/other",
+    )
     content: str = Field(..., min_length=10, max_length=2000, description="问题描述")
     contact: Optional[str] = Field(None, max_length=100, description="联系方式（可选）")
     platform: Optional[str] = Field(None, description="当前平台")
@@ -385,6 +389,7 @@ class FeedbackOut(BaseModel):
     platform: Optional[str] = None
     app_version: Optional[str] = None
     os_info: Optional[str] = None
+    diagnostic_info: Optional[dict] = None
     status: str
     created_at: Optional[str] = None
     updated_at: Optional[str] = None

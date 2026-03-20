@@ -133,6 +133,19 @@
     .tab:hover { color: var(--gray-700); }
     .tab.active { color: var(--blue); border-bottom-color: var(--blue); }
 
+    /* Feedback table */
+    .feedback-desc-cell { white-space: normal; width: 17em; min-width: 17em; max-width: 17em; }
+    .feedback-desc-text {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      overflow: hidden;
+      line-height: 1.5;
+      max-height: 4.5em;
+      word-break: break-all;
+      white-space: normal;
+    }
+
     .hidden { display: none !important; }
   </style>
 </head>
@@ -170,6 +183,7 @@
   <div class="tabs">
     <div class="tab active" data-tab="users">用户管理</div>
     <div class="tab" data-tab="giftcards">礼品卡</div>
+    <div class="tab" data-tab="feedbacks">反馈管理</div>
     <div class="tab" data-tab="logs">操作日志</div>
   </div>
 
@@ -341,6 +355,87 @@
       <div class="pagination" id="logsPagination"></div>
     </div>
   </div>
+
+  <!-- Feedbacks Tab -->
+  <div id="tabFeedbacks" class="hidden">
+    <div class="toolbar">
+      <select id="fbStatusFilter">
+        <option value="">全部状态</option>
+        <option value="pending">待处理</option>
+        <option value="processing">处理中</option>
+        <option value="resolved">已解决</option>
+        <option value="closed">已关闭</option>
+      </select>
+      <select id="fbCategoryFilter">
+        <option value="">全部类型</option>
+        <option value="connection">连接问题</option>
+        <option value="login">登录问题</option>
+        <option value="function">功能异常</option>
+        <option value="suggestion">建议反馈</option>
+        <option value="feature_request">功能需求</option>
+        <option value="other">其他</option>
+      </select>
+      <button id="btnFeedbackFilter">筛选</button>
+      <button class="sm" id="btnFeedbackReset">重置</button>
+      <div class="spacer"></div>
+      <span class="stats" id="fbStatsText"></span>
+    </div>
+    <div class="card" id="fbCard">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>提交时间</th>
+              <th>用户名</th>
+              <th>联系方式</th>
+              <th>类型</th>
+              <th>问题描述</th>
+              <th>平台</th>
+              <th>版本</th>
+              <th>状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="fbBody"></tbody>
+        </table>
+      </div>
+      <div id="fbLoading" class="hidden" style="text-align:center;padding:20px;color:var(--gray-500);"><span class="spinner"></span> 加载中...</div>
+      <div id="fbEmpty" class="hidden" style="text-align:center;padding:20px;color:var(--gray-500);">暂无反馈数据</div>
+      <div class="pagination" id="fbPagination"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Feedback Detail -->
+<div id="modalFeedbackDetail" class="modal">
+  <div class="modal-content" style="max-width:760px;">
+    <div class="modal-title">反馈详情</div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;margin-bottom:16px;">
+      <div><strong>用户：</strong><span id="fbDetailUsername">-</span></div>
+      <div><strong>联系方式：</strong><span id="fbDetailContact">-</span></div>
+      <div><strong>类型：</strong><span id="fbDetailCategory">-</span></div>
+      <div><strong>状态：</strong><span id="fbDetailStatus">-</span></div>
+      <div><strong>平台：</strong><span id="fbDetailPlatform">-</span></div>
+      <div><strong>版本：</strong><span id="fbDetailVersion">-</span></div>
+      <div><strong>系统：</strong><span id="fbDetailOs">-</span></div>
+      <div><strong>提交时间：</strong><span id="fbDetailCreatedAt">-</span></div>
+    </div>
+    <div class="modal-field">
+      <label>需求标题 / 摘要</label>
+      <div id="fbDetailTitle" style="padding:10px 12px;border:1px solid var(--gray-200);border-radius:10px;background:#fafafa;min-height:20px;white-space:pre-wrap;"></div>
+    </div>
+    <div class="modal-field">
+      <label>详细内容</label>
+      <div id="fbDetailContent" style="padding:12px;border:1px solid var(--gray-200);border-radius:10px;background:#fafafa;min-height:120px;white-space:pre-wrap;line-height:1.6;"></div>
+    </div>
+    <div class="modal-field">
+      <label>诊断信息</label>
+      <pre id="fbDetailDiagnostics" style="margin:0;padding:12px;border:1px solid var(--gray-200);border-radius:10px;background:#0b1020;color:#dbe4ff;max-height:240px;overflow:auto;white-space:pre-wrap;word-break:break-word;"></pre>
+    </div>
+    <div class="modal-actions">
+      <button id="btnCloseFeedbackDetailModal">关闭</button>
+    </div>
+  </div>
 </div>
 
 <!-- Modal: Reset Password -->
@@ -491,6 +586,8 @@ let currentPage = 1;
 let currentSize = 20;
 let currentQuery = '';
 let logsPage = 1;
+let currentTab = 'users';
+let isRefreshing = false;
 
 // 【新增】筛选条件
 let currentFilters = {
@@ -575,14 +672,46 @@ function copyToClipboard(text) {
 function openModal(id) { $(id).classList.add('show'); }
 function closeModal(id) { $(id).classList.remove('show'); }
 
+function setRefreshLoading(loading) {
+  var btn = $('btnRefreshUsers');
+  var spinner = $('refreshSpinner');
+  if (!btn || !spinner) return;
+  btn.disabled = loading;
+  spinner.style.display = loading ? 'inline-block' : 'none';
+}
+
+async function refreshCurrentTab() {
+  if (isRefreshing) return;
+  isRefreshing = true;
+  setRefreshLoading(true);
+
+  try {
+    if (currentTab === 'logs') {
+      await loadAuditLogs();
+    } else if (currentTab === 'giftcards') {
+      await Promise.all([loadGiftCards(), loadGcStats()]);
+    } else if (currentTab === 'feedbacks') {
+      await loadFeedbacks();
+    } else {
+      await loadUsers();
+    }
+  } finally {
+    setRefreshLoading(false);
+    isRefreshing = false;
+  }
+}
+
 /* Tab switching */
 function switchTab(name) {
+  currentTab = name;
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   $('tabUsers').classList.toggle('hidden', name !== 'users');
   $('tabGiftcards').classList.toggle('hidden', name !== 'giftcards');
+  $('tabFeedbacks').classList.toggle('hidden', name !== 'feedbacks');
   $('tabLogs').classList.toggle('hidden', name !== 'logs');
   if (name === 'logs') loadAuditLogs();
   if (name === 'giftcards') { loadGiftCards(); loadGcStats(); }
+  if (name === 'feedbacks') { loadFeedbacks(); }
 }
 
 /* Login */
@@ -694,7 +823,7 @@ async function loadUsers() {
       const membershipStatus = u.membership_status || 'free';
       const membershipLabel = u.membership_label || '免费版';
       const membershipExpire = u.membership_expire_at || null;
-      
+
       var checkboxCell = document.createElement('td');
       var checkbox = el('input', { attrs: { type: 'checkbox', value: String(u.user_id) } });
       checkbox.className = 'user-check';
@@ -1196,6 +1325,197 @@ function copyGcCodes() {
 /* ======================== User Live Accounts ======================== */
 let _liveAccountsUser = '';
 
+/* ======================== Feedbacks ======================== */
+let fbPage = 1;
+let fbPageSize = 20;
+let currentFbFilters = { status: '', category: '' };
+let _feedbackById = {};
+
+function feedbackCategoryLabel(category) {
+  const categoryMap = {
+    connection: '连接问题',
+    login: '登录问题',
+    function: '功能异常',
+    suggestion: '建议反馈',
+    feature_request: '功能需求',
+    other: '其他'
+  };
+  return categoryMap[category] || category || '-';
+}
+
+function feedbackStatusLabel(status) {
+  const statusMap = {
+    pending: '待处理',
+    processing: '处理中',
+    resolved: '已解决',
+    closed: '已关闭'
+  };
+  return statusMap[status] || status || '-';
+}
+
+async function loadFeedbacks() {
+  const tbody = $('fbBody');
+  const errEl = $('fbError');
+  clearNode(tbody);
+  $('fbLoading').classList.remove('hidden');
+  $('fbEmpty').classList.add('hidden');
+  clearNode($('fbPagination'));
+  _feedbackById = {};
+
+  let url = API + '/feedback/list?page=' + fbPage + '&size=' + fbPageSize;
+  if (currentFbFilters.status) url += '&status=' + encodeURIComponent(currentFbFilters.status);
+  if (currentFbFilters.category) url += '&category=' + encodeURIComponent(currentFbFilters.category);
+
+  try {
+    const r = await fetch(url, { headers: hdrs() });
+    $('fbLoading').classList.add('hidden');
+    if (r.status === 401) { doLogout(); toast('登录已过期', 'error'); return; }
+    const data = await r.json();
+
+    if (!data.items || data.items.length === 0) {
+      $('fbEmpty').classList.remove('hidden');
+      $('fbStatsText').textContent = '共 0 条反馈';
+      return;
+    }
+
+    $('fbStatsText').textContent = '共 ' + data.total + ' 条反馈';
+
+    data.items.forEach(function(fb) {
+      _feedbackById[fb.id] = fb;
+      const tr = document.createElement('tr');
+
+      // 提交时间
+      const created = fb.created_at ? fb.created_at.slice(0, 16).replace('T', ' ') : '-';
+      tr.appendChild(el('td', { text: created }));
+
+      // 用户名
+      tr.appendChild(el('td', { text: fb.username || '匿名' }));
+
+      // 联系方式
+      tr.appendChild(el('td', { text: fb.contact || '-' }));
+
+      // 类型
+      tr.appendChild(el('td', { text: feedbackCategoryLabel(fb.category) }));
+
+      // 问题描述 / 需求标题（截断显示）
+      const requestTitle = fb.diagnostic_info && fb.diagnostic_info.request_title ? fb.diagnostic_info.request_title : '';
+      const previewText = requestTitle || fb.content || '-';
+      const desc = previewText.length > 51 ? previewText.slice(0, 51) + '…' : previewText;
+      var descCell = document.createElement('td');
+      descCell.className = 'feedback-desc-cell';
+      descCell.title = fb.content || previewText || '';
+      var descText = document.createElement('div');
+      descText.className = 'feedback-desc-text';
+      descText.textContent = desc;
+      descCell.appendChild(descText);
+      tr.appendChild(descCell);
+
+      // 平台
+      tr.appendChild(el('td', { text: fb.platform || '-' }));
+
+      // 版本
+      tr.appendChild(el('td', { text: fb.app_version || '-' }));
+
+      // 状态
+      var statusCell = document.createElement('td');
+      var statusMap = { pending: ['待处理', '#fef3c7', '#92400e'], processing: ['处理中', '#dbeafe', '#1d4ed8'], resolved: ['已解决', '#dcfce7', '#15803d'], closed: ['已关闭', '#f3f4f6', '#6b7280'] };
+      var statusInfo = statusMap[fb.status] || ['未知', '#f3f4f6', '#6b7280'];
+      var statusBadge = el('span', { text: statusInfo[0] });
+      statusBadge.style.cssText = 'display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500;background:' + statusInfo[1] + ';color:' + statusInfo[2];
+      statusCell.appendChild(statusBadge);
+      tr.appendChild(statusCell);
+
+      // 操作
+      var actionCell = document.createElement('td');
+      actionCell.style.whiteSpace = 'nowrap';
+
+      // 查看详情
+      actionCell.appendChild(createActionButton('详情', 'sm', (function(fbid) {
+        return function() { openFeedbackDetail(fbid); };
+      })(fb.id)));
+
+      // 更改状态
+      var nextStatusMap = { pending: 'processing', processing: 'resolved', resolved: 'closed', closed: 'pending' };
+      var nextStatusLabelMap = { pending: '标记处理中', processing: '标记已解决', resolved: '标记已关闭', closed: '重新开放' };
+      actionCell.appendChild(createActionButton(nextStatusLabelMap[fb.status] || '更改状态', 'sm', (function(fbid, currentStatus) {
+        return function() { updateFeedbackStatus(fbid, nextStatusMap[currentStatus] || 'pending'); };
+      })(fb.id, fb.status)));
+
+      tr.appendChild(actionCell);
+      tbody.appendChild(tr);
+    });
+
+    var totalPages = Math.ceil(data.total / fbPageSize) || 1;
+    if (totalPages > 1) {
+      renderPager($('fbPagination'), fbPage, Math.min(totalPages, 10), goFbPage);
+    }
+  } catch (e) {
+    $('fbLoading').classList.add('hidden');
+    $('fbEmpty').classList.remove('hidden');
+    $('fbEmpty').textContent = '加载失败';
+  }
+}
+
+function goFbPage(p) { fbPage = p; loadFeedbacks(); }
+
+function applyFbFilters() {
+  currentFbFilters.status = $('fbStatusFilter').value;
+  currentFbFilters.category = $('fbCategoryFilter').value;
+  fbPage = 1;
+  loadFeedbacks();
+}
+
+function resetFbFilters() {
+  $('fbStatusFilter').value = '';
+  $('fbCategoryFilter').value = '';
+  currentFbFilters = { status: '', category: '' };
+  fbPage = 1;
+  loadFeedbacks();
+}
+
+async function updateFeedbackStatus(feedbackId, newStatus) {
+  try {
+    const r = await fetch(API + '/feedback/' + feedbackId + '/status', {
+      method: 'PUT',
+      headers: hdrs(),
+      body: JSON.stringify({ status: newStatus })
+    });
+    const d = await r.json();
+    if (r.ok) {
+      toast('状态已更新');
+      loadFeedbacks();
+    } else {
+      toast((d.detail && d.detail.message) || '更新失败', 'error');
+    }
+  } catch (e) {
+    toast('网络错误', 'error');
+  }
+}
+
+function openFeedbackDetail(feedbackId) {
+  var detail = _feedbackById[feedbackId];
+  if (!detail) {
+    toast('未找到反馈详情', 'error');
+    return;
+  }
+
+  var diagnostics = detail.diagnostic_info || {};
+  $('fbDetailUsername').textContent = detail.username || '匿名';
+  $('fbDetailContact').textContent = detail.contact || '-';
+  $('fbDetailCategory').textContent = feedbackCategoryLabel(detail.category);
+  $('fbDetailStatus').textContent = feedbackStatusLabel(detail.status);
+  $('fbDetailPlatform').textContent = detail.platform || '-';
+  $('fbDetailVersion').textContent = detail.app_version || '-';
+  $('fbDetailOs').textContent = detail.os_info || '-';
+  $('fbDetailCreatedAt').textContent = detail.created_at ? detail.created_at.replace('T', ' ').slice(0, 19) : '-';
+  $('fbDetailTitle').textContent = diagnostics.request_title || diagnostics.summary || detail.content || '-';
+  $('fbDetailContent').textContent = detail.content || '-';
+  $('fbDetailDiagnostics').textContent = Object.keys(diagnostics).length
+    ? JSON.stringify(diagnostics, null, 2)
+    : '无';
+  openModal('modalFeedbackDetail');
+}
+
 function openLiveAccountsModal(username) {
   _liveAccountsUser = username;
   $('liveAccountsUsername').textContent = username;
@@ -1218,13 +1538,13 @@ async function loadLiveAccounts(username) {
       closeModal('modalLiveAccounts');
       return;
     }
-    
+
     const accounts = data.accounts || [];
     if (accounts.length === 0) {
       $('liveAccountsEmpty').classList.remove('hidden');
       return;
     }
-    
+
     $('liveAccountsContent').classList.remove('hidden');
     accounts.forEach(function(acc) {
       var tr = document.createElement('tr');
@@ -1240,7 +1560,7 @@ async function loadLiveAccounts(username) {
 }
 
 function bindStaticUiEvents() {
-  $('btnRefreshUsers').addEventListener('click', loadUsers);
+  $('btnRefreshUsers').addEventListener('click', refreshCurrentTab);
   $('btnOpenAuditLogs').addEventListener('click', openAuditLogs);
   $('btnLogout').addEventListener('click', doLogout);
 
@@ -1269,6 +1589,9 @@ function bindStaticUiEvents() {
 
   $('btnFilterLogs').addEventListener('click', loadAuditLogs);
 
+  $('btnFeedbackFilter').addEventListener('click', applyFbFilters);
+  $('btnFeedbackReset').addEventListener('click', resetFbFilters);
+
   $('btnCloseResetModal').addEventListener('click', function() { closeModal('modalReset'); });
   $('btnConfirmResetPassword').addEventListener('click', doResetPassword);
   $('btnCopyTempPw').addEventListener('click', copyTempPw);
@@ -1284,6 +1607,7 @@ function bindStaticUiEvents() {
   $('btnCopyGcCodes').addEventListener('click', copyGcCodes);
   $('btnDownloadGcTxt').addEventListener('click', downloadGcTxt);
   $('btnCloseGcResultModal').addEventListener('click', function() { closeModal('modalGcResult'); });
+  $('btnCloseFeedbackDetailModal').addEventListener('click', function() { closeModal('modalFeedbackDetail'); });
   $('btnCloseLiveAccountsModal').addEventListener('click', function() { closeModal('modalLiveAccounts'); });
 }
 

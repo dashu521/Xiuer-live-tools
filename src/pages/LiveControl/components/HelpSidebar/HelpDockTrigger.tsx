@@ -76,19 +76,16 @@ export const HelpDockTrigger = React.memo(
         onMouseLeave={() => setIsHovered(false)}
         className={cn(
           // 基础样式
-          'group fixed right-0 z-40 flex flex-col items-center rounded-l-xl border-y border-l py-2.5 px-2 shadow-lg transition-all duration-300',
+          'group absolute right-0 z-40 flex flex-col items-center rounded-l-xl border-y border-l py-2.5 px-2 transition-all duration-300',
           // 颜色主题（深色橙色主题）
           'bg-[hsl(var(--surface-elevated))] border-[hsl(var(--border))]',
           // 悬停效果：背景变化 + 向左扩展
           'hover:bg-[hsl(var(--surface))] hover:px-3',
           // 打开状态
           isOpen && 'bg-primary/10 border-primary/30',
-          // 位置：与"直播控制台"标题文字齐平（py-6=24px + Title 组件内部 padding）
-          'top-[90px]',
+          // 位置：与直播控制台页面内容区使用同一定位基准，避免受全局 Header 高度影响
+          'top-6',
         )}
-        style={{
-          boxShadow: 'var(--shadow-card), -4px 0 16px rgba(0,0,0,0.15)',
-        }}
         aria-label="打开帮助与反馈"
         aria-expanded={isOpen}
       >

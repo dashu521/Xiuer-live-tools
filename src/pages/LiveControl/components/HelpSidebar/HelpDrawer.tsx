@@ -21,10 +21,19 @@ interface HelpDrawerProps {
   onOpenWechatQR?: () => void
   /** 打开反馈弹窗的回调 */
   onOpenFeedback?: () => void
+  /** 打开功能需求弹窗的回调 */
+  onOpenFeatureRequest?: () => void
 }
 
 export const HelpDrawer = React.memo(
-  ({ isOpen, onClose, onOpenTutorial, onOpenWechatQR, onOpenFeedback }: HelpDrawerProps) => {
+  ({
+    isOpen,
+    onClose,
+    onOpenTutorial,
+    onOpenWechatQR,
+    onOpenFeedback,
+    onOpenFeatureRequest,
+  }: HelpDrawerProps) => {
     // ESC 键关闭
     const handleKeyDown = useCallback(
       (e: KeyboardEvent) => {
@@ -103,6 +112,7 @@ export const HelpDrawer = React.memo(
               onOpenTutorial={onOpenTutorial}
               onOpenWechatQR={onOpenWechatQR}
               onOpenFeedback={onOpenFeedback}
+              onOpenFeatureRequest={onOpenFeatureRequest}
             />
           </div>
         </div>

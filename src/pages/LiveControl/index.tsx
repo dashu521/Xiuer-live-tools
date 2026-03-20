@@ -27,6 +27,7 @@ export default function BrowserControl() {
 
   // 反馈弹窗状态
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false)
+  const [isFeatureRequestOpen, setIsFeatureRequestOpen] = useState(false)
 
   const closeHelp = () => setIsHelpOpen(false)
   const toggleHelp = () => setIsHelpOpen(prev => !prev)
@@ -39,9 +40,11 @@ export default function BrowserControl() {
 
   const openFeedback = () => setIsFeedbackOpen(true)
   const closeFeedback = () => setIsFeedbackOpen(false)
+  const openFeatureRequest = () => setIsFeatureRequestOpen(true)
+  const closeFeatureRequest = () => setIsFeatureRequestOpen(false)
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+    <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden">
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div data-tour="live-control" className="flex min-h-full flex-col gap-6 py-6 pb-24">
           <div className="shrink-0">
@@ -72,6 +75,7 @@ export default function BrowserControl() {
         onOpenTutorial={openTutorial}
         onOpenWechatQR={openWechatQR}
         onOpenFeedback={openFeedback}
+        onOpenFeatureRequest={openFeatureRequest}
       />
 
       {/* 快速上手教程 */}
@@ -89,7 +93,10 @@ export default function BrowserControl() {
       <WechatQRDialog isOpen={isWechatQROpen} onClose={closeWechatQR} />
 
       {/* 问题反馈弹窗 */}
-      <FeedbackDialog isOpen={isFeedbackOpen} onClose={closeFeedback} />
+      <FeedbackDialog isOpen={isFeedbackOpen} onClose={closeFeedback} mode="issue" />
+
+      {/* 功能需求弹窗 */}
+      <FeedbackDialog isOpen={isFeatureRequestOpen} onClose={closeFeatureRequest} mode="feature" />
     </div>
   )
 }
