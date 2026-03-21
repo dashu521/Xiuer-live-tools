@@ -24,6 +24,7 @@ PUBLISH_BASE_IMAGE="${PUBLISH_BASE_IMAGE:-0}"
 AUTH_API_TEST_IDENTIFIER="${AUTH_API_TEST_IDENTIFIER:-}"
 AUTH_API_TEST_PASSWORD="${AUTH_API_TEST_PASSWORD:-}"
 FORCE_REMOTE_BUILD="${FORCE_REMOTE_BUILD:-0}"
+DRY_RUN="${DRY_RUN:-0}"
 
 if [[ -z "$REGISTRY_USERNAME" || -z "$REGISTRY_PASSWORD" ]]; then
   echo "缺少 REGISTRY_USERNAME 或 REGISTRY_PASSWORD"
@@ -37,23 +38,36 @@ echo "publish app image: $PUBLISH_APP_IMAGE"
 echo "deploy app image: $DEPLOY_APP_IMAGE"
 echo "publish base image: $PUBLISH_BASE_IMAGE"
 echo "force remote build: $FORCE_REMOTE_BUILD"
+echo "dry run: $DRY_RUN"
+
+run_or_echo() {
+  if [[ "$DRY_RUN" == "1" ]]; then
+    printf '[dry-run] '
+    printf '%q ' "$@"
+    printf '\n'
+    return 0
+  fi
+
+  "$@"
+}
 
 if [[ "$PUBLISH_BASE_IMAGE" == "1" ]]; then
-  BASE_IMAGE="$BASE_IMAGE" \
-  TARGET_IMAGE="$BASE_IMAGE" \
-  REGISTRY_USERNAME="$REGISTRY_USERNAME" \
-  REGISTRY_PASSWORD="$REGISTRY_PASSWORD" \
-  "$SCRIPT_DIR/publish-auth-api-base.sh"
+  run_or_echo env \
+    BASE_IMAGE="$BASE_IMAGE" \
+    TARGET_IMAGE="$BASE_IMAGE" \
+    REGISTRY_USERNAME="$REGISTRY_USERNAME" \
+    REGISTRY_PASSWORD="$REGISTRY_PASSWORD" \
+    "$SCRIPT_DIR/publish-auth-api-base.sh"
 fi
 
 if [[ "$FORCE_REMOTE_BUILD" == "1" ]] || ! docker info >/dev/null 2>&1; then
-  scp "$SCRIPT_DIR/publish-auth-api-app-image.sh" \
-      "$SCRIPT_DIR/run-auth-api-smoke.sh" \
-      "$SCRIPT_DIR/use-auth-api-app-image.sh" \
-      "$SCRIPT_DIR/remote-deploy.sh" \
-      "$SERVER_USER@$SERVER_HOST:$SERVER_PATH/"
+  run_or_echo scp "$SCRIPT_DIR/publish-auth-api-app-image.sh" \
+    "$SCRIPT_DIR/run-auth-api-smoke.sh" \
+    "$SCRIPT_DIR/use-auth-api-app-image.sh" \
+    "$SCRIPT_DIR/remote-deploy.sh" \
+    "$SERVER_USER@$SERVER_HOST:$SERVER_PATH/"
 
-  ssh -o BatchMode=yes "$SERVER_USER@$SERVER_HOST" \
+  run_or_echo ssh -o BatchMode=yes "$SERVER_USER@$SERVER_HOST" \
     "chmod +x $SERVER_PATH/publish-auth-api-app-image.sh \
               $SERVER_PATH/run-auth-api-smoke.sh \
               $SERVER_PATH/use-auth-api-app-image.sh \
@@ -65,19 +79,20 @@ if [[ "$FORCE_REMOTE_BUILD" == "1" ]] || ! docker info >/dev/null 2>&1; then
      REGISTRY_PASSWORD='$REGISTRY_PASSWORD' \
      ./publish-auth-api-app-image.sh"
 else
-  BASE_IMAGE="$BASE_IMAGE" \
-  TARGET_IMAGE="$PUBLISH_APP_IMAGE" \
-  REGISTRY_USERNAME="$REGISTRY_USERNAME" \
-  REGISTRY_PASSWORD="$REGISTRY_PASSWORD" \
-  "$SCRIPT_DIR/publish-auth-api-app-image.sh"
+  run_or_echo env \
+    BASE_IMAGE="$BASE_IMAGE" \
+    TARGET_IMAGE="$PUBLISH_APP_IMAGE" \
+    REGISTRY_USERNAME="$REGISTRY_USERNAME" \
+    REGISTRY_PASSWORD="$REGISTRY_PASSWORD" \
+    "$SCRIPT_DIR/publish-auth-api-app-image.sh"
 fi
 
-scp "$SCRIPT_DIR/run-auth-api-smoke.sh" \
-    "$SCRIPT_DIR/use-auth-api-app-image.sh" \
-    "$SCRIPT_DIR/remote-deploy.sh" \
-    "$SERVER_USER@$SERVER_HOST:$SERVER_PATH/"
+run_or_echo scp "$SCRIPT_DIR/run-auth-api-smoke.sh" \
+  "$SCRIPT_DIR/use-auth-api-app-image.sh" \
+  "$SCRIPT_DIR/remote-deploy.sh" \
+  "$SERVER_USER@$SERVER_HOST:$SERVER_PATH/"
 
-ssh -o BatchMode=yes "$SERVER_USER@$SERVER_HOST" \
+run_or_echo ssh -o BatchMode=yes "$SERVER_USER@$SERVER_HOST" \
   "chmod +x $SERVER_PATH/run-auth-api-smoke.sh $SERVER_PATH/use-auth-api-app-image.sh $SERVER_PATH/remote-deploy.sh && \
    cd $SERVER_PATH && \
    AUTH_API_TEST_IDENTIFIER='$AUTH_API_TEST_IDENTIFIER' \
@@ -85,4 +100,8 @@ ssh -o BatchMode=yes "$SERVER_USER@$SERVER_HOST" \
    TARGET_APP_IMAGE='$DEPLOY_APP_IMAGE' \
    ./remote-deploy.sh"
 
-echo "release completed: $DEPLOY_APP_IMAGE"
+if [[ "$DRY_RUN" == "1" ]]; then
+  echo "dry-run completed: $DEPLOY_APP_IMAGE"
+else
+  echo "release completed: $DEPLOY_APP_IMAGE"
+fi

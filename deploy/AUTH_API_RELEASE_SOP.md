@@ -98,6 +98,17 @@ AUTH_API_TEST_PASSWORD=你的测试密码 \
 ./deploy/release-auth-api.sh
 ```
 
+只做链路演练、不触发真实发布时，可执行：
+
+```bash
+DRY_RUN=1 \
+REGISTRY_USERNAME=你的ACR用户名 \
+REGISTRY_PASSWORD=你的ACR密码 \
+./deploy/release-auth-api.sh
+```
+
+这会输出计划执行的 `scp` / `ssh` / 镜像发布命令，但不会真正推送或部署。
+
 默认行为：
 
 - 业务镜像 tag 使用当前 git 短哈希

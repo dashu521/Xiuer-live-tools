@@ -233,6 +233,15 @@ AUTH_API_TEST_PASSWORD=你的测试密码 \
 ./deploy/release-auth-api.sh
 ```
 
+如果只想检查发布路径是否正确、不触发真实动作：
+
+```bash
+DRY_RUN=1 \
+REGISTRY_USERNAME=17701259200 \
+REGISTRY_PASSWORD=你的ACR密码 \
+./deploy/release-auth-api.sh
+```
+
 可选项：
 
 - `APP_IMAGE_TAG=release-20260321`
