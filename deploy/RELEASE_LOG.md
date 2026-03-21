@@ -65,3 +65,29 @@
 - 回归结果：`health ok`、`login contract ok`、`subscription status ok`
 - 风险/异常：本地 Docker daemon 不可用，已通过远端构建回退路径完成发布
 - 回滚点：上一可用配置 + 旧镜像 tag
+
+## 2026-03-21 18:10 CST
+
+- 发布人：Codex + 用户协作
+- 环境：production
+- git commit：`5a0fe05`
+- 业务镜像：`crpi-ee6rz2ks9c36lft8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/xiuer-live-tools/auth-api:5a0fe05`
+- 基础镜像：`crpi-ee6rz2ks9c36lft8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/xiuer-live-tools/auth-api-runtime-base:3.11-slim`
+- 发布方式：`release-auth-api.sh`
+- 服务器：`121.41.179.197:/opt/auth-api`
+- 回归结果：脚本健康检查 `health ok`；用户手工验证登录正常、订阅正常
+- 风险/异常：发布脚本未提供测试账号，因此自动 smoke 仅执行了 `/health`；发布后已手工补验证
+- 回滚点：上一稳定业务镜像 tag `ecb45a7`
+
+## 2026-03-21 18:06 CST
+
+- 发布人：Codex + 用户协作
+- 环境：production
+- git commit：N/A（服务器数据库维护）
+- 业务镜像：不变
+- 基础镜像：不变
+- 发布方式：MySQL 手工清理
+- 服务器：`121.41.179.197:/opt/auth-api`
+- 回归结果：删除 `3` 个测试账号；清空关联 `refresh_tokens / subscriptions / user_configs / gift_card_redemptions / trials`；释放 `6` 张礼品卡
+- 风险/异常：保留 `audit_logs` 以维持审计链
+- 回滚点：`/opt/auth-api-backups/test-account-cleanup_20260321_180644`
