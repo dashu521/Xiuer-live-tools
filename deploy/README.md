@@ -1,5 +1,11 @@
 # Auth API 部署（阿里云 ECS + 可选 RDS）
 
+配套文档：
+
+- 发布 SOP：[AUTH_API_RELEASE_SOP.md](./AUTH_API_RELEASE_SOP.md)
+- 发布记录：[RELEASE_LOG.md](./RELEASE_LOG.md)
+- CI 检查清单：[CI_CHECKLIST.md](./CI_CHECKLIST.md)
+
 ## 一、本地先跑通
 
 ### 1. 本地 MySQL（或 Docker MySQL）

@@ -6,6 +6,11 @@
 
 将 `auth-api` 发布到阿里云 ECS，并固定使用阿里云 ACR 私有基础镜像，避免构建过程依赖 Docker Hub。
 
+配套文件：
+
+- 发布留痕：[RELEASE_LOG.md](./RELEASE_LOG.md)
+- CI 检查清单：[CI_CHECKLIST.md](./CI_CHECKLIST.md)
+
 当前线上基础镜像地址：
 
 ```text
@@ -179,6 +184,20 @@ curl -s -X POST "http://127.0.0.1:8000/auth/sms/send?phone=123"
 ```
 
 期望 `detail.code = "phone_format_error"`
+
+### 5. 发布记录
+
+发布完成后，必须把本次信息补记到：
+
+- [RELEASE_LOG.md](./RELEASE_LOG.md)
+
+至少写清：
+
+- git commit
+- 业务镜像
+- 基础镜像
+- 回归结果
+- 回滚点
 
 ## 五、线上配置基线
 
