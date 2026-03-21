@@ -45,7 +45,7 @@
     "dist:mac": "npm run dist:clean && npm run build && electron-builder --mac --publish never",
     "dist:linux": "npm run dist:clean && npm run build && electron-builder --linux --publish never",
     "release:mac": "npm run release:guard && npm run dist:clean && npm run build && electron-builder --mac",
-    "release:win": "npm run dist:clean && npm run build && electron-builder --win",
+    "release:win": "npm run release:guard && npm run dist:clean && npm run build && electron-builder --win",
     "release:guard": "node scripts/release-guard.js",
     "release:audit": "node scripts/release-audit.js",
     "release:notes": "node scripts/generate-release-notes.js",

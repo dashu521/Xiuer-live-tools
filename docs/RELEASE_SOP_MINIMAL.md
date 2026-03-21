@@ -48,6 +48,7 @@
 ```bash
 # 设置生产环境 API 地址
 export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
+export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
 
 # 提升版本号（先定版本号）
 npm version patch  # 或 minor

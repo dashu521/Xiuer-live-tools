@@ -339,6 +339,7 @@ ls -la release/*/mac*/
 | 环境变量 | 生产环境值 | 说明 |
 |----------|------------|------|
 | `VITE_AUTH_API_BASE_URL` | `http://121.41.179.197:8000` | 阿里云 ECS 生产 API 服务器 |
+| `AUTH_STORAGE_SECRET` | 32+ 字符高熵随机字符串 | 主进程安全存储密钥，保护本地加密凭据文件 |
 
 ### 强制要求
 
@@ -347,6 +348,7 @@ ls -la release/*/mac*/
 ```bash
 # ✅ 正确：显式设置生产环境 API 地址
 export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
+export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
 npm run release
 
 # ❌ 错误：未设置环境变量
@@ -371,6 +373,7 @@ Release Guard (`scripts/release-guard.js`) 在发布前执行以下检查：
 | `VITE_AUTH_API_BASE_URL` 未设置 | BLOCKER | 阻止发布 |
 | `VITE_AUTH_API_BASE_URL` 包含 localhost | BLOCKER | 阻止发布 |
 | `VITE_AUTH_API_BASE_URL` 包含 127.0.0.1 | BLOCKER | 阻止发布 |
+| `AUTH_STORAGE_SECRET` 未设置 | BLOCKER | 阻止发布 |
 | `src/shared` 中存在 localhost/127.0.0.1 引用 | BLOCKER | 阻止发布（仅已识别的 fallback 场景在环境变量正确时可降级为 WARNING） |
 
 **任何一项 BLOCKER 检查失败，都无法执行发布。**
@@ -381,6 +384,7 @@ Release Guard (`scripts/release-guard.js`) 在发布前执行以下检查：
 |----------|----------|
 | 未设置 VITE_AUTH_API_BASE_URL | Release Guard 拦截，提示设置生产 API 地址 |
 | 使用 localhost/127.0.0.1 作为环境变量值 | Release Guard 拦截，提示使用生产地址 |
+| 未设置 AUTH_STORAGE_SECRET | Release Guard 与构建脚本拦截，禁止回退到开发态默认密钥 |
 | `src/shared` 中存在硬编码 localhost/127.0.0.1 | Release Guard 扫描并拦截 |
 | 已识别的 localhost fallback 场景且环境变量已正确设置 | Release Guard 降级为 WARNING，不影响发布 |
 
@@ -391,6 +395,7 @@ Release Guard (`scripts/release-guard.js`) 在发布前执行以下检查：
 ```bash
 # 验证环境变量已设置
 echo $VITE_AUTH_API_BASE_URL
+[ -n "$AUTH_STORAGE_SECRET" ] && echo "AUTH_STORAGE_SECRET is set"
 
 # 预期输出
 http://121.41.179.197:8000
@@ -546,6 +551,7 @@ curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_m
 ### 配置检查
 - [ ] `VITE_AUTH_API_BASE_URL` 已设置为 `http://121.41.179.197:8000`
 - [ ] `VITE_AUTH_API_BASE_URL` 不包含 localhost/127.0.0.1
+- [ ] `AUTH_STORAGE_SECRET` 已设置为 32+ 字符随机字符串
 - [ ] Release Guard 检查通过
 
 ### Git 检查
@@ -588,7 +594,16 @@ git commit -m "chore: prepare release vX.X.X"
 export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
 ```
 
-### 3. Localhost 风险
+### 3. 未设置 AUTH_STORAGE_SECRET
+
+**错误信息**：`AUTH_STORAGE_SECRET must be set`
+
+**解决方案**：
+```bash
+export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
+```
+
+### 4. Localhost 风险
 
 **警告信息**：`发现高风险 localhost/127.0.0.1`
 

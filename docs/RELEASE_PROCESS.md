@@ -127,11 +127,12 @@ npm run publish:check
 
 ### 2. 环境变量
 
-**【发布规范】正式发布必须显式注入生产环境 API 地址。**
+**【发布规范】正式发布必须显式注入生产环境 API 地址和主进程安全存储密钥。**
 
 ```bash
 # 生产环境 API 地址（固化）
 export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
+export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
 ```
 
 #### 强制要求
@@ -140,6 +141,7 @@ export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
 |------|------|
 | 正式发布必须显式设置 | 未设置时 Release Guard 会拦截发布 |
 | 禁止使用 localhost | localhost/127.0.0.1 会被 Release Guard 拦截 |
+| 必须设置 AUTH_STORAGE_SECRET | 未设置时构建脚本和 Release Guard 会双重拦截 |
 | 禁止 fallback 进入发布包 | 代码中的 fallback 仅用于开发调试 |
 
 #### Release Guard 拦截规则
@@ -149,6 +151,7 @@ export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
 | `VITE_AUTH_API_BASE_URL` 未设置 | BLOCKER | 阻止发布 |
 | `VITE_AUTH_API_BASE_URL` 包含 localhost | BLOCKER | 阻止发布 |
 | `VITE_AUTH_API_BASE_URL` 包含 127.0.0.1 | BLOCKER | 阻止发布 |
+| `AUTH_STORAGE_SECRET` 未设置 | BLOCKER | 阻止发布 |
 
 详见 [RELEASE_SPECIFICATION.md](./RELEASE_SPECIFICATION.md) 中的"生产环境 API 地址固化规范"章节。
 
@@ -163,6 +166,7 @@ npm run release:audit
 - .gitignore 配置
 - Git 跟踪文件
 - API 地址配置
+- 安全存储密钥配置
 - Publish 配置
 
 ---
@@ -266,7 +270,16 @@ git commit -m "chore: prepare release v1.3.3"
 export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
 ```
 
-### 3. Remote 错误
+### 3. 未设置 AUTH_STORAGE_SECRET
+
+**错误信息**：`AUTH_STORAGE_SECRET must be set`
+
+**解决方案**：
+```bash
+export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
+```
+
+### 4. Remote 错误
 
 **错误信息**：`Origin URL 错误`
 
@@ -363,6 +376,7 @@ Windows 构建只能通过以下方式触发：
 - [ ] `npm run release:audit` 无严重问题
 - [ ] `VITE_AUTH_API_BASE_URL` 已设置为生产地址 `http://121.41.179.197:8000`
 - [ ] `VITE_AUTH_API_BASE_URL` 不包含 localhost/127.0.0.1
+- [ ] `AUTH_STORAGE_SECRET` 已设置为 32+ 字符随机字符串
 - [ ] Release Guard 检查通过（`npm run release:guard`）
 - [ ] Git 工作区干净
 - [ ] 当前分支为 main

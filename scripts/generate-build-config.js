@@ -14,6 +14,7 @@ function main() {
   console.log('\n🔧 [generate-build-config] Generating build-time configuration...\n')
 
   const authApiBaseUrl = process.env.VITE_AUTH_API_BASE_URL || process.env.AUTH_API_BASE_URL
+  const authStorageSecret = process.env.AUTH_STORAGE_SECRET?.trim()
 
   if (!authApiBaseUrl) {
     console.error('❌ [generate-build-config] ERROR: VITE_AUTH_API_BASE_URL or AUTH_API_BASE_URL must be set')
@@ -26,6 +27,13 @@ function main() {
     console.error('❌ [generate-build-config] ERROR: API base URL cannot be localhost')
     console.error(`   Current: ${authApiBaseUrl}`)
     console.error(`   Expected: ${PRODUCTION_API}`)
+    process.exit(1)
+  }
+
+  if (!authStorageSecret) {
+    console.error('❌ [generate-build-config] ERROR: AUTH_STORAGE_SECRET must be set')
+    console.error('   Reason: packaged builds must not fall back to the development storage key')
+    console.error('   Example: export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)')
     process.exit(1)
   }
 
@@ -48,6 +56,7 @@ function main() {
   console.log('✅ [generate-build-config] Configuration generated:')
   console.log(`   Path: ${configPath}`)
   console.log(`   API Base URL: ${authApiBaseUrl}`)
+  console.log(`   AUTH_STORAGE_SECRET: [set, length=${authStorageSecret.length}]`)
   console.log(`   Build Time: ${config.buildTime}\n`)
 }
 

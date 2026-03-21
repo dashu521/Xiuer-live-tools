@@ -77,13 +77,17 @@ if (appTsContent.includes("on('crashed'")) {
 
 // 4. 检查环境变量
 console.log('\n[4/5] 检查环境变量...');
-const requiredEnvVars = ['VITE_AUTH_API_BASE_URL'];
+const requiredEnvVars = ['VITE_AUTH_API_BASE_URL', 'AUTH_STORAGE_SECRET'];
 for (const envVar of requiredEnvVars) {
   if (!process.env[envVar]) {
-    warnings.push(`⚠️ 环境变量 ${envVar} 未设置`);
+    errors.push(`❌ 环境变量 ${envVar} 未设置`);
   } else {
     console.log(`  ✅ ${envVar} 已设置`);
   }
+}
+
+if (process.env.VITE_AUTH_API_BASE_URL?.includes('localhost') || process.env.VITE_AUTH_API_BASE_URL?.includes('127.0.0.1')) {
+  errors.push(`❌ VITE_AUTH_API_BASE_URL 不能为本地地址: ${process.env.VITE_AUTH_API_BASE_URL}`);
 }
 
 // 5. 检查 package.json 脚本

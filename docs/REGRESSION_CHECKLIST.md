@@ -151,10 +151,10 @@
 npm run dev
 
 # 打包后快速验证（macOS）
-export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000 && npm run dist:mac
+export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000 && export AUTH_STORAGE_SECRET=$(openssl rand -hex 32) && npm run dist:mac
 
 # 打包后快速验证（Windows）
-export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000 && npm run dist:win
+export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000 && export AUTH_STORAGE_SECRET=$(openssl rand -hex 32) && npm run dist:win
 ```
 
 ---
