@@ -59,10 +59,10 @@ ssh -o StrictHostKeyChecking=no "$SERVER_USER@$SERVER_HOST" << 'EOF'
     docker compose down || true
 
     echo "  重新构建镜像..."
-    docker compose build api
+    DOCKER_BUILDKIT=0 docker compose build --pull=false api
 
     echo "  启动服务..."
-    docker compose up -d
+    docker compose up -d api --no-build
 
     echo "  等待服务启动..."
     sleep 10

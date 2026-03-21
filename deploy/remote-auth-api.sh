@@ -3,5 +3,6 @@ set -e
 
 cd /opt/auth-api
 docker compose down
-docker compose up -d --build
+DOCKER_BUILDKIT=0 docker compose build --pull=false api
+docker compose up -d api --no-build
 docker compose ps

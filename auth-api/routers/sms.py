@@ -19,6 +19,10 @@ from models import SMSCode, Subscription, User
 from schemas import (
     LoginResponse,
     UserOut,
+    err_phone_format_error,
+    err_phone_not_registered,
+    err_sms_code_invalid_or_expired,
+    err_sms_send_failed,
 )
 from sms_service import (
     SMS_CODE_EXPIRE_SECONDS,
@@ -30,6 +34,12 @@ from sms_service import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth/sms", tags=["sms"])
+
+SMS_ERROR_DETAILS = {
+    "too_many_requests": {"code": "too_many_requests", "message": "发送过于频繁，请稍后再试"},
+    "daily_limit_exceeded": {"code": "daily_limit_exceeded", "message": "今日发送次数已达上限"},
+    "too_many_failures": {"code": "too_many_failures", "message": "尝试过于频繁，请稍后再试"},
+}
 
 
 @router.get("/status")
@@ -155,17 +165,17 @@ def send_sms(
 
     if not is_valid_phone(phone):
         logger.warning(f"[SMS][{request_id}] invalid phone format: {phone}")
-        raise HTTPException(status_code=422, detail="手机号格式不正确")
+        raise HTTPException(status_code=422, detail=err_phone_format_error())
 
     allowed, error = check_rate_limit(db, phone)
     if not allowed:
         logger.warning(f"[SMS][{request_id}] rate limit: phone={mask_phone(phone)}")
-        raise HTTPException(status_code=429, detail=error)
+        raise HTTPException(status_code=429, detail=SMS_ERROR_DETAILS.get(error, {"code": error, "message": "发送过于频繁，请稍后再试"}))
 
     allowed, error = check_daily_limit(db, phone)
     if not allowed:
         logger.warning(f"[SMS][{request_id}] daily limit: phone={mask_phone(phone)}")
-        raise HTTPException(status_code=429, detail=error)
+        raise HTTPException(status_code=429, detail=SMS_ERROR_DETAILS.get(error, {"code": error, "message": "今日发送次数已达上限"}))
 
     sms_service = get_sms_service()
     code = "" if getattr(sms_service, "mode", "") == "aliyun_dypns" else generate_sms_code(6)
@@ -202,10 +212,9 @@ def send_sms(
 
     if not success:
         logger.error(f"[SMS][{request_id}] send failed: {error_msg}")
-        # [SECURITY] 发送失败时返回明确错误，不再返回 dev_code 兜底
         raise HTTPException(
             status_code=500,
-            detail=error_msg if error_msg else "短信发送失败，请稍后重试",
+            detail=err_sms_send_failed(),
         )
 
     logger.info(f"[SMS][{request_id}] code sent: phone={mask_phone(phone)}")
@@ -224,7 +233,7 @@ def login_with_sms(
     allowed, error = check_brute_force(db, phone)
     if not allowed:
         logger.warning(f"[SMS] brute force check failed: phone={mask_phone(phone)}")
-        raise HTTPException(status_code=429, detail=error)
+        raise HTTPException(status_code=429, detail=SMS_ERROR_DETAILS.get(error, {"code": error, "message": "尝试过于频繁，请稍后再试"}))
 
     sms_service = get_sms_service()
     verified_ok = False
@@ -246,8 +255,7 @@ def login_with_sms(
         if verify_success:
             verified_ok = True
         if not verified_ok:
-            # 阿里云返回的错误信息太复杂，统一使用友好提示
-            raise HTTPException(status_code=400, detail="验证码错误或已过期")
+            raise HTTPException(status_code=400, detail=err_sms_code_invalid_or_expired())
     elif not verified_ok:
         verify_success, verify_msg = sms_service.verify(phone, code)
         if verify_msg == "not_supported":
@@ -255,11 +263,10 @@ def login_with_sms(
         elif verify_success:
             verified_ok = True
         if not verified_ok:
-            # 阿里云返回的错误信息太复杂，统一使用友好提示
-            raise HTTPException(status_code=400, detail="验证码错误或已过期")
+            raise HTTPException(status_code=400, detail=err_sms_code_invalid_or_expired())
 
     if not verified_ok:
-        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+        raise HTTPException(status_code=400, detail=err_sms_code_invalid_or_expired())
 
     user = db.query(User).filter(User.phone == phone).first()
 
@@ -267,7 +274,10 @@ def login_with_sms(
         user = create_user_for_phone(phone, db)
 
     if user.status != "active":
-        raise HTTPException(status_code=403, detail="账号已被禁用，请联系客服")
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "account_disabled", "message": "账号已被禁用，请联系客服"},
+        )
 
     user.last_login_at = datetime.utcnow()
     user_id_str = str(user.id)
@@ -296,6 +306,7 @@ def login_with_sms(
             last_login_at=last_login_at,
             status=status_str,
         ),
+        access_token=token,
         token=token,
         refresh_token=refresh_raw,
         needs_password=not _has_real_password,
@@ -311,7 +322,7 @@ def reset_password_sms(
 ):
     """POST /auth/sms/reset-password：通过手机验证码重置密码（忘记密码）"""
     if not is_valid_phone(phone):
-        raise HTTPException(status_code=422, detail="手机号格式不正确")
+        raise HTTPException(status_code=422, detail=err_phone_format_error())
 
     if len(new_password) < 6:
         raise HTTPException(
@@ -337,8 +348,7 @@ def reset_password_sms(
         if verify_success:
             verified_ok = True
         if not verified_ok:
-            # 阿里云返回的错误信息太复杂，统一使用友好提示
-            raise HTTPException(status_code=400, detail="验证码错误或已过期")
+            raise HTTPException(status_code=400, detail=err_sms_code_invalid_or_expired())
     elif not verified_ok:
         verify_success, verify_msg = sms_service.verify(phone, code)
         if verify_msg == "not_supported":
@@ -346,17 +356,16 @@ def reset_password_sms(
         elif verify_success:
             verified_ok = True
         if not verified_ok:
-            # 阿里云返回的错误信息太复杂，统一使用友好提示
-            raise HTTPException(status_code=400, detail="验证码错误或已过期")
+            raise HTTPException(status_code=400, detail=err_sms_code_invalid_or_expired())
 
     if not verified_ok:
-        raise HTTPException(status_code=400, detail="验证码错误或已过期")
+        raise HTTPException(status_code=400, detail=err_sms_code_invalid_or_expired())
 
     user = db.query(User).filter(User.phone == phone).first()
     if not user:
         raise HTTPException(
             status_code=404,
-            detail={"code": "phone_not_registered", "message": "该手机号未注册"},
+            detail=err_phone_not_registered(),
         )
 
     user.password_hash = hash_password(new_password)

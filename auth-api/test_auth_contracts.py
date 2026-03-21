@@ -1,0 +1,124 @@
+import os
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from fastapi.testclient import TestClient
+from sqlalchemy import text
+
+TEST_DB_PATH = Path(__file__).resolve().parent / "data" / "test_auth_contracts.db"
+TEST_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+os.environ["DB_PATH"] = str(TEST_DB_PATH)
+os.environ["JWT_SECRET"] = "test-auth-contracts-secret-32-byte-key"
+os.environ["SMS_MODE"] = "test"
+
+from database import SessionLocal, create_tables, engine  # noqa: E402
+from main import app  # noqa: E402
+from models import SMSCode  # noqa: E402
+
+
+class _FailingSmsService:
+    mode = "aliyun"
+
+    async def send(self, phone: str, code: str):
+        return False, f"vendor detail for {phone}:{code}"
+
+    def verify(self, phone: str, code: str):
+        return False, "invalid_code"
+
+
+class AuthContractTests(unittest.TestCase):
+    def setUp(self):
+        with engine.begin() as conn:
+            for table in (
+                "user_configs",
+                "feedbacks",
+                "gift_card_redemptions",
+                "gift_cards",
+                "audit_logs",
+                "subscriptions",
+                "refresh_tokens",
+                "sms_codes",
+                "trials",
+                "users",
+            ):
+                conn.execute(text(f"DROP TABLE IF EXISTS {table}"))
+        create_tables()
+        self.client = TestClient(app)
+
+    def _register(self, username: str, password: str) -> dict:
+        response = self.client.post("/register", json={"username": username, "password": password})
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.json()
+
+    def _insert_sms_code(self, phone: str, code: str) -> None:
+        db = SessionLocal()
+        try:
+            db.add(
+                SMSCode(
+                    phone=phone,
+                    code=code,
+                    expire_at=2_000_000_000,
+                    created_at=1_900_000_000,
+                    used=0,
+                    date_str="20990101",
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+    def test_password_register_and_login_return_both_token_fields(self):
+        register_data = self._register("contract@example.com", "secret123")
+        self.assertEqual(register_data["access_token"], register_data["token"])
+        self.assertTrue(register_data["refresh_token"])
+
+        login_response = self.client.post(
+            "/login",
+            json={"username": "contract@example.com", "password": "secret123"},
+        )
+        self.assertEqual(login_response.status_code, 200, login_response.text)
+        login_data = login_response.json()
+        self.assertEqual(login_data["access_token"], login_data["token"])
+        self.assertTrue(login_data["refresh_token"])
+
+    def test_sms_login_returns_both_token_fields(self):
+        phone = "13800000009"
+        self._insert_sms_code(phone, "123456")
+
+        response = self.client.post(f"/auth/sms/login?phone={phone}&code=123456")
+        self.assertEqual(response.status_code, 200, response.text)
+        data = response.json()
+
+        self.assertEqual(data["access_token"], data["token"])
+        self.assertTrue(data["refresh_token"])
+
+    def test_sms_errors_are_structured_and_do_not_expose_vendor_details(self):
+        invalid_phone = self.client.post("/auth/sms/send?phone=123")
+        self.assertEqual(invalid_phone.status_code, 422, invalid_phone.text)
+        self.assertEqual(
+            invalid_phone.json()["detail"],
+            {"code": "phone_format_error", "message": "手机号格式不正确"},
+        )
+
+        with patch("routers.sms.get_sms_service", return_value=_FailingSmsService()):
+            failed_send = self.client.post("/auth/sms/send?phone=13800000010")
+
+        self.assertEqual(failed_send.status_code, 500, failed_send.text)
+        self.assertEqual(
+            failed_send.json()["detail"],
+            {"code": "sms_send_failed", "message": "短信发送失败"},
+        )
+        self.assertNotIn("vendor detail", failed_send.text)
+
+        invalid_code = self.client.post("/auth/sms/login?phone=13800000010&code=999999")
+        self.assertEqual(invalid_code.status_code, 400, invalid_code.text)
+        self.assertEqual(
+            invalid_code.json()["detail"],
+            {"code": "sms_code_invalid", "message": "验证码错误或已过期"},
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

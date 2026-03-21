@@ -58,6 +58,7 @@ class TokensOut(BaseModel):
 class AuthResponse(BaseModel):
     user: UserOut
     access_token: str
+    token: Optional[str] = None
     refresh_token: str
     token_type: str = "bearer"
 
@@ -65,6 +66,7 @@ class AuthResponse(BaseModel):
 class LoginResponse(BaseModel):
     """/login 和 /auth/sms/login 统一响应格式"""
     user: UserOut
+    access_token: str
     token: str
     token_type: str = "bearer"
     refresh_token: Optional[str] = None  # 短信登录返回
@@ -140,6 +142,14 @@ def err_token_invalid() -> dict:
     return {"code": "token_invalid", "message": "token 失效或已过期"}
 
 
+def err_forbidden(msg: str = "无权访问") -> dict:
+    return {"code": "forbidden", "message": msg}
+
+
+def err_user_not_found() -> dict:
+    return {"code": "user_not_found", "message": "用户不存在"}
+
+
 # ----- 手机验证码相关 -----
 class SendCodeBody(BaseModel):
     phone: str = Field(..., pattern=r"^1[3-9]\d{9}$", description="手机号")
@@ -180,6 +190,10 @@ class PhoneRegisterResponse(BaseModel):
 # ----- 验证码错误码 -----
 def err_sms_code_invalid() -> dict:
     return {"code": "sms_code_invalid", "message": "验证码错误"}
+
+
+def err_sms_code_invalid_or_expired() -> dict:
+    return {"code": "sms_code_invalid", "message": "验证码错误或已过期"}
 
 
 def err_sms_code_expired() -> dict:

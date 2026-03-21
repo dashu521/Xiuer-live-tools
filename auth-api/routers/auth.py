@@ -99,8 +99,8 @@ def build_user_status_response(user: User, db: Optional[Session] = None) -> User
                 if is_paid_plan(sub_plan) and sub_end_dt and sub_end_dt > now:
                     plan = sub_plan
                     expire_at = sub_end_dt
-        except Exception as e:
-            logger.debug(f"查询 subscriptions 表失败: {e}")
+        except Exception:
+            logger.exception("查询 subscriptions 表失败", extra={"user_id": user.id})
 
         # 【第2优先级】如果没有正式订阅，检查试用 trials 表
         if plan == "free":
@@ -123,8 +123,8 @@ def build_user_status_response(user: User, db: Optional[Session] = None) -> User
                         plan = "trial"
                 else:
                     trial = TrialOut(is_active=False, is_expired=False)
-            except Exception as e:
-                logger.debug(f"查询 trials 表失败: {e}")
+            except Exception:
+                logger.exception("查询 trials 表失败", extra={"user_id": user.id})
                 trial = TrialOut(is_active=False, is_expired=False)
 
     # 【第3优先级】兜底：从 user 对象获取（无数据库连接时）
@@ -247,6 +247,7 @@ def login(body: LoginBody, db: Session = Depends(get_db)):
             status=user.status,
         ),
         access_token=access_token,
+        token=access_token,
         refresh_token=refresh_token,
         token_type="bearer",
     )
@@ -335,6 +336,7 @@ def register(body: RegisterBody, db: Session = Depends(get_db)):
                 status="active",
             ),
             access_token=access_token,
+            token=access_token,
             refresh_token=refresh_raw,
             token_type="bearer",
         )

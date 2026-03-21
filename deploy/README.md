@@ -63,8 +63,13 @@ cd oba-live-tool
 
 ```bash
 cd /opt/oba-live-tool/deploy
+# 若 ECS 无法直连 Docker Hub，请先把 AUTH_API_BASE_IMAGE 设为私有仓库镜像
+# 或服务器本地预置标签，例如 auth-api-runtime-base:3.11-local
+# export AUTH_API_BASE_IMAGE=registry.example.com/xiuer/auth-api-python-base:3.11-slim
 # 生产请修改 docker-compose.yml 中的 JWT_SECRET、MYSQL_ROOT_PASSWORD
-docker-compose up -d
+DOCKER_BUILDKIT=0 docker compose build --pull=false api
+docker compose up -d api --no-build
+docker compose up -d mysql
 ```
 
 ### 5. 仅启动 API + 连接阿里云 RDS
@@ -73,7 +78,13 @@ docker-compose up -d
 
 1. 在 RDS 控制台创建数据库 `auth_db`，记下内网地址、端口、账号密码。
 2. 修改 `docker-compose.yml`：删除 `mysql` 服务，API 的 `DATABASE_URL` 改为 RDS 内网地址。
-3. 只启动 api 服务：`docker-compose up -d api`（需先建好 auth_db）。
+3. 如使用私有基础镜像，先设置 `AUTH_API_BASE_IMAGE`。
+4. 只启动 api 服务：
+
+```bash
+DOCKER_BUILDKIT=0 docker compose -f docker-compose.rds.yml build --pull=false api
+docker compose -f docker-compose.rds.yml up -d api --no-build
+```
 
 ### 6. Nginx 反代（可选，HTTPS）
 
@@ -139,6 +150,38 @@ export REFRESH_TOKEN="登录返回的 refresh_token"
 curl -s -X POST http://127.0.0.1:8000/auth/refresh \
   -H "Content-Type: application/json" \
   -d "{\"refresh_token\":\"$REFRESH_TOKEN\"}"
+```
+
+## 私有 Registry 基础镜像
+
+如果 ECS 无法稳定访问 Docker Hub，建议把 `auth-api` 的基础镜像单独推到你的私有 registry，再让 API 构建时引用它。
+
+### 1. 在可访问 registry 的机器上推送基础镜像
+
+```bash
+cd deploy
+TARGET_IMAGE=registry.example.com/xiuer/auth-api-runtime-base:3.11-slim \
+REGISTRY_USERNAME=your-user \
+REGISTRY_PASSWORD=your-password \
+./publish-auth-api-base.sh
+```
+
+默认推送的本地源镜像是 `auth-api-runtime-base:3.11-local`。如需改源镜像，可额外设置 `SOURCE_IMAGE=...`。
+
+### 2. 在服务器上切换到私有基础镜像
+
+```bash
+cd deploy
+scp use-auth-api-base-image.sh root@your-ecs-ip:/opt/auth-api/
+ssh root@your-ecs-ip \
+  "cd /opt/auth-api && TARGET_IMAGE=registry.example.com/xiuer/auth-api-runtime-base:3.11-slim ./use-auth-api-base-image.sh"
+```
+
+这会把服务器 `.env` 里的 `AUTH_API_BASE_IMAGE` 改成目标镜像，并执行：
+
+```bash
+DOCKER_BUILDKIT=0 docker compose build --pull=false api
+docker compose up -d api --no-build
 ```
 
 ---

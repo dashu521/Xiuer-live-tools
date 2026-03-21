@@ -313,4 +313,4 @@ def auth_audit_log(
         finally:
             db.close()
     except Exception:
-        pass
+        logger.exception("[AUTH-AUDIT] failed to persist audit log", extra={"request_id": request_id, "action": action})

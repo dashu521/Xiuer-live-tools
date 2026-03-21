@@ -10,6 +10,8 @@ services:
     build:
       context: ../auth-api
       dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: ${AUTH_API_BASE_IMAGE:-python:3.11-slim}
     ports:
       - "8000:8000"
     environment:

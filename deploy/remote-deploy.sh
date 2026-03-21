@@ -8,11 +8,11 @@ docker compose down 2>/dev/null || true
 
 echo ""
 echo "=== 重新构建 ==="
-docker compose build --no-cache 2>&1
+DOCKER_BUILDKIT=0 docker compose build --pull=false api 2>&1
 
 echo ""
 echo "=== 启动服务 ==="
-docker compose up -d
+docker compose up -d api --no-build
 
 echo ""
 echo "=== 等待启动 ==="
