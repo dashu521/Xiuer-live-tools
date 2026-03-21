@@ -332,7 +332,7 @@ ls -la release/*/mac*/
 ## 生产环境 API 地址固化规范
 
 ### 规范目的
-**确保正式发布必须使用生产环境 API 地址，禁止 localhost fallback 进入发布包。**
+**确保正式发布使用生产环境 API 地址，通过 Release Guard 机制防止本地地址误用。**
 
 ### 生产环境 API 地址
 
@@ -354,13 +354,15 @@ npm run release
 # Release Guard 会拦截并阻止发布
 ```
 
-#### 2. 禁止 localhost fallback 进入发布包
+#### 2. Localhost Fallback 机制说明
 
-- 代码中的 `import.meta.env.VITE_AUTH_API_BASE_URL || 'localhost'` fallback 模式
-- **仅在开发调试时生效**
-- **正式发布必须设置环境变量**，否则 Release Guard 会拦截
+代码中可能存在 `import.meta.env.VITE_AUTH_API_BASE_URL || 'localhost'` 的 fallback 模式：
 
-#### 3. Release Guard 强制拦截
+- **开发环境**：fallback 模式允许本地调试更方便
+- **发布构建**：当环境变量正确设置时，fallback 不会生效，构建产物使用生产地址
+- **风险控制**：Release Guard 会在发布前扫描并检查，若发现环境变量未正确配置将拦截
+
+#### 3. Release Guard 检查机制
 
 Release Guard (`scripts/release-guard.js`) 在发布前执行以下检查：
 
@@ -369,17 +371,18 @@ Release Guard (`scripts/release-guard.js`) 在发布前执行以下检查：
 | `VITE_AUTH_API_BASE_URL` 未设置 | BLOCKER | 阻止发布 |
 | `VITE_AUTH_API_BASE_URL` 包含 localhost | BLOCKER | 阻止发布 |
 | `VITE_AUTH_API_BASE_URL` 包含 127.0.0.1 | BLOCKER | 阻止发布 |
-| src/ 目录中存在 localhost 引用 | BLOCKER | 阻止发布 |
+| `src/shared` 中存在 localhost/127.0.0.1 引用 | BLOCKER | 阻止发布（仅已识别的 fallback 场景在环境变量正确时可降级为 WARNING） |
 
-**任何一项检查失败，都无法执行发布。**
+**任何一项 BLOCKER 检查失败，都无法执行发布。**
 
 ### 违规处理
 
 | 违规场景 | 处理方式 |
 |----------|----------|
 | 未设置 VITE_AUTH_API_BASE_URL | Release Guard 拦截，提示设置生产 API 地址 |
-| 使用 localhost/127.0.0.1 | Release Guard 拦截，提示使用生产地址 |
-| 代码中存在硬编码 localhost | Release Guard 扫描并拦截 |
+| 使用 localhost/127.0.0.1 作为环境变量值 | Release Guard 拦截，提示使用生产地址 |
+| `src/shared` 中存在硬编码 localhost/127.0.0.1 | Release Guard 扫描并拦截 |
+| 已识别的 localhost fallback 场景且环境变量已正确设置 | Release Guard 降级为 WARNING，不影响发布 |
 
 ### 快速验证
 

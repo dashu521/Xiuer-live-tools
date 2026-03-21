@@ -23,8 +23,8 @@
 │         │                 │                 │                 │         │
 │         ▼                 ▼                 ▼                 ▼         │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
-│  │ • 7天试用    │  │ • 1个账号    │  │ • 3个账号    │  │ • 无限账号   │ │
-│  │ • 功能受限   │  │ • 基础功能   │  │ • 全部功能   │  │ • 全部功能   │ │
+│  │ • 3 天试用    │  │ • 1 个账号    │  │ • 3 个账号    │  │ • 无限账号   │ │
+│  │ • 核心功能可用 │  │ • 基础功能   │  │ • 全部功能   │  │ • 全部功能   │ │
 │  │ • 无需付费   │  │ • 标准配额   │  │ • 高配额     │  │ • 无限配额   │ │
 │  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘ │
 │                                                                         │
@@ -35,11 +35,11 @@
 
 | 属性 | Trial | Pro | ProMax | Ultra |
 |------|-------|-----|--------|-------|
-| **套餐编码** | `trial` | `pro` | `promax` | `ultra` |
+| **套餐编码** | `trial` | `pro` | `pro_max` | `ultra` |
 | **中文名称** | 免费试用 | 基础版 | 高级版 | 旗舰版 |
 | **英文名称** | Free Trial | Pro | ProMax | Ultra |
 | **付费状态** | 免费 | 付费 | 付费 | 付费 |
-| **订阅周期** | 7天 | 月付/年付 | 月付/年付 | 月付/年付 |
+| **订阅周期** | 3 天 | 月付/年付 | 月付/年付 | 月付/年付 |
 
 ---
 
@@ -82,9 +82,8 @@
 ### 3.2 功能限制说明
 
 #### Trial（试用）限制
-- 数据保留仅3天
-- 高级AI模型不可用（仅限基础模型）
-- API接口不可用
+- 数据保留仅 3 天
+- AI 助手不可用（需 Pro）
 - 试用期结束后功能受限
 
 #### Pro（基础版）限制
@@ -121,7 +120,7 @@
 const planDisplayMap = {
   trial: { name: '免费试用', shortName: '试用', color: '#F59E0B', icon: 'star' },
   pro: { name: '基础版', shortName: 'Pro', color: '#3B82F6', icon: 'diamond' },
-  promax: { name: '高级版', shortName: 'ProMax', color: '#8B5CF6', icon: 'crown' },
+  pro_max: { name: '高级版', shortName: 'ProMax', color: '#8B5CF6', icon: 'crown' },
   ultra: { name: '旗舰版', shortName: 'Ultra', color: '#F97316', icon: 'rocket' }
 };
 
@@ -152,7 +151,7 @@ const statusDisplayMap = {
 -- 用户表
 CREATE TABLE users (
     id VARCHAR(36) PRIMARY KEY,
-    plan VARCHAR(20) NOT NULL DEFAULT 'trial', -- trial/pro/promax/ultra
+    plan VARCHAR(20) NOT NULL DEFAULT 'trial', -- trial/pro/pro_max/ultra
     plan_expires_at TIMESTAMP, -- 套餐到期时间
     trial_started_at TIMESTAMP, -- 试用开始时间
     trial_ended_at TIMESTAMP, -- 试用结束时间
@@ -162,7 +161,7 @@ CREATE TABLE users (
 
 -- 套餐定义表（只读配置）
 CREATE TABLE plan_definitions (
-    plan_code VARCHAR(20) PRIMARY KEY, -- trial/pro/promax/ultra
+    plan_code VARCHAR(20) PRIMARY KEY, -- trial/pro/pro_max/ultra
     plan_name VARCHAR(50) NOT NULL,
     max_accounts INT NOT NULL,
     data_retention_days INT NOT NULL,
@@ -179,7 +178,7 @@ CREATE TABLE plan_definitions (
 // /api/user/status 返回结构
 interface UserStatusResponse {
   userId: string;
-  plan: 'trial' | 'pro' | 'promax' | 'ultra';
+  plan: 'trial' | 'pro' | 'pro_max' | 'ultra';
   planName: string; // 中文名称
   planDisplay: {
     name: string;
@@ -215,7 +214,7 @@ interface AccessContext {
   // ... 其他字段
   
   // 套餐信息
-  plan: 'trial' | 'pro' | 'promax' | 'ultra';
+  plan: 'trial' | 'pro' | 'pro_max' | 'ultra';
   planStatus: 'active' | 'expired' | 'trial_ended';
   planExpiresAt: number | null;
   
@@ -240,7 +239,7 @@ function checkPlanFeature(plan: PlanType, feature: FeatureType): boolean {
   const featureMatrix = {
     trial: ['autoReply', 'autoSpeak', 'autoPopup'],
     pro: ['autoReply', 'autoSpeak', 'autoPopup', 'dataMonitoring'],
-    promax: ['autoReply', 'autoSpeak', 'autoPopup', 'dataMonitoring', 'advancedAI'],
+    pro_max: ['autoReply', 'autoSpeak', 'autoPopup', 'dataMonitoring', 'advancedAI'],
     ultra: ['autoReply', 'autoSpeak', 'autoPopup', 'dataMonitoring', 'advancedAI', 'apiAccess']
   };
   return featureMatrix[plan]?.includes(feature) ?? false;
@@ -266,7 +265,7 @@ function checkPlanFeature(plan: PlanType, feature: FeatureType): boolean {
 | 旧命名 | 新命名 | 状态 |
 |--------|--------|------|
 | `basic` / `Basic` | `pro` / `Pro` | 已废弃 |
-| `premium` / `Premium` | `promax` / `ProMax` | 已废弃 |
+| `premium` / `Premium` | `pro_max` / `ProMax` | 已废弃 |
 | `free` / `Free` | `trial` / `Trial` | 已废弃 |
 
 ### 6.2 历史兼容逻辑
