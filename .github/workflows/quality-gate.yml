@@ -46,7 +46,21 @@ jobs:
       - name: Run tests
         run: npm test -- --run
 
-  # 2. Python 代码质量检查（auth-api）
+  # 2. Shell 脚本语法检查（deploy）
+  shell-quality:
+    name: Shell Script Quality Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Run shell syntax check
+        run: bash -n deploy/*.sh
+
+  # 3. Python 代码质量检查（auth-api）
   python-quality:
     name: Python Quality Check
     runs-on: ubuntu-latest
@@ -57,41 +71,27 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      # 安装 auth-api 依赖
-      - name: Install dependencies
-        working-directory: ./auth-api
-        run: |
-          pip install -r requirements.txt
+      - name: Create auth-api virtualenv
+        run: npm run auth:venv
 
-      # Python 语法检查
-      - name: Python syntax check
-        working-directory: ./auth-api
-        run: |
-          python -m py_compile main.py config.py deps.py models.py schemas.py sms_service.py
-          python -m py_compile auth_feature_rules.py subscription_rules.py
-          find routers -name "*.py" -exec python -m py_compile {} \;
+      - name: Run auth-api check suite
+        run: npm run auth:check
 
-      # FastAPI 应用能否正常导入（冒烟测试）
-      - name: FastAPI import check
-        working-directory: ./auth-api
-        run: |
-          python -c "from main import app; print('FastAPI app imported successfully')"
-        env:
-          JWT_SECRET: test-secret-for-ci-32-bytes-minimum-key
-          DATABASE_URL: sqlite:///tmp/test.db
-
-      # 稳定单测
-      - name: Run Python unit tests
-        working-directory: ./auth-api
-        run: |
-          python -m unittest test_auth_feature_rules.py test_subscription_rules.py test_subscription_system.py test_single_session_enforcement.py
-
-  # 3. 依赖漏洞扫描（阻断高风险依赖进入主分支）
+  # 4. 依赖漏洞扫描（阻断高风险依赖进入主分支）
   security-audit:
     name: Security Audit
     runs-on: ubuntu-latest
