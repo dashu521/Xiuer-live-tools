@@ -36,7 +36,22 @@ const HIGH_RISK_ARCHITECTURE_PATHS = [
 ];
 
 function runGit(args) {
-  return execFileSync('git', args, { encoding: 'utf8' }).trim();
+  return execFileSync('git', args, { encoding: 'utf8', stdio: 'pipe' }).trim();
+}
+
+function tryRunGit(args) {
+  try {
+    return runGit(args);
+  } catch {
+    return null;
+  }
+}
+
+function splitChangedFiles(output) {
+  return (output ?? '')
+    .split('\n')
+    .map((file) => file.trim())
+    .filter(Boolean);
 }
 
 function getChangedFiles() {
@@ -47,21 +62,41 @@ function getChangedFiles() {
     const event = JSON.parse(fs.readFileSync(eventPath, 'utf8'));
 
     if (eventName === 'pull_request' && event.pull_request?.base?.sha && event.pull_request?.head?.sha) {
-      return runGit(['diff', '--name-only', `${event.pull_request.base.sha}...${event.pull_request.head.sha}`])
-        .split('\n')
-        .filter(Boolean);
+      const changedFiles = tryRunGit([
+        'diff',
+        '--name-only',
+        `${event.pull_request.base.sha}...${event.pull_request.head.sha}`,
+      ]);
+      if (changedFiles !== null) {
+        return splitChangedFiles(changedFiles);
+      }
     }
 
     if (eventName === 'push' && event.before && event.after && event.before !== '0000000000000000000000000000000000000000') {
-      return runGit(['diff', '--name-only', `${event.before}...${event.after}`])
-        .split('\n')
-        .filter(Boolean);
+      const changedFiles = tryRunGit(['diff', '--name-only', `${event.before}...${event.after}`]);
+      if (changedFiles !== null) {
+        return splitChangedFiles(changedFiles);
+      }
     }
   }
 
-  return runGit(['diff', '--name-only', 'HEAD~1...HEAD'])
-    .split('\n')
-    .filter(Boolean);
+  const fallbackRanges = ['HEAD~1...HEAD', 'HEAD^...HEAD', 'HEAD^..HEAD'];
+  for (const range of fallbackRanges) {
+    const changedFiles = tryRunGit(['diff', '--name-only', range]);
+    if (changedFiles !== null) {
+      return splitChangedFiles(changedFiles);
+    }
+  }
+
+  const lastCommitFiles = tryRunGit(['show', '--name-only', '--pretty=', 'HEAD']);
+  if (lastCommitFiles !== null) {
+    console.warn(
+      '[check-architecture-doc-sync] Falling back to changed files from the latest commit because the diff base is unavailable.',
+    );
+    return splitChangedFiles(lastCommitFiles);
+  }
+
+  throw new Error('Unable to determine changed files for architecture doc sync check.');
 }
 
 function isHighRiskArchitectureChange(file) {
