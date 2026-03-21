@@ -1,6 +1,7 @@
 /**
  * Task 生命周期模型 - 统一类型定义
  */
+import type { IpcInvoke } from 'shared/electron-api'
 
 /**
  * 任务 ID
@@ -42,8 +43,7 @@ export interface TaskContext {
     success: (message: string) => void
     error: (message: string) => void
   }
-  // IPC 调用（允许任意通道字符串，实际调用时通过 IPC_CHANNELS 常量保证安全）
-  ipcInvoke: <T = unknown>(channel: string, ...args: unknown[]) => Promise<T>
+  ipcInvoke: IpcInvoke
   // Store 更新函数（可选，由具体任务决定）
   updateStatus?: (status: TaskStatus) => void
 }

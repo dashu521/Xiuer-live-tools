@@ -6,7 +6,13 @@ import { immer } from 'zustand/middleware/immer'
 import { useShallow } from 'zustand/react/shallow'
 import { useAuthStore } from '@/stores/authStore'
 import { EVENTS, eventEmitter } from '@/utils/events'
-import { storageManager } from '@/utils/storage/StorageManager'
+import {
+  loadAccountScopedContexts,
+  persistAccountScopedContext,
+  persistAllAccountScopedContexts,
+  removeAccountScopedContext,
+  runWhenAccountsReady,
+} from './accountScopedContextStorage'
 import { useAccounts } from './useAccounts'
 
 export interface Message {
@@ -74,18 +80,7 @@ export const useAutoMessageStore = create<AutoMessageStore>()(
     eventEmitter.on(EVENTS.ACCOUNT_REMOVED, (accountId: string) => {
       set(state => {
         delete state.contexts[accountId]
-        const { currentUserId } = get()
-        if (currentUserId) {
-          try {
-            storageManager.remove('auto-message', {
-              level: 'account',
-              userId: currentUserId,
-              accountId,
-            })
-          } catch (e) {
-            console.error('[AutoMessage] 删除存储失败:', e)
-          }
-        }
+        removeAccountScopedContext('auto-message', get().currentUserId, accountId, '[AutoMessage]')
       })
     })
 
@@ -103,23 +98,17 @@ export const useAutoMessageStore = create<AutoMessageStore>()(
     }
 
     const saveToStorage = (accountId: string, context: AutoMessageContext) => {
-      const { currentUserId } = get()
-      if (currentUserId) {
-        try {
-          // 不保存 isRunning 状态
-          const dataToSave = {
-            ...context,
-            isRunning: false,
-          }
-          storageManager.set('auto-message', dataToSave, {
-            level: 'account',
-            userId: currentUserId,
-            accountId,
-          })
-        } catch (e) {
-          console.error('[AutoMessage] 保存到存储失败:', e)
-        }
-      }
+      persistAccountScopedContext({
+        namespace: 'auto-message',
+        userId: get().currentUserId,
+        accountId,
+        context,
+        logPrefix: '[AutoMessage]',
+        serialize: savedContext => ({
+          ...savedContext,
+          isRunning: false,
+        }),
+      })
     }
 
     return {
@@ -184,65 +173,34 @@ export const useAutoMessageStore = create<AutoMessageStore>()(
 
       loadUserContexts: (userId: string) => {
         const loadContexts = () => {
-          const { accounts } = useAccounts.getState()
-          if (accounts.length === 0) {
-            return
-          }
-
           set(state => {
             state.currentUserId = userId
-            state.contexts = {}
-
-            accounts.forEach(account => {
-              const savedContext = storageManager.get<AutoMessageContext>('auto-message', {
-                level: 'account',
-                userId,
-                accountId: account.id,
-              })
-              if (savedContext) {
-                state.contexts[account.id] = {
-                  ...savedContext,
-                  isRunning: false,
-                }
-              }
+            state.contexts = loadAccountScopedContexts({
+              namespace: 'auto-message',
+              userId,
+              restoreContext: savedContext => ({
+                ...savedContext,
+                isRunning: false,
+              }),
             })
           })
         }
 
-        const { accounts } = useAccounts.getState()
-        if (accounts.length > 0) {
-          loadContexts()
-        } else {
-          const unsubscribe = useAccounts.subscribe(state => {
-            if (state.accounts.length > 0) {
-              unsubscribe()
-              loadContexts()
-            }
-          })
-        }
+        runWhenAccountsReady(loadContexts)
       },
 
       resetAllContexts: () => {
         set(state => {
-          // 保存当前数据到存储
-          const { currentUserId } = state
-          if (currentUserId) {
-            Object.entries(state.contexts).forEach(([accountId, context]) => {
-              try {
-                const dataToSave = {
-                  ...context,
-                  isRunning: false,
-                }
-                storageManager.set('auto-message', dataToSave, {
-                  level: 'account',
-                  userId: currentUserId,
-                  accountId,
-                })
-              } catch (e) {
-                console.error('[AutoMessage] 保存配置失败:', e)
-              }
-            })
-          }
+          persistAllAccountScopedContexts({
+            namespace: 'auto-message',
+            userId: state.currentUserId,
+            contexts: state.contexts,
+            logPrefix: '[AutoMessage]',
+            serialize: savedContext => ({
+              ...savedContext,
+              isRunning: false,
+            }),
+          })
           state.contexts = {}
           state.currentUserId = null
         })

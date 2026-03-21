@@ -31,11 +31,7 @@ export class AutoPopupTask extends BaseTask {
 
     try {
       // 启动任务
-      const result = await ctx.ipcInvoke<boolean>(
-        IPC_CHANNELS.tasks.autoPopUp.start,
-        ctx.accountId,
-        config,
-      )
+      const result = await ctx.ipcInvoke(IPC_CHANNELS.tasks.autoPopUp.start, ctx.accountId, config)
 
       if (!result) {
         throw new Error('启动自动弹窗任务失败')

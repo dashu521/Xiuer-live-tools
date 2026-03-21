@@ -44,14 +44,10 @@ export class AutoSpeakTask extends BaseTask {
 
     try {
       // 启动任务
-      const result = await ctx.ipcInvoke<boolean>(
-        IPC_CHANNELS.tasks.autoMessage.start,
-        ctx.accountId,
-        {
-          ...config,
-          messages: runtimeMessages,
-        },
-      )
+      const result = await ctx.ipcInvoke(IPC_CHANNELS.tasks.autoMessage.start, ctx.accountId, {
+        ...config,
+        messages: runtimeMessages,
+      })
 
       if (!result) {
         throw new Error('启动自动发言任务失败')

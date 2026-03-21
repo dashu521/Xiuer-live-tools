@@ -1,5 +1,6 @@
 import { useMemoizedFn } from 'ahooks'
 import { useState } from 'react'
+import type { IpcInvoke } from 'shared/electron-api'
 import { Title } from '@/components/common/Title'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAccounts } from '@/hooks/useAccounts'
@@ -37,11 +38,8 @@ export default function LiveStats() {
   const gate = useLiveFeatureGate()
   const { toast } = useToast()
   const [isExporting, setIsExporting] = useState(false)
-  const invokeCommentListenerIpc = <T = unknown>(channel: string, ...args: unknown[]): Promise<T> =>
-    (window.ipcRenderer as { invoke: (...invokeArgs: unknown[]) => Promise<unknown> }).invoke(
-      channel,
-      ...args,
-    ) as Promise<T>
+  const invokeCommentListenerIpc: IpcInvoke = (channel, ...args) =>
+    window.ipcRenderer.invoke(channel, ...args)
 
   // 获取账号名称
   const accountName = useCurrentLiveControl(ctx => ctx.accountName)

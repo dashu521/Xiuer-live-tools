@@ -6,7 +6,13 @@ import { immer } from 'zustand/middleware/immer'
 import { useShallow } from 'zustand/react/shallow'
 import { useAuthStore } from '@/stores/authStore'
 import { EVENTS, eventEmitter } from '@/utils/events'
-import { storageManager } from '@/utils/storage/StorageManager'
+import {
+  loadAccountScopedContexts,
+  persistAccountScopedContext,
+  persistAllAccountScopedContexts,
+  removeAccountScopedContext,
+  runWhenAccountsReady,
+} from './accountScopedContextStorage'
 import { useAccounts } from './useAccounts'
 import { useOSPlatform } from './useOSPlatform'
 
@@ -73,18 +79,7 @@ export const useAutoPopUpStore = create<AutoPopUpStore>()(
     eventEmitter.on(EVENTS.ACCOUNT_REMOVED, (accountId: string) => {
       set(state => {
         delete state.contexts[accountId]
-        const { currentUserId } = get()
-        if (currentUserId) {
-          try {
-            storageManager.remove('auto-popup', {
-              level: 'account',
-              userId: currentUserId,
-              accountId,
-            })
-          } catch (e) {
-            console.error('[AutoPopUp] 删除存储失败:', e)
-          }
-        }
+        removeAccountScopedContext('auto-popup', get().currentUserId, accountId, '[AutoPopUp]')
       })
     })
 
@@ -96,23 +91,17 @@ export const useAutoPopUpStore = create<AutoPopUpStore>()(
     }
 
     const saveToStorage = (accountId: string, context: AutoPopUpContext) => {
-      const { currentUserId } = get()
-      if (currentUserId) {
-        try {
-          // 不保存 isRunning 状态
-          const dataToSave = {
-            ...context,
-            isRunning: false,
-          }
-          storageManager.set('auto-popup', dataToSave, {
-            level: 'account',
-            userId: currentUserId,
-            accountId,
-          })
-        } catch (e) {
-          console.error('[AutoPopUp] 保存到存储失败:', e)
-        }
-      }
+      persistAccountScopedContext({
+        namespace: 'auto-popup',
+        userId: get().currentUserId,
+        accountId,
+        context,
+        logPrefix: '[AutoPopUp]',
+        serialize: savedContext => ({
+          ...savedContext,
+          isRunning: false,
+        }),
+      })
     }
 
     return {
@@ -165,74 +154,48 @@ export const useAutoPopUpStore = create<AutoPopUpStore>()(
 
       loadUserContexts: (userId: string) => {
         const loadContexts = () => {
-          const { accounts } = useAccounts.getState()
-          if (accounts.length === 0) {
-            return
-          }
-
           set(state => {
             state.currentUserId = userId
-            state.contexts = {}
-
-            accounts.forEach(account => {
-              const savedContext = storageManager.get<AutoPopUpContext>('auto-popup', {
-                level: 'account',
-                userId,
-                accountId: account.id,
-              })
-              if (savedContext) {
-                // 【P1-3】数据迁移：旧配置 goodsIds -> 新配置 goods
-                if (
-                  savedContext.config.goodsIds &&
-                  savedContext.config.goodsIds.length > 0 &&
-                  (!savedContext.config.goods || savedContext.config.goods.length === 0)
-                ) {
-                  savedContext.config.goods = savedContext.config.goodsIds.map(id => ({ id }))
-                  console.log(`[AutoPopUp] 数据迁移: account ${account.id} goodsIds -> goods`)
-                }
-                state.contexts[account.id] = {
+            state.contexts = loadAccountScopedContexts({
+              namespace: 'auto-popup',
+              userId,
+              restoreContext: (savedContext, accountId) => {
+                const nextContext: AutoPopUpContext = {
                   ...savedContext,
+                  config: {
+                    ...savedContext.config,
+                  },
                   isRunning: false,
                 }
-              }
+                if (
+                  nextContext.config.goodsIds &&
+                  nextContext.config.goodsIds.length > 0 &&
+                  (!nextContext.config.goods || nextContext.config.goods.length === 0)
+                ) {
+                  nextContext.config.goods = nextContext.config.goodsIds.map(id => ({ id }))
+                  console.log(`[AutoPopUp] 数据迁移: account ${accountId} goodsIds -> goods`)
+                }
+                return nextContext
+              },
             })
           })
         }
 
-        const { accounts } = useAccounts.getState()
-        if (accounts.length > 0) {
-          loadContexts()
-        } else {
-          const unsubscribe = useAccounts.subscribe(state => {
-            if (state.accounts.length > 0) {
-              unsubscribe()
-              loadContexts()
-            }
-          })
-        }
+        runWhenAccountsReady(loadContexts)
       },
 
       resetAllContexts: () => {
         set(state => {
-          // 保存当前数据到存储
-          const { currentUserId } = state
-          if (currentUserId) {
-            Object.entries(state.contexts).forEach(([accountId, context]) => {
-              try {
-                const dataToSave = {
-                  ...context,
-                  isRunning: false,
-                }
-                storageManager.set('auto-popup', dataToSave, {
-                  level: 'account',
-                  userId: currentUserId,
-                  accountId,
-                })
-              } catch (e) {
-                console.error('[AutoPopUp] 保存配置失败:', e)
-              }
-            })
-          }
+          persistAllAccountScopedContexts({
+            namespace: 'auto-popup',
+            userId: state.currentUserId,
+            contexts: state.contexts,
+            logPrefix: '[AutoPopUp]',
+            serialize: savedContext => ({
+              ...savedContext,
+              isRunning: false,
+            }),
+          })
           state.contexts = {}
           state.currentUserId = null
         })

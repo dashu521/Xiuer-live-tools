@@ -487,7 +487,7 @@ export function useAutoReply() {
         case 'wechat_channel_live_msg':
         case 'comment': {
           // 优先尝试关键字回复
-          const keywordReplied = handleKeywordReply(comment, config, currentAccountId, handleError)
+          const keywordReplied = handleKeywordReply(comment, config, accountId, handleError)
           // 如果关键字未回复，且 AI 回复已启用，则尝试 AI 回复
           if (!keywordReplied && config.comment.aiReply.enable) {
             const { provider, model } = aiStore.config

@@ -1,19 +1,9 @@
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
-import {
-  AUTH_LAST_IDENTIFIER_KEY,
-  AUTH_REMEMBER_ME_KEY,
-  AUTH_ZUSTAND_PERSIST_KEY,
-} from '@/constants/authStorageKeys'
+import { AUTH_ZUSTAND_PERSIST_KEY } from '@/constants/authStorageKeys'
 import { normalizePlan } from '@/domain/access/planRules'
 import { useAccounts } from '../hooks/useAccounts'
-import { useAutoMessageStore } from '../hooks/useAutoMessage'
-import { useAutoPopUpStore } from '../hooks/useAutoPopUp'
-import { useAutoReplyConfigStore } from '../hooks/useAutoReplyConfig'
-import { useChromeConfigStore } from '../hooks/useChromeConfig'
-import { useLiveControlStore } from '../hooks/useLiveControl'
-import { useSubAccountStore } from '../hooks/useSubAccount'
 import type { LoginResponseBackend } from '../services/apiClient'
 import { getMe, getTrialStatus, getUserStatus, startTrial } from '../services/apiClient'
 import { configSyncService } from '../services/configSyncService'
@@ -26,8 +16,15 @@ import type {
   UserStatus,
 } from '../types/auth'
 import { mapAuthError } from '../utils/mapAuthError'
-import { usePlatformPreferenceStore } from './platformPreferenceStore'
-import { useTrialStore } from './trialStore'
+import {
+  clearRememberedIdentifierIfNeeded,
+  clearUserScopedBusinessStorage,
+  loadUserBaseSessionData,
+  loadUserScopedRuntimeContexts,
+  resetUserScopedStores,
+  saveAccountsSnapshot,
+  syncConfigToCloudSafely,
+} from './auth/authSessionOrchestration'
 
 type LoginResponseExtended = AuthResponse & {
   data?: LoginCredentials
@@ -323,8 +320,7 @@ export const useAuthStore = create<AuthStore>()(
             // 【数据隔离】登录成功后加载该用户的账号数据和偏好设置
             const userId = user.id || credentials.username
             console.log('[AuthStore] 登录成功，加载用户数据:', userId)
-            useAccounts.getState().loadUserAccounts(userId)
-            usePlatformPreferenceStore.getState().loadUserPreferences(userId)
+            loadUserBaseSessionData(userId)
 
             // 【跨设备同步】从云端加载用户配置
             configSyncService
@@ -574,37 +570,14 @@ export const useAuthStore = create<AuthStore>()(
         } catch (error) {
           console.error('Logout error:', error)
         } finally {
-          // 【数据隔离】先保存账号数据，再清空用户状态
-          // 重要：必须在设置 user: null 之前保存数据
           const currentUserId = get().user?.id
 
-          // 【跨设备同步】登出前同步配置到云端
-          if (currentUserId) {
-            try {
-              await configSyncService.syncToCloud()
-              console.log('[AuthStore] 登出前配置同步成功')
-            } catch (err) {
-              console.error('[AuthStore] 登出前配置同步失败:', err)
-            }
-          }
-
-          // 先保存账号数据到 localStorage
-          if (currentUserId) {
-            console.log('[AuthStore] 登出前保存账号数据:', currentUserId)
-            const accountsState = useAccounts.getState()
-            // 手动保存数据，不调用 reset（reset 会清空状态）
-            const storageKey = `accounts-storage-${currentUserId}`
-            const dataToSave = {
-              state: {
-                accounts: accountsState.accounts,
-                currentAccountId: accountsState.currentAccountId,
-                defaultAccountId: accountsState.defaultAccountId,
-              },
-              version: 0,
-            }
-            localStorage.setItem(storageKey, JSON.stringify(dataToSave))
-            console.log('[AuthStore] 账号数据已保存，账号数:', accountsState.accounts.length)
-          }
+          await syncConfigToCloudSafely(
+            currentUserId,
+            '[AuthStore] 登出前配置同步成功',
+            '[AuthStore] 登出前配置同步失败:',
+          )
+          saveAccountsSnapshot(currentUserId, '[AuthStore] 登出前保存账号数据:')
 
           set({
             isAuthenticated: false,
@@ -617,55 +590,13 @@ export const useAuthStore = create<AuthStore>()(
             isOffline: false,
           })
 
-          // 【修复】清理当前用户的业务配置数据，但保留账号列表
-          // 这样用户重新登录后可以看到之前添加的账号
           if (currentUserId) {
             console.log('[AuthStore] 清理用户业务配置数据（保留账号列表）:', currentUserId)
-            // 只删除业务配置数据，不删除账号列表
-            const prefixesToRemove = [
-              'account-config',
-              'chrome-config',
-              'auto-reply',
-              'auto-message',
-              'auto-popup',
-              'live-control',
-              'sub-account',
-              'account-pref',
-            ]
-
-            for (let i = 0; i < localStorage.length; i++) {
-              const key = localStorage.key(i)
-              if (!key) continue
-
-              // 检查是否是该用户的业务配置数据
-              for (const prefix of prefixesToRemove) {
-                if (key.startsWith(`${prefix}-${currentUserId}`)) {
-                  localStorage.removeItem(key)
-                  break
-                }
-              }
-            }
+            clearUserScopedBusinessStorage(currentUserId)
           }
 
-          // 清空试用状态，避免 B 账号登录后沿用 A 账号的试用缓存导致不弹试用弹窗
-          useTrialStore.getState().reset()
-          // 清空所有业务数据，实现用户间完全数据隔离
-          useAccounts.getState().reset()
-          // 使用可选链操作符安全调用各 store 的 resetAllContexts 方法
-          useLiveControlStore.getState().resetAllContexts?.()
-          useAutoMessageStore.getState().resetAllContexts?.()
-          useAutoPopUpStore.getState().resetAllContexts?.()
-          useAutoReplyConfigStore.getState().resetAllContexts?.()
-          useChromeConfigStore.getState().resetAllContexts()
-          useSubAccountStore.getState().resetAllContexts?.()
-          // 退出登录后：若未勾选「记住账号」，清空本地保存的账号与记住状态
-          if (
-            typeof localStorage !== 'undefined' &&
-            localStorage.getItem(AUTH_REMEMBER_ME_KEY) !== 'true'
-          ) {
-            localStorage.removeItem(AUTH_LAST_IDENTIFIER_KEY)
-            localStorage.setItem(AUTH_REMEMBER_ME_KEY, 'false')
-          }
+          resetUserScopedStores()
+          clearRememberedIdentifierIfNeeded()
         }
       },
 
@@ -761,14 +692,8 @@ export const useAuthStore = create<AuthStore>()(
 
             // 【修复】启动时加载用户所有数据
             console.log('[AuthStore] 启动鉴权成功，加载用户数据:', userId)
-            useAccounts.getState().loadUserAccounts(userId)
-            usePlatformPreferenceStore.getState().loadUserPreferences(userId)
-            useAutoReplyConfigStore.getState().loadUserContexts(userId)
-            useAutoMessageStore.getState().loadUserContexts(userId)
-            useAutoPopUpStore.getState().loadUserContexts(userId)
-            useChromeConfigStore.getState().loadUserConfigs(userId)
-            useLiveControlStore.getState().loadUserContexts(userId)
-            useSubAccountStore.getState().loadUserContexts(userId)
+            loadUserBaseSessionData(userId)
+            loadUserScopedRuntimeContexts(userId)
 
             // 【跨设备同步】从云端加载用户配置
             configSyncService
@@ -850,20 +775,7 @@ export const useAuthStore = create<AuthStore>()(
           console.error('[AuthStore] Failed to stop runtime tasks during unauth cleanup:', error)
         }
 
-        if (currentUserId) {
-          console.log('[AuthStore] 失效会话清理前保存账号数据:', currentUserId)
-          const accountsState = useAccounts.getState()
-          const storageKey = `accounts-storage-${currentUserId}`
-          const dataToSave = {
-            state: {
-              accounts: accountsState.accounts,
-              currentAccountId: accountsState.currentAccountId,
-              defaultAccountId: accountsState.defaultAccountId,
-            },
-            version: 0,
-          }
-          localStorage.setItem(storageKey, JSON.stringify(dataToSave))
-        }
+        saveAccountsSnapshot(currentUserId, '[AuthStore] 失效会话清理前保存账号数据:')
 
         set({
           isAuthenticated: false,
@@ -877,47 +789,9 @@ export const useAuthStore = create<AuthStore>()(
           authCheckDone: true,
         })
 
-        if (currentUserId) {
-          const prefixesToRemove = [
-            'account-config',
-            'chrome-config',
-            'auto-reply',
-            'auto-message',
-            'auto-popup',
-            'live-control',
-            'sub-account',
-            'account-pref',
-          ]
-
-          const keysToRemove: string[] = []
-          for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i)
-            if (!key) continue
-            if (prefixesToRemove.some(prefix => key.startsWith(`${prefix}-${currentUserId}`))) {
-              keysToRemove.push(key)
-            }
-          }
-          for (const key of keysToRemove) {
-            localStorage.removeItem(key)
-          }
-        }
-
-        useTrialStore.getState().reset()
-        useAccounts.getState().reset()
-        useLiveControlStore.getState().resetAllContexts?.()
-        useAutoMessageStore.getState().resetAllContexts?.()
-        useAutoPopUpStore.getState().resetAllContexts?.()
-        useAutoReplyConfigStore.getState().resetAllContexts?.()
-        useChromeConfigStore.getState().resetAllContexts()
-        useSubAccountStore.getState().resetAllContexts?.()
-
-        if (
-          typeof localStorage !== 'undefined' &&
-          localStorage.getItem(AUTH_REMEMBER_ME_KEY) !== 'true'
-        ) {
-          localStorage.removeItem(AUTH_LAST_IDENTIFIER_KEY)
-          localStorage.setItem(AUTH_REMEMBER_ME_KEY, 'false')
-        }
+        clearUserScopedBusinessStorage(currentUserId)
+        resetUserScopedStores()
+        clearRememberedIdentifierIfNeeded()
       },
 
       setUserStatus: (userStatus: UserStatus | null) => set({ userStatus }),

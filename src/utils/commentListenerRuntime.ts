@@ -1,3 +1,4 @@
+import type { IpcInvoke } from 'shared/electron-api'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
@@ -73,7 +74,7 @@ export async function acquireCommentListener(
   accountId: string,
   consumer: CommentListenerConsumer,
   config: CommentListenerConfig,
-  ipcInvoke: <T = unknown>(channel: string, ...args: unknown[]) => Promise<T>,
+  ipcInvoke: IpcInvoke,
 ): Promise<boolean> {
   const store = useCommentListenerRuntimeStore.getState()
   const context = store.contexts[accountId]
@@ -95,12 +96,8 @@ export async function acquireCommentListener(
 
   store.setStatus(accountId, 'starting')
 
-  const startPromise = ipcInvoke<boolean>(
-    IPC_CHANNELS.tasks.commentListener.start,
-    accountId,
-    config,
-  )
-    .then(ok => {
+  const startPromise = ipcInvoke(IPC_CHANNELS.tasks.commentListener.start, accountId, config)
+    .then((ok: boolean) => {
       const runtimeStore = useCommentListenerRuntimeStore.getState()
       runtimeStore.setStatus(accountId, ok ? 'listening' : 'error')
       if (!ok) {
@@ -108,7 +105,7 @@ export async function acquireCommentListener(
       }
       return ok
     })
-    .catch(error => {
+    .catch((error: unknown) => {
       const runtimeStore = useCommentListenerRuntimeStore.getState()
       runtimeStore.setStatus(accountId, 'error')
       runtimeStore.clearConsumers(accountId)
@@ -125,7 +122,7 @@ export async function acquireCommentListener(
 export async function releaseCommentListener(
   accountId: string,
   consumer: CommentListenerConsumer,
-  ipcInvoke: <T = unknown>(channel: string, ...args: unknown[]) => Promise<T>,
+  ipcInvoke: IpcInvoke,
 ): Promise<void> {
   const store = useCommentListenerRuntimeStore.getState()
   store.setConsumerActive(accountId, consumer, false)

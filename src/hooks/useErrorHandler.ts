@@ -2,6 +2,28 @@ import { useCallback } from 'react'
 import { getFriendlyErrorMessage } from '@/utils/errorMessages'
 import { useToast } from './useToast'
 
+export type ErrorHandlingResult<R> = { ok: true; value: R } | { ok: false; error: unknown }
+
+export async function executeWithErrorHandling<T extends unknown[], R>(
+  asyncFn: (...args: T) => Promise<R>,
+  onError: (error: unknown, message?: string) => void,
+  args: T,
+  errorMessage?: string,
+): Promise<ErrorHandlingResult<R>> {
+  try {
+    return {
+      ok: true,
+      value: await asyncFn(...args),
+    }
+  } catch (error) {
+    onError(error, errorMessage)
+    return {
+      ok: false,
+      error,
+    }
+  }
+}
+
 /**
  * 统一的错误处理 Hook
  * 用于在应用中统一处理错误，包括日志记录和用户提示
@@ -39,14 +61,8 @@ export function useErrorHandler() {
    */
   const withErrorHandling = useCallback(
     <T extends unknown[], R>(asyncFn: (...args: T) => Promise<R>, errorMessage?: string) => {
-      return async (...args: T): Promise<R | undefined> => {
-        try {
-          return await asyncFn(...args)
-        } catch (error) {
-          handleError(error as Error, errorMessage)
-          return undefined
-        }
-      }
+      return (...args: T): Promise<ErrorHandlingResult<R>> =>
+        executeWithErrorHandling(asyncFn, handleError, args, errorMessage)
     },
     [handleError],
   )

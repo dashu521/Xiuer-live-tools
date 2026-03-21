@@ -2,6 +2,7 @@
  * 自动回复任务实现
  */
 
+import type { IpcInvoke } from 'shared/electron-api'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { useAutoReplyStore } from '@/hooks/useAutoReply'
 import { createDefaultConfig, useAutoReplyConfigStore } from '@/hooks/useAutoReplyConfig'
@@ -120,14 +121,8 @@ export class AutoReplyTask extends BaseTask {
       // 自动回复与数据监控共享底层评论监听。这里只释放自动回复消费者，
       // 仅当没有其他消费者时才真正停止监听器。
       if (window.ipcRenderer) {
-        const invokeCommentListenerIpc = <T = unknown>(
-          channel: string,
-          ...args: unknown[]
-        ): Promise<T> =>
-          (window.ipcRenderer as { invoke: (...invokeArgs: unknown[]) => Promise<unknown> }).invoke(
-            channel,
-            ...args,
-          ) as Promise<T>
+        const invokeCommentListenerIpc: IpcInvoke = (channel, ...args) =>
+          window.ipcRenderer.invoke(channel, ...args)
         await releaseCommentListener(this.accountId, 'autoReply', invokeCommentListenerIpc)
       }
       useAutoReplyStore.getState().setIsListening(this.accountId, 'stopped')

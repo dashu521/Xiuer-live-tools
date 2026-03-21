@@ -8,7 +8,6 @@
 
 import { useMemoizedFn } from 'ahooks'
 import { useMemo, useState } from 'react'
-import type { LooseElectronAPI } from 'shared/electron-api'
 import { taskManager } from '@/tasks'
 import type { TaskContext } from '@/tasks/types'
 import { taskStateManager } from '@/utils/TaskStateManager'
@@ -81,12 +80,7 @@ export function useOneClickStart(): {
         success: () => {},
         error: () => {},
       },
-      ipcInvoke: async <T = unknown>(channel: string, ...args: unknown[]): Promise<T> => {
-        return (window as unknown as LooseElectronAPI).ipcRenderer.invoke(
-          channel,
-          ...args,
-        ) as Promise<T>
-      },
+      ipcInvoke: (channel, ...args) => window.ipcRenderer.invoke(channel, ...args),
     }
   })
 
