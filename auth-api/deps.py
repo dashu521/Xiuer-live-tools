@@ -7,9 +7,10 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 import bcrypt
-from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+import jwt
+from jwt import InvalidTokenError
 from sqlalchemy.orm import Session
 
 from config import settings
@@ -64,7 +65,7 @@ def decode_refresh_token(token: str) -> Optional[str]:
         if payload.get("type") != "refresh":
             return None
         return payload.get("sub")
-    except JWTError:
+    except InvalidTokenError:
         return None
 
 
@@ -75,7 +76,7 @@ def decode_access_token(token: str) -> Optional[str]:
         if payload.get("type") != "access":
             return None
         return payload.get("sub")
-    except JWTError:
+    except InvalidTokenError:
         return None
 
 
@@ -86,7 +87,7 @@ def decode_access_token_jti(token: str) -> Optional[str]:
         if payload.get("type") != "access":
             return None
         return payload.get("jti")
-    except JWTError:
+    except InvalidTokenError:
         return None
 
 
@@ -233,7 +234,7 @@ def decode_admin_token(token: str) -> Optional[str]:
         if payload.get("type") != "admin":
             return None
         return payload.get("sub")
-    except JWTError:
+    except InvalidTokenError:
         return None
 
 

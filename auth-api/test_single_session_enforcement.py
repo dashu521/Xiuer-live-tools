@@ -9,7 +9,7 @@ TEST_DB_PATH = Path(__file__).resolve().parent / "data" / "test_single_session.d
 TEST_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 os.environ["DB_PATH"] = str(TEST_DB_PATH)
-os.environ["JWT_SECRET"] = "test-single-session-secret"
+os.environ["JWT_SECRET"] = "test-single-session-secret-32-byte-key"
 os.environ["SMS_MODE"] = "dev"
 
 from database import create_tables, engine  # noqa: E402
