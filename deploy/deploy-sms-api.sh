@@ -28,6 +28,8 @@ FILES=(
     "requirements.txt"
     "Dockerfile"
     "static/admin_ui.html"
+    "run-auth-api-smoke.sh"
+    "use-auth-api-base-image.sh"
 )
 
 echo ""
@@ -53,49 +55,29 @@ echo "2. 重启Docker服务..."
 
 ssh -o StrictHostKeyChecking=no "$SERVER_USER@$SERVER_HOST" << 'EOF'
     cd /opt/auth-api
-    # docker compose 会自动读取当前目录 .env 并注入到 service 环境变量
-
-    echo "  停止旧容器..."
-    docker compose down || true
-
-    echo "  重新构建镜像..."
-    DOCKER_BUILDKIT=0 docker compose build --pull=false api
-
-    echo "  启动服务..."
-    docker compose up -d api --no-build
-
-    echo "  等待服务启动..."
-    sleep 10
-
-    echo "  检查容器状态..."
-    docker compose ps
+    chmod +x ./run-auth-api-smoke.sh ./use-auth-api-base-image.sh
+    TARGET_IMAGE=$(grep '^AUTH_API_BASE_IMAGE=' .env | cut -d= -f2-)
+    if [ -z "$TARGET_IMAGE" ]; then
+        echo "  缺少 AUTH_API_BASE_IMAGE，拒绝发布"
+        exit 1
+    fi
+    AUTH_API_TEST_IDENTIFIER="${AUTH_API_TEST_IDENTIFIER:-}" \
+    AUTH_API_TEST_PASSWORD="${AUTH_API_TEST_PASSWORD:-}" \
+    TARGET_IMAGE="$TARGET_IMAGE" ./use-auth-api-base-image.sh
 EOF
 
 echo ""
 echo "3. 验证部署..."
 
 ssh -o StrictHostKeyChecking=no "$SERVER_USER@$SERVER_HOST" << 'EOF'
-    sleep 3
-    
     API_LIST=$(curl -s http://127.0.0.1:8000/openapi.json 2>/dev/null | python3 -c "import sys,json; print(' '.join(json.load(sys.stdin).get('paths',{}).keys()))" 2>/dev/null || echo "")
-    
     if echo "$API_LIST" | grep -q "/auth/sms/send"; then
         echo ""
         echo "=== ✅ 部署成功！==="
-        echo ""
-        echo "可用API:"
-        echo "  - POST /auth/sms/send  (发送验证码)"
-        echo "  - POST /auth/sms/login (验证码登录)"
-        echo ""
-        echo "测试命令（phone 为 query 参数）:"
-        echo '  curl -X POST "http://127.0.0.1:8000/auth/sms/send?phone=13800138000"'
-        echo ""
-        echo "若收不到验证码：请在 号码认证控制台 配置赠送签名与模板，并设置 ALIYUN_SMS_SIGN_NAME、ALIYUN_SMS_TEMPLATE_CODE，详见 docs/SMS_SETUP.md"
-        echo ""
-        echo "查看日志:"
-        echo "  docker compose logs -f api"
+        echo "查看日志: docker compose logs -f api"
     else
         echo "  API检查失败，查看日志:"
         docker compose logs --tail=20 api
+        exit 1
     fi
 EOF

@@ -184,6 +184,55 @@ DOCKER_BUILDKIT=0 docker compose build --pull=false api
 docker compose up -d api --no-build
 ```
 
+脚本还会执行两类保护：
+
+- 前置校验：`TARGET_IMAGE` 必须是 ACR VPC 地址，且 `docker-compose.yml` 必须带 `BASE_IMAGE` build arg。
+- 发布后 smoke test：默认检查 `/health`；如果设置了 `AUTH_API_TEST_IDENTIFIER` 和 `AUTH_API_TEST_PASSWORD`，还会继续检查 `/login` 与 `/subscription/status`。
+
+## 推荐：直接发布完整业务镜像
+
+这是比 ECS 现场构建更稳的方式。推荐把 `auth-api` 完整镜像推到 ACR，再让 ECS 只做 `pull + up`。
+
+### 1. 推送完整业务镜像
+
+```bash
+BASE_IMAGE=crpi-ee6rz2ks9c36lft8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/xiuer-live-tools/auth-api-runtime-base:3.11-slim \
+TARGET_IMAGE=crpi-ee6rz2ks9c36lft8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/xiuer-live-tools/auth-api:release-tag \
+REGISTRY_USERNAME=17701259200 \
+REGISTRY_PASSWORD=你的ACR密码 \
+./deploy/publish-auth-api-app-image.sh
+```
+
+### 2. 服务器按业务镜像直接部署
+
+```bash
+cd /opt/auth-api
+TARGET_IMAGE=crpi-ee6rz2ks9c36lft8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/xiuer-live-tools/auth-api:release-tag \
+./use-auth-api-app-image.sh
+```
+
+这个流程不会在 ECS 上执行业务镜像构建，只会：
+
+- `docker pull`
+- `docker compose up -d api --no-build`
+- 运行 smoke test
+
+### 3. 一条命令完成推送与部署
+
+```bash
+REGISTRY_USERNAME=17701259200 \
+REGISTRY_PASSWORD=你的ACR密码 \
+AUTH_API_TEST_IDENTIFIER=你的测试账号 \
+AUTH_API_TEST_PASSWORD=你的测试密码 \
+./deploy/release-auth-api.sh
+```
+
+可选项：
+
+- `APP_IMAGE_TAG=release-20260321`
+- `PUBLISH_BASE_IMAGE=1`
+- `SERVER_HOST=你的ECS地址`
+
 ---
 
 ## CORS 说明

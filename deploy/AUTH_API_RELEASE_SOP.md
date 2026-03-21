@@ -36,7 +36,7 @@ npm run auth:check
 
 ## 二、基础镜像未变化时
 
-这种情况最常见。只需要同步业务代码后，在 ECS 上重建 `api`：
+如果你还没有推送完整业务镜像，才使用这一条。只需要同步业务代码后，在 ECS 上重建 `api`：
 
 ```bash
 cd /opt/auth-api
@@ -50,6 +50,55 @@ TARGET_IMAGE=crpi-ee6rz2ks9c36lft8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/xiue
 DOCKER_BUILDKIT=0 docker compose build --pull=false api
 docker compose up -d api --no-build
 ```
+
+并强制执行：
+
+- `TARGET_IMAGE` 必须是 ACR VPC 地址
+- `docker pull $TARGET_IMAGE`
+- 发布后 smoke test
+
+## 二点五、推荐路径：完整业务镜像发布
+
+推荐以后优先使用这一条，而不是 ECS 现场 build。
+
+### 1. 推送完整业务镜像
+
+```bash
+BASE_IMAGE=crpi-ee6rz2ks9c36lft8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/xiuer-live-tools/auth-api-runtime-base:3.11-slim \
+TARGET_IMAGE=crpi-ee6rz2ks9c36lft8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/xiuer-live-tools/auth-api:release-tag \
+REGISTRY_USERNAME=17701259200 \
+REGISTRY_PASSWORD=你的 ACR 密码 \
+./deploy/publish-auth-api-app-image.sh
+```
+
+### 2. 服务器直接拉取业务镜像
+
+```bash
+cd /opt/auth-api
+TARGET_IMAGE=crpi-ee6rz2ks9c36lft8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/xiuer-live-tools/auth-api:release-tag \
+./use-auth-api-app-image.sh
+```
+
+这条链路的优先级应高于“基础镜像未变化时”的现场构建方案。
+
+### 3. 一条命令发布
+
+如果要把“推送业务镜像 + 服务器部署”收口成一个动作，执行：
+
+```bash
+REGISTRY_USERNAME=17701259200 \
+REGISTRY_PASSWORD=你的 ACR 密码 \
+AUTH_API_TEST_IDENTIFIER=你的测试账号 \
+AUTH_API_TEST_PASSWORD=你的测试密码 \
+./deploy/release-auth-api.sh
+```
+
+默认行为：
+
+- 业务镜像 tag 使用当前 git 短哈希
+- 推送 `auth-api` 业务镜像到 ACR VPC 仓库
+- 通过 `remote-deploy.sh` 在 ECS 上直接拉取该镜像
+- 自动跑 smoke test
 
 ## 三、基础镜像变化时
 
@@ -86,6 +135,18 @@ curl -s http://127.0.0.1:8000/health
 
 ```json
 {"ok":true}
+```
+
+如果服务器上已设置：
+
+- `AUTH_API_TEST_IDENTIFIER`
+- `AUTH_API_TEST_PASSWORD`
+
+则可直接复用：
+
+```bash
+cd /opt/auth-api
+./run-auth-api-smoke.sh
 ```
 
 ### 2. 登录契约检查

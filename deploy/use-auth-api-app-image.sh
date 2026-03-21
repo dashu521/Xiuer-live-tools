@@ -5,9 +5,10 @@ SERVER_PATH="${SERVER_PATH:-/opt/auth-api}"
 TARGET_IMAGE="${TARGET_IMAGE:-}"
 REQUIRE_ACR_VPC_IMAGE="${REQUIRE_ACR_VPC_IMAGE:-1}"
 SMOKE_SCRIPT="${SMOKE_SCRIPT:-./run-auth-api-smoke.sh}"
+OVERRIDE_FILE=".auth-api.app-image.override.yml"
 
 if [[ -z "$TARGET_IMAGE" ]]; then
-  echo "用法: TARGET_IMAGE=registry.example.com/xiuer/auth-api-runtime-base:3.11-slim $0"
+  echo "用法: TARGET_IMAGE=registry.example.com/xiuer/auth-api:release-tag $0"
   exit 1
 fi
 
@@ -18,19 +19,14 @@ if [[ "$REQUIRE_ACR_VPC_IMAGE" == "1" && "$TARGET_IMAGE" != *"-vpc."*".aliyuncs.
   exit 1
 fi
 
-if ! grep -q 'BASE_IMAGE' docker-compose.yml; then
-  echo "拒绝发布：docker-compose.yml 未配置 BASE_IMAGE build arg"
-  exit 1
-fi
-
-docker pull "$TARGET_IMAGE" >/dev/null
+docker pull "$TARGET_IMAGE"
 
 python3 - <<PY
 from pathlib import Path
 env_path = Path(".env")
 lines = env_path.read_text().splitlines() if env_path.exists() else []
-key = "AUTH_API_BASE_IMAGE="
-value = "AUTH_API_BASE_IMAGE=${TARGET_IMAGE}"
+key = "AUTH_API_APP_IMAGE="
+value = "AUTH_API_APP_IMAGE=${TARGET_IMAGE}"
 if any(line.startswith(key) for line in lines):
     lines = [value if line.startswith(key) else line for line in lines]
 else:
@@ -38,9 +34,15 @@ else:
 env_path.write_text("\\n".join(lines) + "\\n")
 PY
 
-DOCKER_BUILDKIT=0 docker compose build --pull=false api
-docker compose up -d api --no-build
-docker compose ps api
+cat > "$OVERRIDE_FILE" <<EOF
+services:
+  api:
+    image: ${TARGET_IMAGE}
+EOF
+
+docker compose -f docker-compose.yml -f "$OVERRIDE_FILE" pull api
+docker compose -f docker-compose.yml -f "$OVERRIDE_FILE" up -d api --no-build
+docker compose -f docker-compose.yml -f "$OVERRIDE_FILE" ps api
 
 if [[ -x "$SMOKE_SCRIPT" ]]; then
   "$SMOKE_SCRIPT"
