@@ -32,6 +32,8 @@ permissions:
 env:
   # 生产环境 API 地址
   VITE_AUTH_API_BASE_URL: http://121.41.179.197:8000
+  # 主进程安全存储密钥（必须在 GitHub Secrets 中配置）
+  AUTH_STORAGE_SECRET: ${{ secrets.AUTH_STORAGE_SECRET }}
   # 明确指定构建目标，防止串台
   ELECTRON_BUILDER_TARGETS: win32
 
