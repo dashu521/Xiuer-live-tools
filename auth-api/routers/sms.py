@@ -198,8 +198,12 @@ def send_sms(
     try:
         import asyncio
         loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        success, error_msg = loop.run_until_complete(sms_service.send(phone, code or "0"))
+        try:
+            asyncio.set_event_loop(loop)
+            success, error_msg = loop.run_until_complete(sms_service.send(phone, code or "0"))
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
     except Exception as e:
         logger.exception(f"[SMS][{request_id}] send exception: {e}")
         success = False
