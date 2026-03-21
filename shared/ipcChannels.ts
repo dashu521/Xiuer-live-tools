@@ -73,6 +73,9 @@ export const IPC_CHANNELS = {
       error: 'tasks:aiChat:error',
       normalChat: 'tasks:aiChat:normalChat',
       testApiKey: 'tasks:aiChat:testApiKey',
+      getStoredApiKeys: 'tasks:aiChat:getStoredApiKeys',
+      setStoredApiKeys: 'tasks:aiChat:setStoredApiKeys',
+      clearStoredApiKeys: 'tasks:aiChat:clearStoredApiKeys',
     },
     commentListener: {
       start: COMMENT_LISTENER_CHANNELS.start,

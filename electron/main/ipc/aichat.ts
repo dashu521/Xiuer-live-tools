@@ -1,5 +1,10 @@
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { AIChatService } from '#/services/AIChatServices'
+import {
+  clearStoredAIApiKeys,
+  getStoredAIApiKeys,
+  setStoredAIApiKeys,
+} from '#/services/AISecretsStorage'
 import { typedIpcMainHandle } from '#/utils'
 import windowManager from '#/windowManager'
 
@@ -72,6 +77,20 @@ function setupIpcHandlers() {
       }
     },
   )
+
+  typedIpcMainHandle(IPC_CHANNELS.tasks.aiChat.getStoredApiKeys, () => {
+    return getStoredAIApiKeys()
+  })
+
+  typedIpcMainHandle(IPC_CHANNELS.tasks.aiChat.setStoredApiKeys, async (_, apiKeys) => {
+    setStoredAIApiKeys(apiKeys)
+    return { success: true }
+  })
+
+  typedIpcMainHandle(IPC_CHANNELS.tasks.aiChat.clearStoredApiKeys, async () => {
+    clearStoredAIApiKeys()
+    return { success: true }
+  })
 }
 
 export function setupAIChatIpcHandlers() {

@@ -193,6 +193,13 @@ export interface IpcChannels {
     provider: keyof typeof providers
     customBaseURL?: string
   }) => { success: boolean; models?: string[]; error?: string }
+  [IPC_CHANNELS.tasks.aiChat.getStoredApiKeys]: () => Partial<
+    Record<keyof typeof providers, string>
+  >
+  [IPC_CHANNELS.tasks.aiChat.setStoredApiKeys]: (
+    apiKeys: Partial<Record<keyof typeof providers, string>>,
+  ) => { success: boolean }
+  [IPC_CHANNELS.tasks.aiChat.clearStoredApiKeys]: () => { success: boolean }
   [IPC_CHANNELS.tasks.aiChat.chat]: (params: {
     messages: AIChatMessage[]
     provider: keyof typeof providers

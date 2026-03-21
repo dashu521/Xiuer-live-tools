@@ -1,3 +1,4 @@
+import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { providers } from 'shared/providers'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
@@ -24,6 +25,10 @@ type APIKeys = {
   [key in AIProvider]: string
 }
 
+function hasAnyApiKey(apiKeys: Partial<Record<AIProvider, string>>): boolean {
+  return Object.values(apiKeys).some(value => typeof value === 'string' && value.trim().length > 0)
+}
+
 function createDefaultAPIKeys(): APIKeys {
   return Object.keys(providers).reduce(
     (acc, provider) => {
@@ -34,29 +39,47 @@ function createDefaultAPIKeys(): APIKeys {
   )
 }
 
-function loadStoredAPIKeys(): APIKeys {
+function loadLegacyStoredAPIKeys(): Partial<Record<AIProvider, string>> {
   if (typeof localStorage === 'undefined') {
-    return createDefaultAPIKeys()
+    return {}
   }
-  const stored = SecureStorage.getItem<Partial<Record<AIProvider, string>>>(
-    AI_CHAT_API_KEYS_STORAGE_KEY,
+
+  return (
+    SecureStorage.getItem<Partial<Record<AIProvider, string>>>(AI_CHAT_API_KEYS_STORAGE_KEY) ?? {}
   )
-  return {
-    ...createDefaultAPIKeys(),
-    ...stored,
+}
+
+function clearLegacyStoredAPIKeys() {
+  if (typeof localStorage === 'undefined') {
+    return
+  }
+
+  try {
+    SecureStorage.removeItem(AI_CHAT_API_KEYS_STORAGE_KEY)
+  } catch (error) {
+    console.warn('[useAIChat] Failed to clear legacy API key storage:', error)
   }
 }
 
-function persistAPIKeys(apiKeys: APIKeys) {
-  if (typeof localStorage === 'undefined') {
+async function loadStoredAPIKeysFromMain(): Promise<Partial<Record<AIProvider, string>>> {
+  if (typeof window === 'undefined' || !window.ipcRenderer) {
+    return {}
+  }
+
+  return await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.aiChat.getStoredApiKeys)
+}
+
+async function persistAPIKeysToMain(apiKeys: APIKeys): Promise<void> {
+  if (typeof window === 'undefined' || !window.ipcRenderer) {
     return
   }
-  const hasAnyKey = Object.values(apiKeys).some(Boolean)
-  if (!hasAnyKey) {
-    SecureStorage.removeItem(AI_CHAT_API_KEYS_STORAGE_KEY)
+
+  if (!hasAnyApiKey(apiKeys)) {
+    await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.aiChat.clearStoredApiKeys)
     return
   }
-  SecureStorage.setItem(AI_CHAT_API_KEYS_STORAGE_KEY, apiKeys)
+
+  await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.aiChat.setStoredApiKeys, apiKeys)
 }
 
 export interface ProviderConfig {
@@ -74,12 +97,14 @@ interface AIChatStore {
   messages: ChatMessage[]
   status: Status
   apiKeys: APIKeys
+  isApiKeysHydrated: boolean
   config: ProviderConfig
   customBaseURL: string
   systemPrompt?: string
+  hydrateApiKeys: () => Promise<void>
+  saveApiKeys: (apiKeys: Partial<Record<AIProvider, string>>) => Promise<void>
   setCustomBaseURL: (url: string) => void
   setConfig: (config: Partial<ProviderConfig>) => void
-  setApiKey: (provider: AIProvider, key: string) => void
   addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void
   appendToChat: (chunk: string) => void
   appendToReasoning: (chunk: string) => void
@@ -93,7 +118,7 @@ interface AIChatStore {
 
 export const useAIChatStore = create<AIChatStore>()(
   persist(
-    immer(set => {
+    immer((set, get) => {
       const modelPreferences = Object.keys(providers).reduce(
         (acc, provider) => {
           acc[provider as AIProvider] =
@@ -103,17 +128,67 @@ export const useAIChatStore = create<AIChatStore>()(
         {} as Record<AIProvider, string>,
       )
 
-      const apiKeys = loadStoredAPIKeys()
+      const defaultApiKeys = createDefaultAPIKeys()
 
       return {
         messages: [],
         status: 'ready',
+        apiKeys: defaultApiKeys,
+        isApiKeysHydrated: false,
         config: {
           provider: 'deepseek',
           model: providers.deepseek.models[0],
           modelPreferences,
         },
-        apiKeys,
+        hydrateApiKeys: async () => {
+          if (get().isApiKeysHydrated) {
+            return
+          }
+
+          const storedApiKeys = loadLegacyStoredAPIKeys()
+
+          try {
+            const mainApiKeys = await loadStoredAPIKeysFromMain()
+            if (hasAnyApiKey(mainApiKeys)) {
+              set(state => {
+                state.apiKeys = { ...defaultApiKeys, ...mainApiKeys }
+                state.isApiKeysHydrated = true
+              })
+              clearLegacyStoredAPIKeys()
+              return
+            }
+
+            if (hasAnyApiKey(storedApiKeys)) {
+              const migratedApiKeys = { ...defaultApiKeys, ...storedApiKeys }
+              await persistAPIKeysToMain(migratedApiKeys)
+              set(state => {
+                state.apiKeys = migratedApiKeys
+                state.isApiKeysHydrated = true
+              })
+              clearLegacyStoredAPIKeys()
+              return
+            }
+          } catch (error) {
+            console.error('[useAIChat] Failed to hydrate API keys from main process:', error)
+            if (hasAnyApiKey(storedApiKeys)) {
+              set(state => {
+                state.apiKeys = { ...defaultApiKeys, ...storedApiKeys }
+              })
+            }
+          }
+
+          set(state => {
+            state.isApiKeysHydrated = true
+          })
+        },
+        saveApiKeys: async apiKeys => {
+          const nextApiKeys = { ...defaultApiKeys, ...apiKeys }
+          set(state => {
+            state.apiKeys = nextApiKeys
+          })
+          await persistAPIKeysToMain(nextApiKeys)
+          clearLegacyStoredAPIKeys()
+        },
         customBaseURL: '',
         setCustomBaseURL: url => {
           set(state => {
@@ -131,12 +206,6 @@ export const useAIChatStore = create<AIChatStore>()(
               state.config.model = config.model
               state.config.modelPreferences[state.config.provider] = config.model
             }
-          })
-        },
-        setApiKey: (provider, key) => {
-          set(state => {
-            state.apiKeys[provider] = key
-            persistAPIKeys(state.apiKeys)
           })
         },
         addMessage: message => {

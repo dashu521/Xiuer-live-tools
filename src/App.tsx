@@ -32,6 +32,7 @@ import { initializePlatformPreferenceService } from '@/services/platformPreferen
 import { useAuthCheckDone, useIsAuthenticated } from '@/stores/authStore'
 import { initializeStorage } from '@/utils/storage'
 import { useAccounts } from './hooks/useAccounts'
+import { useAIChatStore } from './hooks/useAIChat'
 import { useLoadAutoMessageOnLogin } from './hooks/useAutoMessage'
 import { useLoadAutoPopUpOnLogin } from './hooks/useAutoPopUp'
 import { useLoadAutoReplyConfigOnLogin } from './hooks/useAutoReplyConfig'
@@ -50,6 +51,7 @@ const UpdateDialog = lazy(async () => {
 function AppContent() {
   const { enabled: devMode } = useDevMode()
   const { accounts, currentAccountId } = useAccounts()
+  const hydrateApiKeys = useAIChatStore(state => state.hydrateApiKeys)
   // 【修复】直接解构 setConnectState，避免 selector 返回新对象导致无限循环
   const setConnectState = useLiveControlStore(state => state.setConnectState)
   const [logCollapsed, setLogCollapsed] = useState(() => {
@@ -78,6 +80,10 @@ function AppContent() {
   useEffect(() => {
     initializePlatformPreferenceService()
   }, [])
+
+  useEffect(() => {
+    void hydrateApiKeys()
+  }, [hydrateApiKeys])
 
   // Check if running in Electron environment
   useEffect(() => {

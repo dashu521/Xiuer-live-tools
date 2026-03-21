@@ -223,11 +223,11 @@ const ApiKeyInput = memo(
             >
               {providerInfo.name}
             </a>
-            获取 API Key。您的密钥将加密保存在本机存储中。
+            获取 API Key。您的密钥将保存在本机主进程安全存储中。
           </p>
         )}
         {isCustom && (
-          <p className="text-xs text-muted-foreground">您的密钥将加密保存在本机存储中。</p>
+          <p className="text-xs text-muted-foreground">您的密钥将保存在本机主进程安全存储中。</p>
         )}
       </div>
     )
@@ -235,7 +235,7 @@ const ApiKeyInput = memo(
 )
 
 export function APIKeyDialog() {
-  const { apiKeys, config, setConfig, setApiKey, customBaseURL, setCustomBaseURL } =
+  const { apiKeys, config, saveApiKeys, setConfig, customBaseURL, setCustomBaseURL } =
     useAIChatStore()
   const { toast } = useToast()
   const { showError } = useFriendlyError()
@@ -248,20 +248,17 @@ export function APIKeyDialog() {
   const [testSuccess, setTestSuccess] = useState(false)
 
   // 保存配置
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     setConfig(tempConfig)
 
     if (tempConfig.provider === 'custom') {
       setCustomBaseURL(tempCustomBaseURL)
     }
 
-    // 保存所有API Keys
-    for (const key of Object.keys(providers)) {
-      setApiKey(key as AIProvider, tempKeys[key as AIProvider] || '')
-    }
+    await saveApiKeys(tempKeys)
 
     setOpen(false)
-  }, [tempConfig, tempCustomBaseURL, tempKeys, setConfig, setCustomBaseURL, setApiKey])
+  }, [tempConfig, tempCustomBaseURL, tempKeys, saveApiKeys, setConfig, setCustomBaseURL])
 
   const handleProviderChange = useCallback((value: string) => {
     const provider = value as AIProvider
@@ -331,6 +328,16 @@ export function APIKeyDialog() {
   useEffect(() => {
     setTestSuccess(false)
   }, [tempConfig.provider])
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    setTempKeys(apiKeys)
+    setTempConfig(config)
+    setTempCustomBaseURL(customBaseURL || '')
+  }, [open, apiKeys, config, customBaseURL])
 
   const dialogContent = useMemo(
     () => (
