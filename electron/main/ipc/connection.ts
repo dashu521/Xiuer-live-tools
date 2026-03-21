@@ -12,6 +12,30 @@ const TASK_NAME = '中控台'
 /** 主进程允许同时连接的最大账号数，避免内存与 FD 耗尽 */
 const MAX_CONCURRENT_ACCOUNTS = 10
 
+function emitConnectionState(
+  accountId: string,
+  connectState: {
+    status: 'disconnected' | 'connecting' | 'connected' | 'error'
+    phase:
+      | 'idle'
+      | 'preparing'
+      | 'launching_browser'
+      | 'waiting_for_login'
+      | 'verifying_session'
+      | 'streaming'
+      | 'tasks_running'
+      | 'error'
+    error?: string | null
+    session?: string | null
+    lastVerifiedAt?: number | null
+  },
+) {
+  windowManager.send(IPC_CHANNELS.tasks.liveControl.stateChanged, {
+    accountId,
+    connectState,
+  })
+}
+
 function setupIpcHandlers() {
   typedIpcMainHandle(
     IPC_CHANNELS.tasks.liveControl.connect,
@@ -34,6 +58,13 @@ function setupIpcHandlers() {
             `[BrowserPopup] ${logPrefix} MAX_CONCURRENT_ACCOUNTS reached: ${currentCount}`,
           )
           createLogger(TASK_NAME).warn(msg)
+          emitConnectionState(account.id, {
+            status: 'error',
+            phase: 'error',
+            error: msg,
+            session: null,
+            lastVerifiedAt: null,
+          })
           return {
             success: false,
             browserLaunched: false,
@@ -100,13 +131,14 @@ function setupIpcHandlers() {
             logger.error(
               `${logPrefix}[connect:browser-launch-failed] 浏览器启动失败，不返回 browserLaunched=true`,
             )
-            accountManager.closeSession(account.id)
-
-            windowManager.send(
-              IPC_CHANNELS.tasks.liveControl.disconnectedEvent,
-              account.id,
-              errorMessage || '浏览器启动失败',
-            )
+            accountManager.accountSessions.delete(account.id)
+            emitConnectionState(account.id, {
+              status: 'error',
+              phase: 'error',
+              error: errorMessage || '浏览器启动失败',
+              session: null,
+              lastVerifiedAt: null,
+            })
 
             return {
               success: false,
@@ -124,12 +156,10 @@ function setupIpcHandlers() {
             logger.info(
               `${logPrefix}[connect:browser-was-launched] session still exists, cleaning up and returning browserLaunched=true`,
             )
-            accountManager.closeSession(account.id)
-
-            windowManager.send(
-              IPC_CHANNELS.tasks.liveControl.disconnectedEvent,
+            accountManager.closeSession(
               account.id,
               error instanceof Error ? error.message : 'browser has been closed',
+              { closeBrowser: true },
             )
 
             // 返回 browserLaunched=true，前端会显示"请扫码登录"而不是"连接失败"
@@ -147,6 +177,13 @@ function setupIpcHandlers() {
             account.id,
             error instanceof Error ? error.message : '连接直播控制台失败',
           )
+          emitConnectionState(account.id, {
+            status: 'error',
+            phase: 'error',
+            error: error instanceof Error ? error.message : '连接失败',
+            session: null,
+            lastVerifiedAt: null,
+          })
 
           return {
             success: false,
@@ -158,6 +195,13 @@ function setupIpcHandlers() {
         logger.warn(
           `${logPrefix}[connect:error] error=${error instanceof Error ? error.message : '启动浏览器时出现问题'}`,
         )
+        emitConnectionState(account.id, {
+          status: 'error',
+          phase: 'error',
+          error: error instanceof Error ? error.message : '启动浏览器时出现问题',
+          session: null,
+          lastVerifiedAt: null,
+        })
         return {
           success: false,
           browserLaunched: false,

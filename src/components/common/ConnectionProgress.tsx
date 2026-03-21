@@ -33,6 +33,7 @@ const getPhaseIndex = (phase: ConnectionPhase): number => {
     preparing: 0,
     launching_browser: 1,
     waiting_for_login: 2,
+    verifying_session: 3,
     streaming: 3,
     tasks_running: 4,
     error: 0,

@@ -41,6 +41,10 @@ import { createSendBatchMessageTask } from '#/tasks/SendBatchMessageTask'
 import { createSubAccountInteractionTask } from '#/tasks/SubAccountInteractionTask'
 import windowManager from '#/windowManager'
 
+const BROWSER_LAUNCH_TIMEOUT_MS = 30_000
+const LOGIN_TIMEOUT_MS = 180_000
+const SESSION_VERIFY_TIMEOUT_MS = 20_000
+
 export class AccountSession {
   private platform: IPlatform
   private browserSession: BrowserSession | null = null
@@ -71,16 +75,70 @@ export class AccountSession {
     })
   }
 
+  private emitConnectionState(
+    connectState: Partial<{
+      status: 'disconnected' | 'connecting' | 'connected' | 'error'
+      phase:
+        | 'idle'
+        | 'preparing'
+        | 'launching_browser'
+        | 'waiting_for_login'
+        | 'verifying_session'
+        | 'streaming'
+        | 'tasks_running'
+        | 'error'
+      error: string | null
+      session: string | null
+      lastVerifiedAt: number | null
+    }>,
+  ) {
+    windowManager.send(IPC_CHANNELS.tasks.liveControl.stateChanged, {
+      accountId: this.account.id,
+      connectState,
+    })
+  }
+
+  private async withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    message: string,
+  ): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<T>((_, reject) => {
+          timer = setTimeout(() => reject(new Error(message)), timeoutMs)
+        }),
+      ])
+    } finally {
+      if (timer) {
+        clearTimeout(timer)
+      }
+    }
+  }
+
   async connect(config: {
     headless?: boolean
     storageState?: string
   }): Promise<{ needsLogin: boolean }> {
     try {
+      this.isDisconnecting = false
+      this.isDisconnected = false
+      this.isWaitingForLogin = false
       const headless = config.headless ?? false
       console.log('[BrowserPopup] [AccountSession] connect() called', {
         accountId: this.account.id,
         headless,
         hasStorageState: !!config.storageState,
+      })
+      this.emitConnectionState({
+        status: 'connecting',
+        phase: 'preparing',
+        error: null,
+        session: null,
+        lastVerifiedAt: null,
       })
       this.logger.info(`[连接] 使用headless模式: ${headless}`)
       let storageState: StorageState
@@ -90,7 +148,16 @@ export class AccountSession {
       }
 
       console.log('[BrowserPopup] [AccountSession] Calling browserManager.createSession()')
-      this.browserSession = await browserManager.createSession(headless, storageState)
+      this.emitConnectionState({
+        status: 'connecting',
+        phase: 'launching_browser',
+        error: null,
+      })
+      this.browserSession = await this.withTimeout(
+        browserManager.createSession(headless, storageState),
+        BROWSER_LAUNCH_TIMEOUT_MS,
+        '启动浏览器超时，请重试',
+      )
       console.log(
         `[BrowserPopup] [AccountSession] createSession() returned, browser exists: ${!!this.browserSession?.browser}`,
       )
@@ -177,6 +244,11 @@ export class AccountSession {
         emitter.emit('page-closed', { accountId: this.account.id, reason: 'page_crash' })
       })
       // 【修复】连接成功后进行健康检查，确保直播状态检测可以正常工作
+      this.emitConnectionState({
+        status: 'connecting',
+        phase: 'verifying_session',
+        error: null,
+      })
       this.logger.info('[健康检查] 验证直播状态检测功能...')
       const healthCheck = await this.verifyConnectionHealth()
       if (!healthCheck.healthy) {
@@ -185,12 +257,25 @@ export class AccountSession {
       }
       this.logger.success('[健康检查] 通过，直播状态检测功能正常')
 
+      this.emitConnectionState({
+        status: 'connected',
+        phase: 'streaming',
+        error: null,
+        lastVerifiedAt: Date.now(),
+      })
       this.logger.success('成功与中控台建立连接')
 
       return { needsLogin }
     } catch (error) {
       const message = this.formatConnectError(error)
       this.logger.error('连接直播控制台失败：', error)
+      this.emitConnectionState({
+        status: 'error',
+        phase: 'error',
+        error: message,
+        session: null,
+        lastVerifiedAt: null,
+      })
       throw new Error(message)
     }
   }
@@ -301,8 +386,22 @@ export class AccountSession {
 
     // 根据参数决定发送什么事件
     if (sendDisconnectEvent) {
+      const shouldEmitErrorState =
+        !!reason &&
+        !reason.includes('用户主动断开') &&
+        !reason.includes('重新连接') &&
+        !reason.includes('browser has been closed') &&
+        !reason.includes('应用退出')
+
       // 断开中控台：发送 disconnectedEvent
       this.logger.info(`[disconnect][${accountId}] >>> Step 5: sending disconnectedEvent`)
+      this.emitConnectionState({
+        status: shouldEmitErrorState ? 'error' : 'disconnected',
+        phase: shouldEmitErrorState ? 'error' : 'idle',
+        error: reason || null,
+        session: null,
+        lastVerifiedAt: null,
+      })
       windowManager.send(IPC_CHANNELS.tasks.liveControl.disconnectedEvent, accountId, reason)
       accountRuntimeManager.setDisconnected(accountId)
     } else {
@@ -404,10 +503,23 @@ export class AccountSession {
     this.logger.warn(`[disconnect][${accountId}] END`)
   }
 
-  private async ensureAuthenticated(session: BrowserSession, headless = true): Promise<boolean> {
+  private async ensureAuthenticated(
+    session: BrowserSession,
+    headless = true,
+    loginRequired = false,
+  ): Promise<boolean> {
     this.browserSession = session
     this.streamStateDetector.updateBrowserSession(session)
-    const isConnected = await this.platform.connect(this.browserSession)
+    this.emitConnectionState({
+      status: 'connecting',
+      phase: 'verifying_session',
+      error: null,
+    })
+    const isConnected = await this.withTimeout(
+      this.platform.connect(this.browserSession),
+      SESSION_VERIFY_TIMEOUT_MS,
+      '连接校验超时，请重试',
+    )
     // 未登录，需要等待登录
     if (!isConnected) {
       // 【修复】标记正在等待登录
@@ -418,10 +530,28 @@ export class AccountSession {
       if (headless) {
         await this.browserSession.browser.close()
         this.logger.info('需要登录，请在打开的浏览器中登录')
-        this.browserSession = await browserManager.createSession(false)
+        this.emitConnectionState({
+          status: 'connecting',
+          phase: 'launching_browser',
+          error: null,
+        })
+        this.browserSession = await this.withTimeout(
+          browserManager.createSession(false),
+          BROWSER_LAUNCH_TIMEOUT_MS,
+          '启动登录浏览器超时，请重试',
+        )
       }
+      this.emitConnectionState({
+        status: 'connecting',
+        phase: 'waiting_for_login',
+        error: null,
+      })
       // 等待登录
-      await this.platform.login(this.browserSession)
+      await this.withTimeout(
+        this.platform.login(this.browserSession),
+        LOGIN_TIMEOUT_MS,
+        '登录超时，请检查是否已完成扫码登录',
+      )
 
       // 【修复】登录成功，清除等待登录标记
       this.isWaitingForLogin = false
@@ -435,13 +565,22 @@ export class AccountSession {
       if (headless) {
         await this.browserSession.browser.close()
         this.logger.info('登录成功，浏览器将继续以无头模式运行')
-        this.browserSession = await browserManager.createSession(headless, storageState)
+        this.emitConnectionState({
+          status: 'connecting',
+          phase: 'launching_browser',
+          error: null,
+        })
+        this.browserSession = await this.withTimeout(
+          browserManager.createSession(headless, storageState),
+          BROWSER_LAUNCH_TIMEOUT_MS,
+          '恢复无头浏览器超时，请重试',
+        )
         this.streamStateDetector.updateBrowserSession(this.browserSession)
       }
       // 【修复】递归调用后返回结果，确保 needsLogin 状态正确
-      return await this.ensureAuthenticated(this.browserSession, headless)
+      return await this.ensureAuthenticated(this.browserSession, headless, true)
     }
-    return false // 不需要登录
+    return loginRequired
   }
 
   private formatConnectError(error: unknown) {

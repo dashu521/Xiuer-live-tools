@@ -36,6 +36,8 @@ export const IPC_CHANNELS = {
   tasks: {
     liveControl: {
       connect: 'tasks:liveControl:connect',
+      stateChanged: 'tasks:liveControl:stateChanged',
+      waitingForLogin: 'tasks:liveControl:waitingForLogin',
       notifyAccountName: 'tasks:liveControl:notifyAccountName',
       disconnect: 'tasks:liveControl:disconnect',
       disconnectedEvent: 'tasks:liveControl:disconnectedEvent',

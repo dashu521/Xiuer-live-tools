@@ -104,6 +104,7 @@ export type ConnectionPhase =
   | 'preparing' // 准备连接
   | 'launching_browser' // 启动浏览器
   | 'waiting_for_login' // 等待用户扫码登录
+  | 'verifying_session' // 验证登录会话
   | 'streaming' // 开始直播
   | 'tasks_running' // 任务运行中
   | 'error' // 连接失败

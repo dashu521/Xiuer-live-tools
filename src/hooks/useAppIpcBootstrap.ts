@@ -150,15 +150,10 @@ function useLiveControlIpcSync() {
       return
     }
 
-    setConnectState(id, {
-      status: 'disconnected',
-      phase: 'idle',
-      error: reason || '直播中控台已断开连接',
-    })
-
     if (reason && !reasonStr.includes('用户主动断开')) {
+      const latestConnectState = useLiveControlStore.getState().contexts[id]?.connectState
       toast.error({
-        title: '连接已断开',
+        title: latestConnectState?.status === 'error' ? '连接失败' : '连接已断开',
         description: getFriendlyErrorMessage(reason),
         dedupeKey: `live-control-disconnected:${id}`,
       })
@@ -168,30 +163,31 @@ function useLiveControlIpcSync() {
     console.log(`[renderer][${id}] ==============================================`)
   })
 
+  useIpcListener(IPC_CHANNELS.tasks.liveControl.stateChanged, ({ accountId, connectState }) => {
+    const prevContext = useLiveControlStore.getState().contexts[accountId]
+    const shouldToastConnected =
+      connectState.status === 'connected' &&
+      connectState.phase === 'streaming' &&
+      (prevContext?.connectState.status !== 'connected' ||
+        prevContext?.connectState.phase !== 'streaming')
+
+    setConnectState(accountId, connectState)
+
+    if (shouldToastConnected) {
+      toast.success({
+        description: '已成功连接到直播控制台',
+        dedupeKey: `live-control-connected:${accountId}`,
+      })
+    }
+  })
+
   useIpcListener(IPC_CHANNELS.tasks.liveControl.notifyAccountName, params => {
     if (!params.ok) {
       console.warn('[conn][event] notifyAccountName 返回失败')
       return
     }
 
-    const prevContext = useLiveControlStore.getState().contexts[params.accountId]
-    const shouldToastConnected =
-      prevContext?.connectState.status !== 'connected' ||
-      prevContext?.connectState.phase !== 'streaming'
-
     setAccountName(params.accountId, params.accountName)
-    setConnectState(params.accountId, {
-      status: 'connected',
-      phase: 'streaming',
-      error: null,
-      lastVerifiedAt: Date.now(),
-    })
-    if (shouldToastConnected) {
-      toast.success({
-        description: '已成功连接到直播控制台',
-        dedupeKey: `live-control-connected:${params.accountId}`,
-      })
-    }
   })
 
   useIpcListener(

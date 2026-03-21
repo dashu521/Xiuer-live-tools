@@ -260,6 +260,8 @@
   cursor: not-allowed;
 }
 
+/* 直播中控连接按钮：保留默认交互，只去掉橙金渐变 */
+
 /* 玻璃拟态效果 */
 [data-theme="fashion"] .glass {
   background: rgba(28, 28, 33, 0.7);

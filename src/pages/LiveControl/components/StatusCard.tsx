@@ -1,6 +1,6 @@
 import { useMemoizedFn } from 'ahooks'
 import { GlobeIcon, Loader2, Monitor, Play, Square } from 'lucide-react'
-import React, { useEffect, useRef } from 'react'
+import React, { useRef } from 'react'
 import type { IpcChannels } from 'shared/electron-api.d.ts'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { OneClickStartButton } from '@/components/common/OneClickStartButton'
@@ -12,12 +12,12 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import type { ConnectState } from '@/config/platformConfig'
 import { GATE_ACTIONS } from '@/domain/access/gateActions'
 import { useAccounts } from '@/hooks/useAccounts'
+import { useCurrentAutoMessage } from '@/hooks/useAutoMessage'
+import { useCurrentAutoPopUp } from '@/hooks/useAutoPopUp'
+import { useAutoReply } from '@/hooks/useAutoReply'
 import { useCurrentChromeConfig, useCurrentChromeConfigActions } from '@/hooks/useChromeConfig'
-import {
-  useCurrentLiveControl,
-  useCurrentLiveControlActions,
-  useLiveControlStore,
-} from '@/hooks/useLiveControl'
+import { useCurrentLiveControl } from '@/hooks/useLiveControl'
+import { useLiveStatsStore } from '@/hooks/useLiveStats'
 import { useToast } from '@/hooks/useToast'
 import { useGateStore } from '@/stores/gateStore'
 import { getFullErrorInfo } from '@/utils/errorMessages'
@@ -103,6 +103,14 @@ const StatusCardContent = React.memo(
     accountName: string | null
     streamState: string | null
   }) => {
+    const currentAccountId = useAccounts(state => state.currentAccountId)
+    const { isRunning: isAutoReplyRunning } = useAutoReply()
+    const isAutoMessageRunning = useCurrentAutoMessage(context => context.isRunning)
+    const isAutoPopUpRunning = useCurrentAutoPopUp(context => context.isRunning)
+    const isLiveStatsRunning = useLiveStatsStore(
+      state => state.contexts[currentAccountId]?.isListening ?? false,
+    )
+
     // 获取连接阶段显示文本
     const getConnectingPhaseText = () => {
       switch (connectState.phase) {
@@ -112,6 +120,8 @@ const StatusCardContent = React.memo(
           return '正在启动浏览器...'
         case 'waiting_for_login':
           return '等待扫码登录...'
+        case 'verifying_session':
+          return '正在验证登录状态...'
         case 'streaming':
           return '正在建立连接...'
         default:
@@ -133,6 +143,17 @@ const StatusCardContent = React.memo(
       }
     }
 
+    const getStreamStateClassName = () => {
+      switch (streamState) {
+        case 'live':
+          return 'text-green-600'
+        case 'offline':
+          return 'text-red-500'
+        default:
+          return 'text-muted-foreground'
+      }
+    }
+
     const statusText =
       connectState.status === 'connected'
         ? `已连接${accountName ? ` (${accountName})` : ''}`
@@ -145,6 +166,18 @@ const StatusCardContent = React.memo(
     const isConnected = connectState.status === 'connected'
     const isConnecting = connectState.status === 'connecting'
     const _isError = connectState.status === 'error'
+    const isAnyTaskRunning =
+      isAutoReplyRunning || isAutoMessageRunning || isAutoPopUpRunning || isLiveStatsRunning
+
+    const indicatorClassName = isConnecting
+      ? 'border-primary/35 bg-primary/10 animate-pulse'
+      : isConnected
+        ? isAnyTaskRunning
+          ? 'border-emerald-500/35 bg-emerald-500/10 animate-pulse'
+          : 'border-emerald-500/35 bg-emerald-500/10'
+        : 'border-primary/30 bg-primary/8'
+
+    const indicatorIconClassName = isConnected ? 'h-7 w-7 text-emerald-500' : 'h-7 w-7 text-primary'
 
     return (
       <TooltipProvider>
@@ -164,18 +197,12 @@ const StatusCardContent = React.memo(
               {/* 左侧状态显示 */}
               <div className="flex min-w-0 items-center gap-4">
                 <div
-                  className={`h-14 w-14 rounded-xl flex items-center justify-center border transition-all duration-300 ${
-                    isConnecting
-                      ? 'border-primary/35 bg-primary/10 animate-pulse'
-                      : 'border-primary/30 bg-primary/8'
-                  }`}
+                  className={`h-14 w-14 rounded-xl flex items-center justify-center border transition-all duration-300 ${indicatorClassName}`}
                 >
-                  {isConnected ? (
-                    <div className="h-6 w-6 rounded-full border-2 border-primary animate-pulse" />
-                  ) : isConnecting ? (
+                  {isConnecting ? (
                     <Loader2 className="h-7 w-7 text-primary animate-spin" />
                   ) : (
-                    <Monitor className="h-7 w-7 text-primary" />
+                    <Monitor className={indicatorIconClassName} />
                   )}
                 </div>
                 <div className="min-w-0 flex-1">
@@ -186,7 +213,11 @@ const StatusCardContent = React.memo(
                         ? `${getPlatformName(connectState.platform)}`
                         : '请选择平台并连接'}
                     </span>
-                    {isConnected && <span>· {getStreamStateText()}</span>}
+                    {isConnected && (
+                      <span>
+                        · <span className={getStreamStateClassName()}>{getStreamStateText()}</span>
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -232,66 +263,18 @@ const getPlatformName = (platform: string) => {
 }
 
 const ConnectToLiveControl = React.memo(() => {
-  const { setConnectState } = useCurrentLiveControlActions()
   const connectState = useCurrentLiveControl(context => context.connectState)
   const chromePath = useCurrentChromeConfig(context => context.path)
   const storageState = useCurrentChromeConfig(context => context.storageState)
-  // 确保 headless 有默认值 false，避免 undefined 导致浏览器无法弹出
   let headless = useCurrentChromeConfig(context => context.headless ?? false)
   const account = useAccounts(store => store.getCurrentAccount())
+  const connectRequestInFlightRef = useRef(false)
 
   if (connectState.platform === 'taobao') {
     headless = false
   }
 
   const { toast } = useToast()
-  const loginTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    return () => {
-      if (loginTimeoutRef.current) {
-        clearTimeout(loginTimeoutRef.current)
-        loginTimeoutRef.current = null
-      }
-    }
-  }, [])
-
-  useEffect(() => {
-    if (connectState.status === 'connected' || connectState.status === 'disconnected') {
-      if (loginTimeoutRef.current) {
-        clearTimeout(loginTimeoutRef.current)
-        loginTimeoutRef.current = null
-      }
-    }
-  }, [connectState.status])
-
-  useEffect(() => {
-    if (connectState.status === 'connecting' && !loginTimeoutRef.current) {
-      const checkTimer = setTimeout(() => {
-        const currentState = useLiveControlStore.getState()
-        const currentAccountId = useAccounts.getState().currentAccountId
-        const currentContext = currentState.contexts[currentAccountId]
-
-        if (currentContext?.connectState.status === 'connecting' && !loginTimeoutRef.current) {
-          console.warn(
-            '[State Machine] Invalid connecting state detected (no timeout), rolling back to disconnected',
-          )
-          setConnectState({
-            status: 'disconnected',
-            error: null,
-            session: null,
-            lastVerifiedAt: null,
-          })
-          toast.error('连接已失效，请重新连接')
-        }
-      }, 30000) // 增加到 30 秒，给 IPC 调用足够时间
-
-      return () => {
-        clearTimeout(checkTimer)
-      }
-    }
-  }, [connectState.status, setConnectState, toast])
-
   const guardAction = useGateStore(s => s.guardAction)
 
   const connectLiveControl = useMemoizedFn(async () => {
@@ -304,175 +287,47 @@ const ConnectToLiveControl = React.memo(() => {
             return
           }
 
-          if (connectState.status === 'connecting') {
+          if (connectState.status === 'connecting' || connectRequestInFlightRef.current) {
             console.warn(`[conn][${account.id}] 重入拒绝：正在连接中`)
             toast.error('正在连接中控台，请稍等')
             return
           }
 
-          // 生成 traceId 用于全链路追踪
           const traceId = generateTraceId()
           console.log(`[conn][${account.id}][${traceId}] UI 点击连接`, {
             accountId: account.id,
             platform: connectState.platform,
           })
-
-          if (!loginTimeoutRef.current) {
-            loginTimeoutRef.current = null
-          }
-
           console.log('[State Machine] selectedPlatformId:', connectState.platform)
           console.log('[State Machine] headless config:', headless)
-          console.log('[State Machine] Status transition:', connectState.status, '→ connecting')
+          console.log('[State Machine] 主进程状态机开始连接')
 
-          // 阶段 1: 准备连接
-          setConnectState({
-            status: 'connecting',
-            phase: 'preparing',
-            error: null,
-            lastVerifiedAt: null,
-          })
-
-          // 阶段 2: 启动浏览器
-          setConnectState({
-            phase: 'launching_browser',
-          })
-
+          connectRequestInFlightRef.current = true
           const result = (await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.liveControl.connect, {
             headless,
             chromePath,
             storageState,
             platform: connectState.platform as LiveControlPlatform,
             account,
-            traceId, // 传递 traceId 到主进程
+            traceId,
           })) as ConnectResult
 
           console.log('[Connect] IPC result:', result)
 
-          const latestConnectState =
-            useLiveControlStore.getState().contexts[account.id]?.connectState
-          const wasDisconnectedDuringConnect =
-            latestConnectState?.status === 'disconnected' || latestConnectState?.status === 'error'
-
-          if (wasDisconnectedDuringConnect) {
-            console.warn(
-              `[conn][${account.id}][${traceId}] 连接过程中已收到断开事件，跳过后续 waiting_for_login/connected 状态覆盖`,
-              latestConnectState,
-            )
-            if (loginTimeoutRef.current) {
-              clearTimeout(loginTimeoutRef.current)
-              loginTimeoutRef.current = null
-            }
-            return
-          }
-
-          // 【修复 2.1】browserLaunched=false 时立即回到 disconnected 状态
           if (result && !result.browserLaunched) {
-            console.warn(`[conn][${account.id}][${traceId}] IPC 同步失败，浏览器未启动`, {
-              error: result.error,
-              elapsed: '0ms',
-            })
-
-            // 立即回到 disconnected 状态
-            setConnectState({
-              status: 'disconnected',
-              phase: 'error',
-              error: result.error || '启动浏览器失败',
-              session: null,
-              lastVerifiedAt: null,
-            })
-
-            // 使用用户友好的错误提示
             const friendlyError = getFullErrorInfo(result.error || '连接失败')
             toast.error({
               title: friendlyError.title,
               description: `${friendlyError.message}\n建议：${friendlyError.solution}`,
               dedupeKey: `live-control-connect-error:${account.id}`,
             })
-
-            // 清理超时定时器
-            if (loginTimeoutRef.current) clearTimeout(loginTimeoutRef.current)
-            loginTimeoutRef.current = null
-
-            return
           }
-
-          // 阶段 3: 浏览器已启动
-          if (result.needsLogin) {
-            setConnectState({
-              phase: 'waiting_for_login',
-            })
-            toast.info('请在新打开的浏览器窗口中完成登录')
-            console.log(`[conn][${account.id}][${traceId}] 浏览器已启动，等待用户扫码登录...`)
-          } else {
-            setConnectState({
-              status: 'connected',
-              phase: 'streaming',
-              error: null,
-              lastVerifiedAt: Date.now(),
-            })
-            console.log(
-              `[conn][${account.id}][${traceId}] 浏览器已启动，已登录，状态已更新为 connected`,
-            )
-            toast.success({
-              description: '已成功连接到直播中控台',
-              dedupeKey: `live-control-connected:${account.id}`,
-            })
-          }
-          loginTimeoutRef.current = setTimeout(() => {
-            // 从 store 获取最新状态，避免闭包陷阱
-            const currentAccountId = useAccounts.getState().currentAccountId
-            const latestStatus =
-              useLiveControlStore.getState().contexts[currentAccountId]?.connectState.status
-            if (latestStatus === 'connecting') {
-              console.log('[State Machine] Login timeout, status transition: connecting → error')
-              setConnectState({
-                status: 'error',
-                error: '登录超时，请检查是否已完成扫码登录',
-              })
-              const timeoutError = getFullErrorInfo('登录超时')
-              toast.error({
-                title: timeoutError.title,
-                description: `${timeoutError.message}\n建议：${timeoutError.solution}`,
-                dedupeKey: `live-control-login-timeout:${currentAccountId}`,
-              })
-            } else if (latestStatus === 'connected') {
-              // 已经在 connected 状态，说明登录成功了，只是 notifyAccountName 事件可能延迟
-              console.log('[State Machine] Login already succeeded, ignoring timeout')
-            }
-            loginTimeoutRef.current = null
-          }, 60000)
         } catch (error) {
           console.error('[State Machine] Connection failed:', error)
           const errorMessage = error instanceof Error ? error.message : '连接失败'
-          console.log('[State Machine] Connection error (non-fatal warning):', errorMessage)
-          // 不在这里显示 toast，避免与后续的 disconnectedEvent 或登录成功事件冲突
-          loginTimeoutRef.current = setTimeout(() => {
-            // 从 store 获取最新状态，避免闭包陷阱
-            const currentAccountId = useAccounts.getState().currentAccountId
-            const latestStatus =
-              useLiveControlStore.getState().contexts[currentAccountId]?.connectState.status
-            if (latestStatus === 'connecting') {
-              console.log(
-                '[State Machine] Login timeout after error, status transition: connecting → error',
-              )
-              setConnectState({
-                status: 'error',
-                error: '登录超时，请检查是否已完成扫码登录',
-              })
-              // 使用用户友好的错误提示
-              const timeoutError = getFullErrorInfo('登录超时')
-              toast.error({
-                title: timeoutError.title,
-                description: `${timeoutError.message}\n建议：${timeoutError.solution}`,
-                dedupeKey: `live-control-login-timeout:${currentAccountId}`,
-              })
-            } else if (latestStatus === 'connected') {
-              // 已经在 connected 状态，说明登录成功了
-              console.log('[State Machine] Login already succeeded after error, ignoring timeout')
-            }
-            loginTimeoutRef.current = null
-          }, 60000)
+          console.log('[State Machine] Connection error:', errorMessage)
+        } finally {
+          connectRequestInFlightRef.current = false
         }
       },
     })
@@ -485,17 +340,7 @@ const ConnectToLiveControl = React.memo(() => {
     }
     try {
       console.log('[State Machine] Starting disconnect for platform:', connectState.platform)
-      console.log('[State Machine] Status transition:', connectState.status, '→ disconnected')
-
       await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.liveControl.disconnect, account.id)
-
-      setConnectState({
-        status: 'disconnected',
-        session: null,
-        lastVerifiedAt: null,
-        error: null,
-      })
-
       toast.success('已断开中控台连接')
     } catch (error) {
       console.error('[State Machine] Disconnect failed:', error)
@@ -506,21 +351,12 @@ const ConnectToLiveControl = React.memo(() => {
   const handleButtonClick = useMemoizedFn(() => {
     if (connectState.status === 'connected') {
       disconnectLiveControl()
-    } else if (connectState.status === 'connecting') {
-      console.log('[State Machine] Canceling connection attempt')
-      console.log('[State Machine] Status transition:', connectState.status, '→ disconnected')
-
-      setConnectState({
-        status: 'disconnected',
-        session: null,
-        lastVerifiedAt: null,
-        error: null,
-      })
-
-      toast.success('已取消连接')
-    } else {
-      connectLiveControl()
+      return
     }
+    if (connectState.status === 'connecting') {
+      return
+    }
+    connectLiveControl()
   })
 
   const getButtonText = () => {

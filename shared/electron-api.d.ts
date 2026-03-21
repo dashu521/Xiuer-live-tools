@@ -112,6 +112,25 @@ export interface IpcChannels {
     error?: string
     needsLogin?: boolean
   }>
+  [IPC_CHANNELS.tasks.liveControl.stateChanged]: (params: {
+    accountId: string
+    connectState: {
+      status: 'disconnected' | 'connecting' | 'connected' | 'error'
+      phase:
+        | 'idle'
+        | 'preparing'
+        | 'launching_browser'
+        | 'waiting_for_login'
+        | 'verifying_session'
+        | 'streaming'
+        | 'tasks_running'
+        | 'error'
+      error?: string | null
+      session?: string | null
+      lastVerifiedAt?: number | null
+    }
+  }) => void
+  [IPC_CHANNELS.tasks.liveControl.waitingForLogin]: (accountId: string) => void
   [IPC_CHANNELS.tasks.liveControl.disconnect]: (accountId: string) => boolean
   [IPC_CHANNELS.tasks.liveControl.disconnectedEvent]: (id: string, reason?: string) => void
   [IPC_CHANNELS.tasks.liveControl.notifyAccountName]: (
@@ -461,14 +480,19 @@ export interface IpcChannels {
   [IPC_CHANNELS.liveStats.openExportFolder]: () => void
 }
 
+export type IpcRendererInvokeReturnType<Channel extends keyof IpcChannels> =
+  ReturnType<IpcChannels[Channel]> extends Promise<infer _U>
+    ? ReturnType<IpcChannels[Channel]>
+    : Promise<ReturnType<IpcChannels[Channel]>>
+
+export type IpcInvoke = <Channel extends keyof IpcChannels>(
+  channel: Channel,
+  ...args: Parameters<IpcChannels[Channel]>
+) => IpcRendererInvokeReturnType<Channel>
+
 export interface ElectronAPI {
   ipcRenderer: {
-    invoke: <Channel extends keyof IpcChannels>(
-      channel: Channel,
-      ...args: Parameters<IpcChannels[Channel]>
-    ) => ReturnType<IpcChannels[Channel]> extends Promise<infer _U>
-      ? ReturnType<IpcChannels[Channel]>
-      : Promise<ReturnType<IpcChannels[Channel]>>
+    invoke: IpcInvoke
 
     send: <Channel extends keyof IpcChannels>(
       channel: Channel,
