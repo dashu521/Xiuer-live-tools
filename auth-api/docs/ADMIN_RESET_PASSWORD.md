@@ -3,18 +3,19 @@
 ## 概述
 
 - **桌面端**：登录页提供「忘记密码？」入口，点击后弹窗说明「请联系微信客服重置密码」并展示微信二维码（本地 `public/support-wechat-qr.png`）。不引入短信/邮件服务。
-- **管理员后台**：在 `/admin/app` 用户列表中可对每行执行「重置密码」「生成临时密码」「禁用/启用」；仅允许来自 `ADMIN_ALLOWED_IPS` 的请求访问重置/禁用接口。
-- **auth-api**：新增 `POST /admin/reset-password`、`POST /admin/toggle-disabled`，需管理员 JWT + IP 白名单，审计日志不记录明文密码。
+- **管理员后台**：在 `/admin/app` 用户列表中可对每行执行「重置密码」「生成临时密码」「禁用/启用」。
+- **auth-api**：新增 `POST /admin/reset-password`、`POST /admin/toggle-disabled`，当前代码侧依赖管理员 JWT；审计日志不记录明文密码。
 
 ## 安全
 
-- **IP 白名单**：`ADMIN_ALLOWED_IPS`（逗号分隔，默认 `127.0.0.1`）。仅白名单内 IP 可调用 `POST /admin/reset-password`、`POST /admin/toggle-disabled`。
+- **访问控制现状**：当前代码中未实现 `ADMIN_ALLOWED_IPS` / `require_admin_ip` 一类的代码级 IP 白名单；管理员接口主要依赖管理员 JWT。
+- **部署建议**：若管理后台需要公网暴露，建议在 Nginx、WAF、堡垒机或内网入口处额外加来源 IP 限制。
 - **审计日志**：每次操作记录 `requestId`、操作类型、`username`、来源 IP、结果；不记录明文密码。
 - **密码**：DB 写入使用 bcrypt hash；用户不存在时返回 404 + 友好 `detail`。
 
 ## 本机 curl 自测（127.0.0.1）
 
-假设 auth-api 运行在 `http://127.0.0.1:8000`，且 `ADMIN_ALLOWED_IPS=127.0.0.1`（默认）。
+假设 auth-api 运行在 `http://127.0.0.1:8000`，并已配置管理员账号密码。
 
 ### 1. 管理员登录获取 token
 
@@ -82,7 +83,7 @@ curl -s -X POST http://127.0.0.1:8000/admin/reset-password \
 
 ## 管理员 UI
 
-- **地址**：`http://127.0.0.1:8000/admin/app`（与 auth-api 同机时）。**请求从浏览器发出，来源 IP 为访问者 IP**，需将管理员所在 IP 加入 `ADMIN_ALLOWED_IPS`。
+- **地址**：`http://127.0.0.1:8000/admin/app`（与 auth-api 同机时）。当前代码未内建来源 IP 白名单，如需进一步收口访问面，请在反向代理或网络边界层限制来源。
 - **操作流程**：
   1. 打开 `/admin/app`，输入管理员账号密码，登录。
   2. 用户列表展示：账号、状态、创建时间、试用截止（不展示 password 哈希）。
@@ -95,11 +96,11 @@ curl -s -X POST http://127.0.0.1:8000/admin/reset-password \
 
 | 变量 | 说明 | 默认 |
 |------|------|------|
-| `ADMIN_ALLOWED_IPS` | 逗号分隔的 IP 白名单，允许调用 `/admin/reset-password`、`/admin/toggle-disabled` | `127.0.0.1` |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | 管理员登录账号密码 | 见 config |
+| `ADMIN_JWT_SECRET` | 管理员 JWT 使用的独立密钥；为空时回退复用 `JWT_SECRET` | 空 |
 
 ## 改动文件一览
 
-- **auth-api**：`config.py`（ADMIN_ALLOWED_IPS）、`deps.py`（require_admin_ip）、`routers/admin.py`（POST /admin/reset-password、POST /admin/toggle-disabled、GET /admin/app）、`schemas_admin.py`（ResetPasswordBody/Resp、ToggleDisabledBody/Resp）、`static/admin_ui.html`（管理员 UI 单页）
+- **auth-api**：`deps.py`（管理员 JWT 鉴权）、`routers/admin.py`（POST /admin/reset-password、POST /admin/toggle-disabled、GET /admin/app）、`schemas_admin.py`（ResetPasswordBody/Resp、ToggleDisabledBody/Resp）、`static/admin_ui.html`（管理员 UI 单页）
 - **桌面端**：`src/components/auth/AuthDialog.tsx`（忘记密码入口 + 弹窗展示微信二维码与说明）
 - **文档**：`auth-api/docs/ADMIN_RESET_PASSWORD.md`（本文件）、可选更新 `README` 或部署说明
