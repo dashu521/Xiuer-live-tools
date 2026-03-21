@@ -87,6 +87,7 @@ auth-api/.venv/
 TROUBLE.md
 .agents/
 .trae/
+.arts/
 skills-lock.json
 *_AUDIT_REPORT*.md
 CODE_QUALITY_AUDIT_REPORT_*.md
