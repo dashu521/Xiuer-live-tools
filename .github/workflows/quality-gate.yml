@@ -30,21 +30,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Biome 代码检查
-      - name: Run Biome check
-        run: npx biome check --no-errors-on-unmatched --files-ignore-unknown=true .
-
-      # TypeScript 类型检查
-      - name: Run TypeScript check
-        run: npx tsc --noEmit
-
-      # 高风险架构边界改动时，必须同步更新架构文档
-      - name: Check architecture doc sync
-        run: node scripts/check-architecture-doc-sync.js
-
-      # 测试运行（smoke test）
-      - name: Run tests
-        run: npm test -- --run
+      - name: Run frontend quality gate
+        run: npm run ci:frontend
 
   # 2. Shell 脚本语法检查（deploy）
   shell-quality:
@@ -58,7 +45,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run shell syntax check
-        run: bash -n deploy/*.sh
+        run: npm run shell:check
 
   # 3. Python 代码质量检查（auth-api）
   python-quality:
@@ -85,11 +72,8 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Create auth-api virtualenv
-        run: npm run auth:venv
-
       - name: Run auth-api check suite
-        run: npm run auth:check
+        run: npm run ci:auth
 
   # 4. 依赖漏洞扫描（阻断高风险依赖进入主分支）
   security-audit:
