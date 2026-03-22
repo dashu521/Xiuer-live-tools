@@ -29,7 +29,10 @@ export const LEGACY_MEMBERSHIP_TYPE_TO_TIER = planRulesData.legacyMembershipType
   string,
   PlanType
 >
-export const TIER_BENEFITS = planRulesData.tierBenefits as Record<Exclude<PlanType, 'trial'>, TierBenefit>
+export const TIER_BENEFITS = planRulesData.tierBenefits as Record<
+  Exclude<PlanType, 'trial'>,
+  TierBenefit
+>
 
 export const PLAN_LEVEL: Record<PlanType, number> = Object.fromEntries(
   VALID_PLANS.map(plan => [plan, PLAN_RULES[plan].level]),

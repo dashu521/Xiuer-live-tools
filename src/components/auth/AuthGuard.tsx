@@ -128,14 +128,14 @@ export function useFeatureAccess() {
       }
     } catch (error) {
       console.error('Feature access check failed:', error)
-        return {
-          featureAccess: {
-            can_access: false,
-            requires_auth: true,
-            required_plan: 'trial',
-          },
-          user: null,
-        }
+      return {
+        featureAccess: {
+          can_access: false,
+          requires_auth: true,
+          required_plan: 'trial',
+        },
+        user: null,
+      }
     }
   }
 
