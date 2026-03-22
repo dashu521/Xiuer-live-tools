@@ -13,10 +13,12 @@ TEST_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 os.environ["DB_PATH"] = str(TEST_DB_PATH)
 os.environ["JWT_SECRET"] = "test-subscription-contracts-secret-32-byte-key"
 os.environ["SMS_MODE"] = "dev"
+os.environ["ADMIN_USERNAME"] = "admin"
+os.environ["ADMIN_PASSWORD"] = "super-secret-admin"
 
 from database import SessionLocal, create_tables, engine  # noqa: E402
 from main import app  # noqa: E402
-from models import Subscription, User  # noqa: E402
+from models import GiftCard, Subscription, User  # noqa: E402
 from routers.subscription import get_current_user  # noqa: E402
 
 
@@ -46,6 +48,14 @@ class SubscriptionContractTests(unittest.TestCase):
 
     def _auth_headers(self, token: str) -> dict[str, str]:
         return {"Authorization": f"Bearer {token}"}
+
+    def _admin_headers(self) -> dict[str, str]:
+        response = self.client.post(
+            "/admin/login",
+            json={"username": os.environ["ADMIN_USERNAME"], "password": os.environ["ADMIN_PASSWORD"]},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        return {"Authorization": f"Bearer {response.json()['token']}"}
 
     def test_subscription_status_forbidden_error_is_structured(self):
         register_data = self._register("subscription@example.com", "secret123")
@@ -104,6 +114,78 @@ class SubscriptionContractTests(unittest.TestCase):
         self.assertEqual(body["username"], "paid@example.com")
         self.assertIsInstance(body["current_period_end"], int)
         self.assertFalse(body["expired"])
+
+    def test_gift_card_redeem_rejects_cards_without_expiring_duration(self):
+        register_data = self._register("giftcard@example.com", "secret123")
+        db = SessionLocal()
+        try:
+            db.add(
+                GiftCard(
+                    id=str(uuid.uuid4()),
+                    code="ABCD-EFGH-JKLM",
+                    tier="pro",
+                    benefits_json={"plan": "pro", "max_accounts": 1, "duration_days": None},
+                    membership_type="pro",
+                    membership_days=0,
+                    status="active",
+                )
+            )
+            db.commit()
+        finally:
+            db.close()
+
+        response = self.client.post(
+            "/gift-card/redeem",
+            json={"code": "ABCD-EFGH-JKLM"},
+            headers=self._auth_headers(register_data["access_token"]),
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertFalse(body["success"])
+        self.assertEqual(body["error"], "INVALID_CARD_CONFIG")
+        self.assertEqual(body["message"], "礼品卡配置无效，请联系客服处理")
+
+    def test_admin_users_paginates_after_membership_filtering(self):
+        db = SessionLocal()
+        try:
+            for index in range(5):
+                user_id = str(uuid.uuid4())
+                user = User(
+                    id=user_id,
+                    username=f"user{index}@example.com",
+                    email=f"user{index}@example.com",
+                    password_hash="hashed_password",
+                    plan="free",
+                )
+                db.add(user)
+                db.flush()
+                if index < 3:
+                    db.add(
+                        Subscription(
+                            id=str(uuid.uuid4()),
+                            user_id=user_id,
+                            plan="pro_max",
+                            status="active",
+                            current_period_end=datetime.utcnow() + timedelta(days=7),
+                        )
+                    )
+            db.commit()
+        finally:
+            db.close()
+
+        response = self.client.get(
+            "/admin/users?page=2&size=2&membership=pro_max",
+            headers=self._admin_headers(),
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["total"], 3)
+        self.assertEqual(body["page"], 2)
+        self.assertEqual(body["size"], 2)
+        self.assertEqual(len(body["items"]), 1)
+        self.assertEqual(body["items"][0]["membership_status"], "pro_max")
 
 
 if __name__ == "__main__":

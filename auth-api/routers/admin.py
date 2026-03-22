@@ -256,8 +256,8 @@ def admin_list_users(
         elif status == "disabled":
             q = q.filter(User.status == "disabled")
     
-    # 先获取用户列表，再应用需要计算会员状态的筛选
-    users = q.order_by(User.created_at.desc()).offset(offset).limit(size * 3).all()  # 多取一些用于筛选
+    # 会员状态与在线状态依赖运行时计算，必须先完成筛选后再分页，避免 offset 重复生效。
+    users = q.order_by(User.created_at.desc()).all()
     items = [_build_user_item(u, db) for u in users]
     
     # 【新增】会员状态筛选（后端计算后过滤）
@@ -271,7 +271,6 @@ def admin_list_users(
         elif online == "offline":
             items = [item for item in items if not item.is_online]
     
-    # 分页处理
     total = len(items)
     items = items[offset:offset + size]
     

@@ -44,16 +44,25 @@ Authorization: Bearer <上一步获得的 token>
 响应示例：
 
 ```json
-[
-  {
-    "username": "user@example.com",
-    "user_id": "uuid",
-    "created_at": "2025-02-03T10:00:00",
-    "disabled": false,
-    "trial_end": 1738587600,
-    "plan": "free"
-  }
-]
+{
+  "items": [
+    {
+      "username": "user@example.com",
+      "user_id": "uuid",
+      "created_at": "2025-02-03T10:00:00",
+      "disabled": false,
+      "trial_end": 1738587600,
+      "plan": "free",
+      "membership_status": "free",
+      "membership_label": "免费版",
+      "membership_expire_at": null,
+      "membership_type": "none"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "size": 20
+}
 ```
 
 ### 3. 用户详情
