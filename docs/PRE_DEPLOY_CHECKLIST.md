@@ -69,13 +69,13 @@ CORS_ORIGINS=http://localhost:3000,*
 | 检查项 | 要求 | 检查命令/方法 | 状态 |
 |--------|------|---------------|------|
 | VITE_AUTH_API_BASE_URL 已设置 | 非空，必须是生产地址 | `echo $VITE_AUTH_API_BASE_URL` | [ ] |
-| API 地址为生产地址 | 值为 `http://121.41.179.197:8000` | 人工确认 | [ ] |
+| API 地址为生产地址 | 值为 HTTPS 生产地址，禁止裸 IP 明文 HTTP | 人工确认 | [ ] |
 | 不包含 localhost | 值中无 localhost/127.0.0.1 | 人工确认 | [ ] |
 | Release Guard 检查通过 | 无 BLOCKER 级别错误 | `npm run release:guard` | [ ] |
 
-**生产环境 API 地址（固化）**：
+**生产环境 API 地址（规范）**：
 ```bash
-export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
+export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
 ```
 
 **风险**: 
@@ -86,11 +86,12 @@ export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
 **正确示例**:
 ```bash
 # ✅ 正确
-export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
+export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
 
 # ❌ 错误（禁止发布）
 export VITE_AUTH_API_BASE_URL=http://localhost:8000
 export VITE_AUTH_API_BASE_URL=http://127.0.0.1:8000
+export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
 # 或未设置环境变量
 ```
 

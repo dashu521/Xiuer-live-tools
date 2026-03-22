@@ -4,7 +4,7 @@
 
 - **桌面端**：登录页提供「忘记密码？」入口，点击后弹窗说明「请联系微信客服重置密码」并展示微信二维码（本地 `public/support-wechat-qr.png`）。不引入短信/邮件服务。
 - **管理员后台**：在 `/admin/app` 用户列表中可对每行执行「重置密码」「生成临时密码」「禁用/启用」。
-- **auth-api**：新增 `POST /admin/reset-password`、`POST /admin/toggle-disabled`，当前代码侧依赖管理员 JWT；审计日志不记录明文密码。
+- **auth-api**：当前代码使用 `POST /admin/users/{username}/reset-password`、`POST /admin/users/{username}/disable`、`POST /admin/users/{username}/enable`，依赖管理员 JWT；审计日志不记录明文密码。
 
 ## 安全
 
@@ -29,54 +29,48 @@ echo "Token: ${TOKEN:0:20}..."
 ### 2. 重置密码（指定新密码）
 
 ```bash
-curl -s -X POST http://127.0.0.1:8000/admin/reset-password \
+curl -s -X POST http://127.0.0.1:8000/admin/users/user%40example.com/reset-password \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"username":"user@example.com","new_password":"newpass123"}' | python3 -m json.tool
+  -d '{"new_password":"newpass123"}' | python3 -m json.tool
 ```
 
-预期：`{"success": true}`
+预期：`{"ok": true, "message": "密码已更新"}`
 
 ### 3. 生成临时密码
 
 ```bash
-curl -s -X POST http://127.0.0.1:8000/admin/reset-password \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"username":"user@example.com","generate_temp":true}' | python3 -m json.tool
+curl -s -X POST http://127.0.0.1:8000/admin/users/user%40example.com/reset-password \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 ```
 
-预期：`{"success": true, "temp_password": "随机12位"}`（仅返回一次，请妥善保管）
+预期：`{"ok": true, "temp_password": "随机12位", "message": "已生成临时密码，请妥善保管"}`（仅返回一次，请妥善保管）
 
 ### 4. 禁用用户
 
 ```bash
-curl -s -X POST http://127.0.0.1:8000/admin/toggle-disabled \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"username":"user@example.com","disabled":true}' | python3 -m json.tool
+curl -s -X POST http://127.0.0.1:8000/admin/users/user%40example.com/disable \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 ```
 
-预期：`{"success": true}`
+预期：`{"ok": true, "username": "user@example.com", "status": "disabled"}`
 
 ### 5. 启用用户
 
 ```bash
-curl -s -X POST http://127.0.0.1:8000/admin/toggle-disabled \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
-  -d '{"username":"user@example.com","disabled":false}' | python3 -m json.tool
+curl -s -X POST http://127.0.0.1:8000/admin/users/user%40example.com/enable \
+  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
 ```
 
-预期：`{"success": true}`
+预期：`{"ok": true, "username": "user@example.com", "status": "active"}`
 
 ### 6. 用户不存在时的响应
 
 ```bash
-curl -s -X POST http://127.0.0.1:8000/admin/reset-password \
+curl -s -X POST http://127.0.0.1:8000/admin/users/nonexistent%40example.com/reset-password \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"username":"nonexistent@example.com","new_password":"newpass123"}' | python3 -m json.tool
+  -d '{"new_password":"newpass123"}' | python3 -m json.tool
 ```
 
 预期：HTTP 404，`{"detail": {"code": "user_not_found", "message": "用户不存在"}}`
@@ -101,6 +95,6 @@ curl -s -X POST http://127.0.0.1:8000/admin/reset-password \
 
 ## 改动文件一览
 
-- **auth-api**：`deps.py`（管理员 JWT 鉴权）、`routers/admin.py`（POST /admin/reset-password、POST /admin/toggle-disabled、GET /admin/app）、`schemas_admin.py`（ResetPasswordBody/Resp、ToggleDisabledBody/Resp）、`static/admin_ui.html`（管理员 UI 单页）
+- **auth-api**：`deps.py`（管理员 JWT 鉴权）、`routers/admin.py`（`POST /admin/users/{username}/reset-password`、`POST /admin/users/{username}/disable`、`POST /admin/users/{username}/enable`、`GET /admin/app`）、`schemas_admin.py`（管理员请求/响应模型）、`static/admin_ui.html`（管理员 UI 单页）
 - **桌面端**：`src/components/auth/AuthDialog.tsx`（忘记密码入口 + 弹窗展示微信二维码与说明）
 - **文档**：`auth-api/docs/ADMIN_RESET_PASSWORD.md`（本文件）、可选更新 `README` 或部署说明
