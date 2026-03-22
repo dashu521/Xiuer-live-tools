@@ -135,6 +135,20 @@ def redeem_gift_card(
     
     # 计算新的到期时间
     membership_days = card.membership_days or benefits.get("duration_days") or 0
+    if membership_days <= 0:
+        auth_audit_log(
+            req_id,
+            str(request.url),
+            "redeem_gift_card",
+            user.email or user.phone,
+            "failure",
+            {"reason": "invalid_duration", "card_id": card.id},
+        )
+        return RedeemResultOut(
+            success=False,
+            error="INVALID_CARD_CONFIG",
+            message="礼品卡配置无效，请联系客服处理",
+        )
     extend_secs = membership_days * 86400 if membership_days > 0 else 0
     new_plan = normalize_plan(benefits.get("plan"), default=tier)
     new_max_accounts = benefits.get("max_accounts", 1)
@@ -321,6 +335,15 @@ def admin_create_gift_cards(
 
     # 获取档位权益配置
     benefits = get_tier_benefits(tier)
+    membership_days = (
+        body.membership_days if body.membership_days > 0 else benefits.get("duration_days", 0)
+    )
+    if membership_days <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "invalid_duration", "message": "礼品卡必须配置有效的会员天数"},
+        )
+    benefits["duration_days"] = membership_days
 
     cards = []
     existing_codes = set()
@@ -341,7 +364,7 @@ def admin_create_gift_cards(
             tier=tier,
             benefits_json=benefits,
             membership_type=benefits["plan"],  # 兼容旧字段
-            membership_days=body.membership_days if body.membership_days > 0 else benefits.get("duration_days", 0),
+            membership_days=membership_days,
             status="active",
             batch_id=batch_id,
             created_by=admin,
