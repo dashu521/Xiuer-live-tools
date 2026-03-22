@@ -22,12 +22,6 @@ const UPGRADE_SUGGESTIONS: Record<
   PlanType,
   { title: string; description: string; nextPlan: string; nextPlanLimit: number }
 > = {
-  free: {
-    title: '升级专业版，解锁更多功能',
-    description: '专业版支持自动回复、自动发言、AI 助手等高级功能',
-    nextPlan: '专业版',
-    nextPlanLimit: 1,
-  },
   trial: {
     title: '试用期即将结束，升级继续使用全部功能',
     description: '专业版支持自动回复、自动发言、AI 助手等高级功能',
@@ -55,7 +49,7 @@ const UPGRADE_SUGGESTIONS: Record<
 }
 
 const MEMBERSHIP_OVERVIEW: Record<
-  Exclude<PlanType, 'free'>,
+  PlanType,
   { price: string; accountLimit: string; summary: string }
 > = {
   trial: {
@@ -94,8 +88,7 @@ export function AccountLimitDialog({ isOpen, onClose, onContinue }: AccountLimit
 
   const suggestion = UPGRADE_SUGGESTIONS[plan]
   const membershipPlans = useMemo(
-    () =>
-      ['trial', 'pro', 'pro_max', 'ultra'] as const satisfies readonly Exclude<PlanType, 'free'>[],
+    () => ['trial', 'pro', 'pro_max', 'ultra'] as const satisfies readonly PlanType[],
     [],
   )
 

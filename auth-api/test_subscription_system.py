@@ -43,7 +43,7 @@ class SubscriptionSystemTests(unittest.TestCase):
                 last_login_at TIMESTAMP,
                 last_active_at TIMESTAMP,
                 status TEXT DEFAULT 'active',
-                plan TEXT DEFAULT 'free',
+                plan TEXT DEFAULT 'trial',
                 trial_start_at TIMESTAMP,
                 trial_end_at TIMESTAMP,
                 max_accounts INTEGER DEFAULT 1,
@@ -111,7 +111,7 @@ class SubscriptionSystemTests(unittest.TestCase):
             INSERT INTO users (id, username, email, password_hash, plan)
             VALUES (?, ?, ?, ?, ?)
             """,
-            (user_id, "test_user", "test@example.com", "hashed_password", "free"),
+            (user_id, "test_user", "test@example.com", "hashed_password", "trial"),
         )
 
         now_ts = int(time.time())
@@ -170,7 +170,7 @@ class SubscriptionSystemTests(unittest.TestCase):
             INSERT INTO users (id, username, email, password_hash, plan, max_accounts)
             VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (user_id, "redeem_test", "redeem@example.com", "hashed_password", "free", 1),
+            (user_id, "redeem_test", "redeem@example.com", "hashed_password", "trial", 1),
         )
         cursor.execute(
             """
@@ -194,7 +194,7 @@ class SubscriptionSystemTests(unittest.TestCase):
             (id, gift_card_id, user_id, previous_plan, new_plan, previous_expiry_ts, new_expiry_ts)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (str(uuid.uuid4()), card_id, user_id, "free", "pro", None, now_ts + 30 * 24 * 3600),
+            (str(uuid.uuid4()), card_id, user_id, "trial", "pro", None, now_ts + 30 * 24 * 3600),
         )
         conn.commit()
 
@@ -212,7 +212,7 @@ class SubscriptionSystemTests(unittest.TestCase):
         cursor = conn.cursor()
 
         cases = [
-            ("free", 1),
+            ("trial", 1),
             ("pro", 1),
             ("pro_max", 3),
             ("ultra", -1),
@@ -233,7 +233,7 @@ class SubscriptionSystemTests(unittest.TestCase):
         rows = cursor.fetchall()
         conn.close()
 
-        self.assertEqual(rows, [("free", 1), ("pro", 1), ("pro_max", 3), ("ultra", -1)])
+        self.assertEqual(rows, [("pro", 1), ("pro_max", 3), ("trial", 1), ("ultra", -1)])
 
     def test_tier_upgrade_from_pro_to_pro_max(self):
         conn = self._connect()
@@ -263,7 +263,7 @@ class SubscriptionSystemTests(unittest.TestCase):
             ),
         )
 
-        tier_order = {"free": 0, "trial": 1, "pro": 2, "pro_max": 3, "ultra": 4}
+        tier_order = {"trial": 0, "pro": 1, "pro_max": 2, "ultra": 3}
         self.assertGreaterEqual(tier_order["pro_max"], tier_order["pro"])
 
         cursor.execute("UPDATE users SET plan = ?, max_accounts = ? WHERE id = ?", ("pro_max", 3, user_id))
@@ -283,7 +283,7 @@ class SubscriptionSystemTests(unittest.TestCase):
         self.assertEqual(row, ("pro_max", 3))
 
     def test_downgrade_from_ultra_to_pro_is_blocked(self):
-        tier_order = {"free": 0, "trial": 1, "pro": 2, "pro_max": 3, "ultra": 4}
+        tier_order = {"trial": 0, "pro": 1, "pro_max": 2, "ultra": 3}
         self.assertLess(tier_order["pro"], tier_order["ultra"])
 
 

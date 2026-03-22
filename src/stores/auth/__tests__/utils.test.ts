@@ -21,7 +21,7 @@ describe('Auth 工具函数测试', () => {
       expect(result.username).toBe('testuser')
       expect(result.email).toBe('')
       expect(result.status).toBe('active')
-      expect(result.plan).toBe('free')
+      expect(result.plan).toBe('trial')
       expect(result.expire_at).toBeNull()
       expect(result.balance).toBe(0)
       expect(result.lastLogin).toBeNull()
@@ -107,8 +107,8 @@ describe('Auth 工具函数测试', () => {
 
       const result = backendUserToSafeUser(backendUser, 'fallback')
 
-      // enterprise 不是标准 plan，应被规范化
-      expect(['free', 'basic', 'pro', 'enterprise'].includes(result.plan)).toBe(true)
+      // enterprise 不是标准 plan，应被规范化为 trial
+      expect(result.plan).toBe('trial')
     })
 
     it('应优先使用 phone 作为 username', () => {

@@ -13,7 +13,6 @@ with _SHARED_RULES_PATH.open("r", encoding="utf-8") as f:
     _RULES = json.load(f)
 
 TRIAL_PLAN = "trial"
-LEGACY_FREE_PLAN = "free"
 DEFAULT_PLAN = TRIAL_PLAN
 EXPIRED_STATUS = "expired"
 
@@ -59,7 +58,7 @@ def get_max_accounts(plan: Optional[str], fallback: Optional[int] = None) -> int
 
 def resolve_user_max_accounts(plan: Optional[str], stored_value: Optional[int]) -> int:
     normalized_plan = normalize_plan(plan)
-    if normalized_plan in (LEGACY_FREE_PLAN, TRIAL_PLAN):
+    if normalized_plan == TRIAL_PLAN:
         return PLAN_MAX_ACCOUNTS[normalized_plan]
     return get_max_accounts(normalized_plan, fallback=stored_value)
 

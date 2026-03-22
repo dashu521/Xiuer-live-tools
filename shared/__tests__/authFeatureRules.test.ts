@@ -28,12 +28,12 @@ describe('authFeatureRules', () => {
     expect(isAuthFeature('unknown_feature')).toBe(false)
   })
 
-  it('未知功能应回退到默认免费规则', () => {
+  it('未知功能应回退到默认 trial 规则', () => {
     expect(getAuthFeatureRule('unknown_feature')).toEqual({
       requiresAuth: false,
-      requiredPlan: 'free',
+      requiredPlan: 'trial',
     })
     expect(requiresAuthentication('unknown_feature')).toBe(false)
-    expect(getRequiredPlan('unknown_feature')).toBe('free')
+    expect(getRequiredPlan('unknown_feature')).toBe('trial')
   })
 })

@@ -97,7 +97,7 @@ export class AuthService {
         passwordHash,
         lastLogin: null,
         status: 'active',
-        plan: 'free',
+        plan: 'trial',
         expire_at: null,
         deviceId: '',
         machineFingerprint: '',
@@ -256,7 +256,7 @@ export class AuthService {
    * 判断用户套餐等级是否满足最低要求
    */
   static hasPlanLevel(user: Omit<User, 'passwordHash'> | null, requiredPlan: PlanType): boolean {
-    if (!user) return requiredPlan === 'free'
+    if (!user) return false
 
     const userPlan = normalizePlan(user.plan)
 

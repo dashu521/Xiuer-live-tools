@@ -150,7 +150,7 @@ export function getEffectivePlan(
 export function getSubscriptionFromUserStatus(userStatus: UserStatus | null) {
   if (!userStatus) {
     return {
-      plan: 'free' as PlanType,
+      plan: 'trial' as PlanType,
       expireAt: null as number | null,
       maxAccounts: 1,
       isExpired: false,
@@ -194,9 +194,6 @@ export function getUpgradeSuggestion(currentPlan: string): string {
     return ''
   }
 
-  if (normalized === 'free') {
-    return '升级专业版可使用全部功能'
-  }
   if (normalized === 'trial') {
     return '试用期结束后，升级专业版可继续使用全部功能'
   }

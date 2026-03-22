@@ -14,7 +14,7 @@ with _SHARED_RULES_PATH.open("r", encoding="utf-8") as f:
 
 DEFAULT_AUTH_FEATURE_RULE = {
     "requiresAuth": False,
-    "requiredPlan": "free",
+    "requiredPlan": "trial",
 }
 
 

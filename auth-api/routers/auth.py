@@ -69,7 +69,7 @@ def is_phone(s: str) -> bool:
 def build_user_status_response(user: User, db: Optional[Session] = None) -> UserStatusResponse:
     """拼装 /auth/status 返回结构（含 plan、trial）。
 
-    【P0-1 会员规则对齐】优先级：正式订阅(subscription) > 试用(trial) > 免费(free)
+    【P0-1 会员规则对齐】优先级：正式订阅(subscription) > 试用(trial)
 
     1. 优先查询 subscriptions 表（正式订阅）
     2. 其次查询 trials 表（试用）
@@ -78,7 +78,7 @@ def build_user_status_response(user: User, db: Optional[Session] = None) -> User
     确保 Pro/ProMax/Ultra 不会被 trial 逻辑覆盖
     """
     username = user.email or user.phone or user.id
-    plan = "free"
+    plan = "trial"
     expire_at = None
     trial: Optional[TrialOut] = None
 
@@ -103,7 +103,7 @@ def build_user_status_response(user: User, db: Optional[Session] = None) -> User
             logger.exception("查询 subscriptions 表失败", extra={"user_id": user.id})
 
         # 【第2优先级】如果没有正式订阅，检查试用 trials 表
-        if plan == "free":
+        if not is_paid_plan(plan):
             try:
                 row = db.execute(
                     text("SELECT start_ts, end_ts FROM trials WHERE username = :u"),
@@ -119,8 +119,6 @@ def build_user_status_response(user: User, db: Optional[Session] = None) -> User
                         is_active=is_active,
                         is_expired=is_expired,
                     )
-                    if is_active:
-                        plan = "trial"
                 else:
                     trial = TrialOut(is_active=False, is_expired=False)
             except Exception:
@@ -128,7 +126,7 @@ def build_user_status_response(user: User, db: Optional[Session] = None) -> User
                 trial = TrialOut(is_active=False, is_expired=False)
 
     # 【第3优先级】兜底：从 user 对象获取（无数据库连接时）
-    if plan == "free":
+    if not is_paid_plan(plan):
         user_plan = normalize_plan(getattr(user, "plan", None))
         if is_paid_plan(user_plan):
             plan = user_plan
@@ -138,7 +136,7 @@ def build_user_status_response(user: User, db: Optional[Session] = None) -> User
                 expire_at = user_expire
 
         # 检查试用（从 user 表字段）
-        if plan == "free" and trial is None:
+        if not is_paid_plan(plan) and trial is None:
             trial_start_at = getattr(user, "trial_start_at", None)
             trial_end_at = getattr(user, "trial_end_at", None)
             if trial_end_at:
@@ -298,7 +296,7 @@ def register(body: RegisterBody, db: Session = Depends(get_db)):
             created_at=now,
             updated_at=now,
             status="active",
-            plan="free",
+            plan="trial",
         )
         db.add(user)
         db.commit()
@@ -309,10 +307,10 @@ def register(body: RegisterBody, db: Session = Depends(get_db)):
             from sqlalchemy import text as sa_text
             _sub_sql = (
                 "INSERT IGNORE INTO subscriptions (id, user_id, plan, status) "
-                "VALUES (:sid, :uid, 'free', 'active')"
+                "VALUES (:sid, :uid, 'trial', 'active')"
             ) if is_mysql() else (
                 "INSERT OR IGNORE INTO subscriptions (id, user_id, plan, status) "
-                "VALUES (:sid, :uid, 'free', 'active')"
+                "VALUES (:sid, :uid, 'trial', 'active')"
             )
             db.execute(sa_text(_sub_sql), {"sid": str(uuid.uuid4()), "uid": str(user.id)})
             db.commit()

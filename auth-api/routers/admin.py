@@ -106,7 +106,7 @@ def _get_membership_status(u: User, db: Session) -> dict:
     """
     计算用户会员状态
     返回: {
-        membership_status: free | trial | pro | pro_max | ultra | expired
+        membership_status: trial | pro | pro_max | ultra | expired
         membership_label: 免费版 | 试用中 | Pro | ProMax | Ultra | 已过期
         membership_expire_at: ISO格式到期时间或None
         membership_type: none | trial | subscription
@@ -160,8 +160,8 @@ def _get_membership_status(u: User, db: Session) -> dict:
     if has_history:
         return build_membership_info("expired", membership_type="none")
     
-    # 4. 免费版（无任何记录）
-    return build_membership_info("free", membership_type="none")
+    # 4. 默认视为 trial 口径（无任何记录）
+    return build_membership_info("trial", membership_type="none")
 
 
 def _build_user_item(u: User, db: Session) -> AdminUserListItem:
@@ -306,7 +306,7 @@ def admin_export_users(
             "禁用" if (u.status or "active") != "active" else "正常",
             u.created_at.strftime("%Y-%m-%d %H:%M") if u.created_at else "",
             trial_str,
-            getattr(u, "plan", None) or "free",
+            getattr(u, "plan", None) or "trial",
         ])
 
     auth_audit_log(req_id, str(request.url), "export_users", None, "success", {"count": len(users)})
@@ -346,7 +346,7 @@ def admin_get_user(
         last_active_at=user.last_active_at.isoformat() if user.last_active_at else None,
         trial_end=trial_end,
         trial_start=trial_start,
-        plan=getattr(user, "plan", None) or "free",
+        plan=getattr(user, "plan", None) or "trial",
         last_login_at=user.last_login_at.isoformat() if user.last_login_at else None,
     )
 
