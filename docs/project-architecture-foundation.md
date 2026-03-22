@@ -188,6 +188,7 @@
 - 功能权限静态规则来自 `shared/authFeatureRules.data.json`
 - 服务端输出 `capabilities`
 - 前端权限层优先消费服务端 `capabilities.feature_access`
+- 当前有效套餐集合为 `trial / pro / pro_max / ultra`，`free` 仅允许作为历史数据迁移兼容值，不再作为新增默认值或有效套餐写入
 
 主文件：
 
@@ -202,6 +203,7 @@
 
 - 新增套餐等级或功能权限时，先改 `shared/*.data.json`
 - 前端不应再次复制一份独立套餐优先级规则
+- 后端新写入用户/订阅默认值、前端 DTO 默认值、共享默认权限规则不得继续写入 `free`
 
 ### 3.4 小号互动独立子系统
 

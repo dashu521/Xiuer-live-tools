@@ -73,6 +73,7 @@
 - 功能权限静态规则是否先改 `shared/authFeatureRules.data.json`？
 - 服务端能力 DTO 和前端消费结构是否保持一致？
 - 前端是否优先消费 `capabilities.feature_access`，而不是重算核心权限规则？
+- 如果套餐口径发生收口（如 `free -> trial`），后端默认值、共享默认规则、前端默认展示和测试用例是否已同步更新？
 
 ### 3.4 小号互动
 
