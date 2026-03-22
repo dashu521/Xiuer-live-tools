@@ -273,6 +273,7 @@ function checkPlanFeature(plan: PlanType, feature: FeatureType): boolean {
 - **数据库层面**: 保留旧数据，但新用户统一使用新命名
 - **API 层面**: 返回统一使用新命名，前端做映射展示
 - **前端层面**: 统一使用新命名，不再兼容旧命名
+- **实现约束**: 后端默认值、管理后台 DTO、数据库新增默认 plan 均应使用 `trial`，不得继续新增 `free`
 
 ### 6.3 不再作为当前规范的内容
 

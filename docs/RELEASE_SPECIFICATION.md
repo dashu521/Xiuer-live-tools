@@ -68,7 +68,7 @@
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
 │  步骤 1: 本地 Mac 构建                                                    │
-│  ├── export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000           │
+│  ├── export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>        │
 │  ├── npm run release:mac                                                 │
 │  └── 产物: release/<version>/*.dmg + latest-mac.yml                      │
 │                                                                         │
@@ -309,8 +309,8 @@ echo $VITE_AUTH_API_BASE_URL
 
 ### 构建步骤（任何 Mac 均可执行）
 ```bash
-# 步骤 1：设置 API 地址
-export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
+# 步骤 1：设置 API 地址（必须是 HTTPS 生产地址）
+export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
 
 # 步骤 2：执行构建
 npm run build
@@ -338,16 +338,16 @@ ls -la release/*/mac*/
 
 | 环境变量 | 生产环境值 | 说明 |
 |----------|------------|------|
-| `VITE_AUTH_API_BASE_URL` | `http://121.41.179.197:8000` | 阿里云 ECS 生产 API 服务器 |
-| `AUTH_STORAGE_SECRET` | 32+ 字符高熵随机字符串 | 主进程安全存储密钥，保护本地加密凭据文件 |
+| `VITE_AUTH_API_BASE_URL` | `https://<your-auth-api-domain>` | 生产认证/管理 API 的 HTTPS 地址，禁止裸 IP 明文 HTTP |
+| `AUTH_STORAGE_SECRET` | 32+ 字符高熵随机字符串 | 主进程安全存储密钥；正式发布必须显式注入，不能依赖运行时兜底 |
 
 ### 强制要求
 
 #### 1. 正式发布必须显式注入环境变量
 
 ```bash
-# ✅ 正确：显式设置生产环境 API 地址
-export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
+# ✅ 正确：显式设置生产环境 HTTPS API 地址
+export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
 export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
 npm run release
 
@@ -361,7 +361,7 @@ npm run release
 代码中可能存在 `import.meta.env.VITE_AUTH_API_BASE_URL || 'localhost'` 的 fallback 模式：
 
 - **开发环境**：fallback 模式允许本地调试更方便
-- **发布构建**：当环境变量正确设置时，fallback 不会生效，构建产物使用生产地址
+- **发布构建**：当环境变量正确设置时，fallback 不会生效，构建产物使用 HTTPS 生产地址
 - **风险控制**：Release Guard 会在发布前扫描并检查，若发现环境变量未正确配置将拦截
 
 #### 3. Release Guard 检查机制
@@ -398,7 +398,7 @@ echo $VITE_AUTH_API_BASE_URL
 [ -n "$AUTH_STORAGE_SECRET" ] && echo "AUTH_STORAGE_SECRET is set"
 
 # 预期输出
-http://121.41.179.197:8000
+https://<your-auth-api-domain>
 
 # 执行阻断检查
 npm run release:guard
@@ -532,7 +532,7 @@ curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_m
 | 2025-03-12 | v2.0 | 建立三层发布结构，明确区分测试构建和正式发布构建 |
 | 2025-03-12 | v2.1 | 更新 macOS 构建说明：删除 M3 Ultra 特定表述，明确任何 Mac 均可构建，当前使用无签名方式，未来可升级至 Apple Developer 签名 |
 | 2025-03-14 | v2.2 | 添加下载页部署规范：明确 download.xiuer.work/ 为正式下载页，/releases/latest/ 为自动更新目录，两者路径独立；添加发布后必验地址清单 |
-| 2026-03-18 | v2.3 | 添加生产环境 API 地址固化规范：明确 VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000 为生产环境地址，强制要求正式发布必须显式注入，禁止 localhost fallback 进入发布包，Release Guard 强制拦截 |
+| 2026-03-18 | v2.3 | 添加生产环境 API 地址固化规范：明确 VITE_AUTH_API_BASE_URL 必须为 HTTPS 生产地址，强制要求正式发布必须显式注入，禁止 localhost fallback 进入发布包，Release Guard 强制拦截 |
 | 2026-03-18 | v2.4 | 明确发布架构与职责边界：本地 Mac 不再依赖 OSS 凭证，OSS 上传统一走 GitHub Actions，npm run upload:mac:oss 保留为手工兜底方案 |
 
 ---
@@ -549,7 +549,7 @@ curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_m
 - [ ] macOS 11 及以上
 
 ### 配置检查
-- [ ] `VITE_AUTH_API_BASE_URL` 已设置为 `http://121.41.179.197:8000`
+- [ ] `VITE_AUTH_API_BASE_URL` 已设置为 HTTPS 生产地址
 - [ ] `VITE_AUTH_API_BASE_URL` 不包含 localhost/127.0.0.1
 - [ ] `AUTH_STORAGE_SECRET` 已设置为 32+ 字符随机字符串
 - [ ] Release Guard 检查通过
@@ -591,7 +591,7 @@ git commit -m "chore: prepare release vX.X.X"
 
 **解决方案**：
 ```bash
-export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
+export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
 ```
 
 ### 3. 未设置 AUTH_STORAGE_SECRET
@@ -612,7 +612,7 @@ export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
 - `electron/main/` 目录中的 localhost 会被视为 WARNING（需确认）
 - `scripts/` 目录中的 localhost 会被视为 INFO（正常）
 
-**解决方案**：确保 `VITE_AUTH_API_BASE_URL` 已设置为生产地址。
+**解决方案**：确保 `VITE_AUTH_API_BASE_URL` 已设置为 HTTPS 生产地址。
 
 ---
 
