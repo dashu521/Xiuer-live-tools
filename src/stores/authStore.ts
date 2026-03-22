@@ -50,7 +50,7 @@ function safeUserFromUsername(username: string): SafeUser {
     status: 'active',
     // @deprecated 使用 plan
     // 统一使用 plan 字段
-    plan: 'free',
+    plan: 'trial',
     // @deprecated 使用 expire_at
     expire_at: null,
     deviceId: '',
@@ -197,7 +197,7 @@ function _backendUserToSafeUser(
     fallbackUsername
 
   // 从后端获取 plan，兼容处理
-  const plan = normalizePlan(backendUser.plan) || 'free'
+  const plan = normalizePlan(backendUser.plan)
 
   return {
     id: String(backendUser.id),
@@ -838,7 +838,7 @@ export const useAuthStore = create<AuthStore>()(
                 user_id: get().user?.id,
                 username: get().user?.username ?? username,
                 status: 'active',
-                plan: statusData.active ? 'trial' : 'free',
+                plan: 'trial',
                 max_accounts: 1,
                 trial: {
                   start_at:

@@ -126,7 +126,7 @@ def create_user_for_phone(phone: str, db: Session) -> User:
     db.execute(
         sa_text(
             "INSERT INTO users (id, username, email, phone, password_hash, created_at, updated_at, status, plan) "
-            "VALUES (:id, :u, NULL, :p, :pw, :ca, :ua, 'active', 'free')"
+            "VALUES (:id, :u, NULL, :p, :pw, :ca, :ua, 'active', 'trial')"
         ),
         {"id": user_id, "u": phone, "p": phone, "pw": pw, "ca": now, "ua": now},
     )
@@ -138,10 +138,10 @@ def create_user_for_phone(phone: str, db: Session) -> User:
         from sqlalchemy import text as sa_text2
         _sub_sql = (
             "INSERT IGNORE INTO subscriptions (id, user_id, plan, status) "
-            "VALUES (:sid, :uid, 'free', 'active')"
+            "VALUES (:sid, :uid, 'trial', 'active')"
         ) if is_mysql() else (
             "INSERT OR IGNORE INTO subscriptions (id, user_id, plan, status) "
-            "VALUES (:sid, :uid, 'free', 'active')"
+            "VALUES (:sid, :uid, 'trial', 'active')"
         )
         db.execute(sa_text2(_sub_sql), {"sid": str(uuid.uuid4()), "uid": str(user.id)})
         db.commit()

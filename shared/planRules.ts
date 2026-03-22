@@ -1,6 +1,6 @@
 import planRulesData from './planRules.data.json'
 
-export type PlanType = 'free' | 'trial' | 'pro' | 'pro_max' | 'ultra'
+export type PlanType = 'trial' | 'pro' | 'pro_max' | 'ultra'
 export type MembershipStatus = PlanType | 'expired'
 
 export interface PlanRule {
@@ -29,24 +29,21 @@ export const LEGACY_MEMBERSHIP_TYPE_TO_TIER = planRulesData.legacyMembershipType
   string,
   PlanType
 >
-export const TIER_BENEFITS = planRulesData.tierBenefits as Record<
-  Exclude<PlanType, 'free' | 'trial'>,
-  TierBenefit
->
+export const TIER_BENEFITS = planRulesData.tierBenefits as Record<Exclude<PlanType, 'trial'>, TierBenefit>
 
 export const PLAN_LEVEL: Record<PlanType, number> = Object.fromEntries(
   VALID_PLANS.map(plan => [plan, PLAN_RULES[plan].level]),
 ) as Record<PlanType, number>
 
 export function normalizePlan(plan: string | null | undefined): PlanType {
-  if (!plan) return 'free'
+  if (!plan) return 'trial'
 
   const normalized = plan.toLowerCase().trim()
   if (VALID_PLANS.includes(normalized as PlanType)) {
     return normalized as PlanType
   }
 
-  return 'free'
+  return 'trial'
 }
 
 export function isPaidPlan(plan: PlanType): boolean {
@@ -83,12 +80,11 @@ export function getEffectivePlan(
     return 'trial'
   }
 
-  return 'free'
+  return 'trial'
 }
 
 export function getUpgradeSuggestion(currentPlan: PlanType): PlanType | undefined {
   const upgradeMap: Record<PlanType, PlanType | undefined> = {
-    free: 'pro',
     trial: 'pro',
     pro: 'pro_max',
     pro_max: 'ultra',

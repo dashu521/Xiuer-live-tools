@@ -101,7 +101,7 @@ export function createEmptyAccessContext(): AccessContext {
     isAuthenticated: false,
     userId: null,
     username: null,
-    plan: 'free',
+    plan: 'trial',
     userStatus: null,
     capabilities: null,
     trialActive: false,

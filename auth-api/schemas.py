@@ -94,7 +94,7 @@ class TrialOut(BaseModel):
 
 class FeatureAccessOut(BaseModel):
     requires_auth: bool = False
-    required_plan: str = "free"
+    required_plan: str = "trial"
     can_access: bool = False
 
 

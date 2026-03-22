@@ -90,7 +90,7 @@ export function isActiveTrialUser(context: AccessContext): boolean {
  * 是否为免费用户
  */
 export function isFreeUser(context: AccessContext): boolean {
-  return context.plan === 'free'
+  return context.plan === 'trial' && !context.isPaidUser && !context.trialActive
 }
 
 // ===== 功能权限判断 =====

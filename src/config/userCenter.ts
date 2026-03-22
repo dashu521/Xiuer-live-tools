@@ -1,13 +1,9 @@
-import { Check, Crown, Gift, Star, User, Zap } from 'lucide-react'
+import { Check, Crown, Gift, type LucideIcon, Star, Zap } from 'lucide-react'
 import type { PlanType } from '@/domain/access/planRules'
 import type { BenefitItem, PlanColors } from '@/types/userCenter'
 
 // 所有套餐的权益配置
 export const TIER_BENEFITS: Record<PlanType, BenefitItem[]> = {
-  free: [
-    { name: '直播控制', description: '基础直播控制功能', icon: Check },
-    { name: '基础设置', description: '基础应用设置', icon: Check },
-  ],
   trial: [
     { name: '直播控制', description: '完整直播控制功能', icon: Check },
     { name: '自动回复', description: '智能自动回复评论', icon: Check },
@@ -49,8 +45,7 @@ export const TIER_BENEFITS: Record<PlanType, BenefitItem[]> = {
 }
 
 // 套餐图标映射 - 差异化设计
-export const PLAN_ICON_MAP: Record<PlanType, typeof User> = {
-  free: User,
+export const PLAN_ICON_MAP: Record<PlanType, LucideIcon> = {
   trial: Gift,
   pro: Crown,
   pro_max: Zap,
@@ -59,11 +54,6 @@ export const PLAN_ICON_MAP: Record<PlanType, typeof User> = {
 
 // 套餐颜色样式映射 - 差异化设计
 export const PLAN_COLOR_MAP: Record<PlanType, PlanColors> = {
-  free: {
-    badge: 'border border-muted text-muted-foreground',
-    gradient: 'from-muted/5 to-muted/10 border-muted/20',
-    icon: 'bg-muted/30 text-muted-foreground',
-  },
   trial: {
     badge: 'border border-blue-500/30 text-blue-400 bg-blue-500/5',
     gradient: 'from-blue-500/5 to-blue-500/10 border-blue-500/20',
@@ -88,7 +78,6 @@ export const PLAN_COLOR_MAP: Record<PlanType, PlanColors> = {
 
 // 套餐描述映射
 export const PLAN_DESCRIPTION_MAP: Record<PlanType, string> = {
-  free: '',
   trial: '',
   pro: '',
   pro_max: '',

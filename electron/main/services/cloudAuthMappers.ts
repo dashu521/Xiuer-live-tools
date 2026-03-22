@@ -10,7 +10,7 @@ export function cloudUserToSafeUser(u: CloudUserOut): SafeUser {
     createdAt: u.created_at,
     lastLogin: u.last_login_at,
     status: u.status as 'active' | 'inactive' | 'banned',
-    plan: 'free',
+    plan: 'trial',
     expire_at: null,
     deviceId: '',
     machineFingerprint: '',

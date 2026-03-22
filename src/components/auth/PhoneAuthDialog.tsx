@@ -272,8 +272,8 @@ export function PhoneAuthDialog({
           createdAt: user?.created_at || new Date().toISOString(),
           lastLogin: user?.last_login_at || null,
           status: (user?.status as 'active' | 'inactive' | 'banned') || 'active',
-          licenseType: 'free' as const,
-          plan: 'free' as const, // 初始值，登录后会通过 getUserStatus 获取真实套餐
+          licenseType: 'trial' as const,
+          plan: 'trial' as const, // 初始值，登录后会通过 getUserStatus 获取真实套餐
           expiryDate: null,
           expire_at: null, // 统一 expire_at 字段
           deviceId: '',

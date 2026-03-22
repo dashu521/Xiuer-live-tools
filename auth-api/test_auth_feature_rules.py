@@ -20,10 +20,10 @@ class AuthFeatureRulesTests(unittest.TestCase):
     def test_unknown_feature_uses_safe_default(self):
         self.assertFalse(is_auth_feature("unknown_feature"))
         self.assertFalse(requires_authentication("unknown_feature"))
-        self.assertEqual(get_required_plan("unknown_feature"), "free")
+        self.assertEqual(get_required_plan("unknown_feature"), "trial")
         self.assertEqual(
             get_auth_feature_rule("unknown_feature"),
-            {"requiresAuth": False, "requiredPlan": "free"},
+            {"requiresAuth": False, "requiredPlan": "trial"},
         )
 
     def test_build_feature_access_uses_plan_thresholds(self):

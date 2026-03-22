@@ -1,15 +1,13 @@
 {
-  "validPlans": ["free", "trial", "pro", "pro_max", "ultra"],
+  "validPlans": ["trial", "pro", "pro_max", "ultra"],
   "paidPlans": ["pro", "pro_max", "ultra"],
   "planTextMap": {
-    "free": "免费版",
     "trial": "试用版",
     "pro": "专业版",
     "pro_max": "专业增强版",
     "ultra": "旗舰版"
   },
   "membershipLabels": {
-    "free": "免费版",
     "trial": "试用中",
     "pro": "Pro",
     "pro_max": "ProMax",
@@ -17,18 +15,9 @@
     "expired": "已过期"
   },
   "planRules": {
-    "free": {
-      "name": "免费版",
-      "level": 0,
-      "maxLiveAccounts": 1,
-      "canUseAllFeatures": false,
-      "isPaid": false,
-      "themeColor": "gray",
-      "iconType": "free"
-    },
     "trial": {
       "name": "试用版",
-      "level": 1,
+      "level": 0,
       "maxLiveAccounts": 1,
       "canUseAllFeatures": true,
       "isPaid": false,
@@ -37,7 +26,7 @@
     },
     "pro": {
       "name": "专业版",
-      "level": 2,
+      "level": 1,
       "maxLiveAccounts": 1,
       "canUseAllFeatures": true,
       "isPaid": true,
@@ -46,7 +35,7 @@
     },
     "pro_max": {
       "name": "专业增强版",
-      "level": 3,
+      "level": 2,
       "maxLiveAccounts": 3,
       "canUseAllFeatures": true,
       "isPaid": true,
@@ -55,7 +44,7 @@
     },
     "ultra": {
       "name": "旗舰版",
-      "level": 4,
+      "level": 3,
       "maxLiveAccounts": -1,
       "canUseAllFeatures": true,
       "isPaid": true,

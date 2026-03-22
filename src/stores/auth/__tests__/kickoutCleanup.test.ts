@@ -199,7 +199,7 @@ describe('kickout cleanup', () => {
         createdAt: new Date().toISOString(),
         lastLogin: null,
         status: 'active',
-        plan: 'free',
+        plan: 'trial',
         expire_at: null,
         deviceId: '',
         machineFingerprint: '',
@@ -215,7 +215,7 @@ describe('kickout cleanup', () => {
         user_id: 'user-1',
         username: 'user-1',
         status: 'active',
-        plan: 'free',
+        plan: 'trial',
       },
     })
 
