@@ -9,9 +9,9 @@ from subscription_rules import (
 
 
 class SubscriptionRulesTests(unittest.TestCase):
-    def test_normalize_plan_falls_back_to_free(self):
+    def test_normalize_plan_falls_back_to_trial(self):
         self.assertEqual(normalize_plan("PRO_MAX"), "pro_max")
-        self.assertEqual(normalize_plan("unknown"), "free")
+        self.assertEqual(normalize_plan("unknown"), "trial")
 
     def test_tier_benefits_keep_plan_and_account_limit_in_sync(self):
         pro_max = get_tier_benefits("pro_max")

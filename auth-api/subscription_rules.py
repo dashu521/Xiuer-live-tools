@@ -12,8 +12,9 @@ _SHARED_RULES_PATH = Path(__file__).resolve().parent.parent / "shared" / "planRu
 with _SHARED_RULES_PATH.open("r", encoding="utf-8") as f:
     _RULES = json.load(f)
 
-FREE_PLAN = "free"
 TRIAL_PLAN = "trial"
+LEGACY_FREE_PLAN = "free"
+DEFAULT_PLAN = TRIAL_PLAN
 EXPIRED_STATUS = "expired"
 
 PAID_PLANS = tuple(_RULES["paidPlans"])
@@ -28,7 +29,7 @@ TIER_BENEFITS = _RULES["tierBenefits"]
 LEGACY_MEMBERSHIP_TYPE_TO_TIER = _RULES["legacyMembershipTypeToTier"]
 
 
-def normalize_plan(plan: Optional[str], default: str = FREE_PLAN) -> str:
+def normalize_plan(plan: Optional[str], default: str = DEFAULT_PLAN) -> str:
     value = (plan or "").strip().lower()
     return value if value in KNOWN_PLANS else default
 
@@ -39,7 +40,7 @@ def normalize_tier(tier: Optional[str], default: str = "pro") -> str:
 
 
 def get_plan_level(plan: Optional[str]) -> int:
-    return PLAN_LEVELS.get(normalize_plan(plan), PLAN_LEVELS[FREE_PLAN])
+    return PLAN_LEVELS.get(normalize_plan(plan), PLAN_LEVELS[DEFAULT_PLAN])
 
 
 def is_paid_plan(plan: Optional[str]) -> bool:
@@ -53,19 +54,19 @@ def can_use_all_features(plan: Optional[str]) -> bool:
 def get_max_accounts(plan: Optional[str], fallback: Optional[int] = None) -> int:
     if fallback is not None:
         return fallback
-    return PLAN_MAX_ACCOUNTS.get(normalize_plan(plan), PLAN_MAX_ACCOUNTS[FREE_PLAN])
+    return PLAN_MAX_ACCOUNTS.get(normalize_plan(plan), PLAN_MAX_ACCOUNTS[DEFAULT_PLAN])
 
 
 def resolve_user_max_accounts(plan: Optional[str], stored_value: Optional[int]) -> int:
     normalized_plan = normalize_plan(plan)
-    if normalized_plan in (FREE_PLAN, TRIAL_PLAN):
+    if normalized_plan in (LEGACY_FREE_PLAN, TRIAL_PLAN):
         return PLAN_MAX_ACCOUNTS[normalized_plan]
     return get_max_accounts(normalized_plan, fallback=stored_value)
 
 
 def resolve_membership_label(status: Optional[str]) -> str:
     normalized_status = (status or "").strip().lower()
-    return MEMBERSHIP_LABELS.get(normalized_status, MEMBERSHIP_LABELS[FREE_PLAN])
+    return MEMBERSHIP_LABELS.get(normalized_status, MEMBERSHIP_LABELS[DEFAULT_PLAN])
 
 
 def build_membership_info(
