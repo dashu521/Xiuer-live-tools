@@ -546,6 +546,146 @@ export async function syncUserConfig(
   return requestWithRefresh<SyncConfigResponse>('POST', '/config/sync', { config })
 }
 
+// ===================== 消息中心 =====================
+
+export interface MessageCenterItem {
+  id: string
+  title: string
+  content: string
+  type: 'notice' | 'update' | 'warning' | 'marketing'
+  is_pinned: boolean
+  is_read: boolean
+  created_at: string | null
+  published_at: string | null
+  expires_at: string | null
+}
+
+export interface MessageListResponse {
+  success: boolean
+  items: MessageCenterItem[]
+  unread_count: number
+  fetched_at: string | null
+}
+
+export interface MessageReadResponse {
+  success: boolean
+  unread_count: number
+  updated_at: string | null
+}
+
+export interface MessageStreamSnapshotEvent {
+  type: 'snapshot'
+  payload: MessageListResponse
+}
+
+type MessageStreamEvent = MessageStreamSnapshotEvent
+
+export async function getMessages(limit = 20): Promise<ApiResult<MessageListResponse>> {
+  return requestWithRefresh<MessageListResponse>('GET', `/messages?limit=${limit}`)
+}
+
+export async function markMessageRead(messageId: string): Promise<ApiResult<MessageReadResponse>> {
+  return requestWithRefresh<MessageReadResponse>(
+    'POST',
+    `/messages/${encodeURIComponent(messageId)}/read`,
+  )
+}
+
+export async function markAllMessagesRead(): Promise<ApiResult<MessageReadResponse>> {
+  return requestWithRefresh<MessageReadResponse>('POST', '/messages/read-all')
+}
+
+function parseSseBlock(block: string): MessageStreamEvent | null {
+  const lines = block.split('\n')
+  let eventName = 'message'
+  const dataLines: string[] = []
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd()
+    if (!line || line.startsWith(':')) continue
+    if (line.startsWith('event:')) {
+      eventName = line.slice(6).trim()
+      continue
+    }
+    if (line.startsWith('data:')) {
+      dataLines.push(line.slice(5).trimStart())
+    }
+  }
+
+  if (eventName !== 'snapshot' || dataLines.length === 0) {
+    return null
+  }
+
+  try {
+    const payload = JSON.parse(dataLines.join('\n')) as MessageListResponse
+    return { type: 'snapshot', payload }
+  } catch {
+    return null
+  }
+}
+
+export async function connectMessageStream(
+  onEvent: (event: MessageStreamEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const token = await getTokenFromMainProcess()
+  if (!token) {
+    throw new Error('missing_access_token')
+  }
+
+  const url = `${API_BASE_URL.replace(/\/$/, '')}/messages/stream`
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'text/event-stream',
+      'Cache-Control': 'no-cache',
+    },
+    signal,
+  })
+
+  if (!response.ok) {
+    throw new Error(`message_stream_http_${response.status}`)
+  }
+
+  if (!response.body) {
+    throw new Error('message_stream_no_body')
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) {
+        break
+      }
+
+      buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n')
+      let separatorIndex = buffer.indexOf('\n\n')
+      while (separatorIndex >= 0) {
+        const block = buffer.slice(0, separatorIndex)
+        buffer = buffer.slice(separatorIndex + 2)
+        const event = parseSseBlock(block)
+        if (event) {
+          onEvent(event)
+        }
+        separatorIndex = buffer.indexOf('\n\n')
+      }
+    }
+
+    buffer += decoder.decode().replace(/\r\n/g, '\n')
+    const event = parseSseBlock(buffer)
+    if (event) {
+      onEvent(event)
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
+
 // ===================== 用户反馈 =====================
 
 export interface SubmitFeedbackRequest {
