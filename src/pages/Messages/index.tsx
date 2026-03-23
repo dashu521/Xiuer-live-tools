@@ -6,8 +6,8 @@ import { Title } from '@/components/common/Title'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { cn } from '@/lib/utils'
 import { useMessageCenterStore } from '@/hooks/useMessageCenter'
+import { cn } from '@/lib/utils'
 
 function formatDateTime(value: string | null) {
   if (!value) return '未设置'
@@ -44,7 +44,8 @@ export default function MessagesPage() {
       return
     }
 
-    const fallbackId = selectedId && items.some(item => item.id === selectedId) ? selectedId : items[0]?.id
+    const fallbackId =
+      selectedId && items.some(item => item.id === selectedId) ? selectedId : items[0]?.id
     if (!fallbackId) {
       return
     }
@@ -159,9 +160,7 @@ export default function MessagesPage() {
 
             <Card className="min-h-[26rem] overflow-hidden">
               <CardHeader className="border-b border-border/60">
-                <CardTitle className="text-base">
-                  {selectedMessage?.title ?? '消息详情'}
-                </CardTitle>
+                <CardTitle className="text-base">{selectedMessage?.title ?? '消息详情'}</CardTitle>
                 <CardDescription>
                   {selectedMessage
                     ? `发布时间：${formatDateTime(selectedMessage.published_at ?? selectedMessage.created_at)}`

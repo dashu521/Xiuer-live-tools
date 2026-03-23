@@ -585,7 +585,10 @@ export async function getMessages(limit = 20): Promise<ApiResult<MessageListResp
 }
 
 export async function markMessageRead(messageId: string): Promise<ApiResult<MessageReadResponse>> {
-  return requestWithRefresh<MessageReadResponse>('POST', `/messages/${encodeURIComponent(messageId)}/read`)
+  return requestWithRefresh<MessageReadResponse>(
+    'POST',
+    `/messages/${encodeURIComponent(messageId)}/read`,
+  )
 }
 
 export async function markAllMessagesRead(): Promise<ApiResult<MessageReadResponse>> {

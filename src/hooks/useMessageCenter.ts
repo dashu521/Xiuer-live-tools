@@ -3,10 +3,10 @@ import { create } from 'zustand'
 import {
   connectMessageStream,
   getMessages,
+  type MessageCenterItem,
+  type MessageListResponse,
   markAllMessagesRead,
   markMessageRead,
-  type MessageListResponse,
-  type MessageCenterItem,
 } from '@/services/apiClient'
 import { useAuthCheckDone, useAuthStore } from '@/stores/authStore'
 import { useToast } from './useToast'
@@ -177,28 +177,25 @@ export function useMessageCenterPolling() {
       while (!disposed) {
         abortController = new AbortController()
         try {
-          await connectMessageStream(
-            event => {
-              if (disposed || event.type !== 'snapshot') {
-                return
-              }
+          await connectMessageStream(event => {
+            if (disposed || event.type !== 'snapshot') {
+              return
+            }
 
-              setStreamConnected(true)
-              const result = applySnapshot(event.payload)
-              if (toastReadyRef.current && result.increased > 0) {
-                toast.info({
-                  title: '收到新消息',
-                  description:
-                    result.increased > 1
-                      ? `有 ${result.increased} 条新消息，请在消息中心查看。`
-                      : result.latestTitle || '有 1 条新消息，请在消息中心查看。',
-                  dedupeKey: `message-center:new:${result.latestTitle ?? 'batch'}`,
-                })
-              }
-              toastReadyRef.current = true
-            },
-            abortController.signal,
-          )
+            setStreamConnected(true)
+            const result = applySnapshot(event.payload)
+            if (toastReadyRef.current && result.increased > 0) {
+              toast.info({
+                title: '收到新消息',
+                description:
+                  result.increased > 1
+                    ? `有 ${result.increased} 条新消息，请在消息中心查看。`
+                    : result.latestTitle || '有 1 条新消息，请在消息中心查看。',
+                dedupeKey: `message-center:new:${result.latestTitle ?? 'batch'}`,
+              })
+            }
+            toastReadyRef.current = true
+          }, abortController.signal)
         } catch (error) {
           if (disposed || abortController.signal.aborted) {
             break

@@ -11,12 +11,12 @@ import {
 } from 'lucide-react'
 import { memo, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { useAuthStore } from '@/stores/authStore'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { cn } from '@/lib/utils'
 import { useMessageCenterPolling, useMessageCenterStore } from '@/hooks/useMessageCenter'
+import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/stores/authStore'
 
 function formatMessageTime(value: string | null): string {
   if (!value) return '刚刚'
