@@ -146,14 +146,14 @@ class AliyunDypnsSMSService(SMSService):
             client = Client(config)
             # 使用 ##code## 由阿里云生成验证码，min 为有效期分钟数
             template_param = json.dumps({"code": "##code##", "min": "5"})
-            # 【修复】只传必要字段，与控制台保持一致
+            # 【修复】显式设置 code_length=6，确保阿里云生成6位验证码（默认是4位）
             req = dypns_models.SendSmsVerifyCodeRequest(
                 phone_number=phone,
                 sign_name=self.sign_name,
                 template_code=self.template_code,
                 template_param=template_param,
-                # 移除可选参数：code_length, valid_time, interval
-                # 让阿里云使用默认值
+                code_length=6,
+                code_type=1,
             )
             # 使用空的 RuntimeOptions 对象而不是 None
             from alibabacloud_tea_util import models as util_models
