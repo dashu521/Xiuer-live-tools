@@ -23,10 +23,10 @@ class AdminUserListItem(BaseModel):
     is_online: bool = False
     last_active_at: Optional[str] = None
     trial_end: Optional[int] = None
-    plan: str = "trial"
+    plan: str = "free"
     # 【新增】会员状态统一字段
-    membership_status: str = "trial"  # trial | pro | pro_max | ultra | expired
-    membership_label: str = "试用中"  # 免费版 | 试用中 | Pro | ProMax | Ultra | 已过期
+    membership_status: str = "free"  # free | trial | pro | pro_max | ultra | expired
+    membership_label: str = "免费版"  # 免费版 | 试用中 | Pro | ProMax | Ultra | 已过期
     membership_expire_at: Optional[str] = None  # 到期时间 ISO 格式
     membership_type: str = "none"  # none | trial | subscription 标识来源
 
@@ -71,3 +71,43 @@ class PaginatedAuditLogs(BaseModel):
     total: int
     page: int
     size: int
+
+
+class AdminAnnouncementItem(BaseModel):
+    id: str
+    title: str
+    content: str
+    type: str = "notice"
+    status: str = "draft"
+    target_scope: str = "all"
+    target_value: Optional[str] = None
+    is_pinned: bool = False
+    created_by: Optional[str] = None
+    published_at: Optional[str] = None
+    expires_at: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class PaginatedAdminAnnouncements(BaseModel):
+    items: List[AdminAnnouncementItem]
+    total: int
+    page: int
+    size: int
+
+
+class AdminAnnouncementUpsertBody(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    content: str = Field(..., min_length=1, max_length=4000)
+    type: str = Field(default="notice", pattern="^(notice|update|warning|marketing)$")
+    status: str = Field(default="draft", pattern="^(draft|published)$")
+    target_scope: str = Field(default="all", pattern="^(all|plan|user)$")
+    target_value: Optional[str] = Field(default=None, max_length=255)
+    is_pinned: bool = False
+    expires_at: Optional[str] = None
+
+
+class AdminAnnouncementActionResponse(BaseModel):
+    ok: bool = True
+    message: str = ""
+    item: Optional[AdminAnnouncementItem] = None

@@ -1,0 +1,523 @@
+"""消息中心：客户端读取消息，管理员发布/编辑消息"""
+import asyncio
+import json
+import uuid
+from datetime import datetime
+from typing import Iterable, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import StreamingResponse
+from sqlalchemy import and_, or_
+from sqlalchemy.orm import Session
+
+from database import SessionLocal, get_db
+from deps import auth_audit_log, get_current_admin, get_current_user
+from models import Announcement, AnnouncementReceipt, User
+from schemas import MessageItem, MessageListResponse, MessageMarkReadResponse
+from schemas_admin import (
+    AdminAnnouncementActionResponse,
+    AdminAnnouncementItem,
+    AdminAnnouncementUpsertBody,
+    PaginatedAdminAnnouncements,
+)
+
+router = APIRouter(prefix="/messages", tags=["messages"])
+admin_router = APIRouter(prefix="/admin/messages", tags=["admin-messages"])
+
+
+class AnnouncementStreamHub:
+    """进程内消息变更通知中心，用于 SSE 实时推送。"""
+
+    def __init__(self) -> None:
+        self._version = 0
+        self._event = asyncio.Event()
+
+    @property
+    def version(self) -> int:
+        return self._version
+
+    def notify(self) -> None:
+        self._version += 1
+        self._event.set()
+
+    async def wait_for_change(self, last_version: int, timeout: float = 15.0) -> int:
+        if self._version != last_version:
+            return self._version
+
+        try:
+            await asyncio.wait_for(self._event.wait(), timeout=timeout)
+        except TimeoutError:
+            return last_version
+
+        self._event.clear()
+        return self._version
+
+
+stream_hub = AnnouncementStreamHub()
+
+
+def _now() -> datetime:
+    return datetime.utcnow()
+
+
+def _req_id(request: Request) -> str:
+    return getattr(request.state, "request_id", None) or str(uuid.uuid4())
+
+
+def _parse_optional_datetime(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+
+    normalized = value.strip()
+    if not normalized:
+        return None
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"code": "invalid_datetime", "message": "时间格式不正确"},
+        ) from exc
+
+    if parsed.tzinfo is not None:
+        return parsed.astimezone().replace(tzinfo=None)
+    return parsed
+
+
+def _user_identifiers(user: User) -> set[str]:
+    values = {
+        str(user.id or "").strip(),
+        str(user.username or "").strip(),
+        str(user.email or "").strip(),
+        str(user.phone or "").strip(),
+    }
+    return {value for value in values if value}
+
+
+def _base_active_query(db: Session):
+    now = _now()
+    return db.query(Announcement).filter(
+        Announcement.status == "published",
+        or_(Announcement.published_at.is_(None), Announcement.published_at <= now),
+        or_(Announcement.expires_at.is_(None), Announcement.expires_at > now),
+    )
+
+
+def _apply_target_filter(query, user: User):
+    identifiers = list(_user_identifiers(user))
+    plan = (user.plan or "free").strip()
+    conditions = [Announcement.target_scope == "all"]
+    if identifiers:
+        conditions.append(
+            and_(
+                Announcement.target_scope == "user",
+                Announcement.target_value.in_(identifiers),
+            )
+        )
+    if plan:
+        conditions.append(
+            and_(
+                Announcement.target_scope == "plan",
+                Announcement.target_value == plan,
+            )
+        )
+    return query.filter(or_(*conditions))
+
+
+def _to_admin_item(item: Announcement) -> AdminAnnouncementItem:
+    return AdminAnnouncementItem(
+        id=item.id,
+        title=item.title,
+        content=item.content,
+        type=item.type,
+        status=item.status,
+        target_scope=item.target_scope,
+        target_value=item.target_value,
+        is_pinned=bool(item.is_pinned),
+        created_by=item.created_by,
+        published_at=item.published_at.isoformat() if item.published_at else None,
+        expires_at=item.expires_at.isoformat() if item.expires_at else None,
+        created_at=item.created_at.isoformat() if item.created_at else None,
+        updated_at=item.updated_at.isoformat() if item.updated_at else None,
+    )
+
+
+def _to_client_item(item: Announcement, is_read: bool) -> MessageItem:
+    return MessageItem(
+        id=item.id,
+        title=item.title,
+        content=item.content,
+        type=item.type,
+        is_pinned=bool(item.is_pinned),
+        is_read=is_read,
+        created_at=item.created_at.isoformat() if item.created_at else None,
+        published_at=item.published_at.isoformat() if item.published_at else None,
+        expires_at=item.expires_at.isoformat() if item.expires_at else None,
+    )
+
+
+def _announcement_or_404(db: Session, announcement_id: str) -> Announcement:
+    item = db.query(Announcement).filter(Announcement.id == announcement_id).first()
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "announcement_not_found", "message": "消息不存在"},
+        )
+    return item
+
+
+def _upsert_receipts(
+    db: Session,
+    user_id: str,
+    items: Iterable[Announcement],
+) -> None:
+    now = _now()
+    ids = [item.id for item in items]
+    if not ids:
+        return
+
+    existing = {
+        receipt.announcement_id: receipt
+        for receipt in db.query(AnnouncementReceipt).filter(
+            AnnouncementReceipt.user_id == user_id,
+            AnnouncementReceipt.announcement_id.in_(ids),
+        )
+    }
+
+    changed = False
+    for announcement_id in ids:
+        receipt = existing.get(announcement_id)
+        if receipt:
+            if receipt.read_at is None:
+                receipt.read_at = now
+                receipt.updated_at = now
+                changed = True
+            continue
+
+        db.add(
+            AnnouncementReceipt(
+                id=str(uuid.uuid4()),
+                announcement_id=announcement_id,
+                user_id=user_id,
+                read_at=now,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        changed = True
+
+    if changed:
+        db.commit()
+
+
+def _compute_unread_count(db: Session, user: User) -> int:
+    base_query = _apply_target_filter(_base_active_query(db), user)
+    unread_query = (
+        base_query.outerjoin(
+            AnnouncementReceipt,
+            and_(
+                AnnouncementReceipt.announcement_id == Announcement.id,
+                AnnouncementReceipt.user_id == user.id,
+            ),
+        )
+        .filter(AnnouncementReceipt.read_at.is_(None))
+    )
+    return unread_query.count()
+
+
+def _build_message_payload(db: Session, user: User, limit: int = 20) -> MessageListResponse:
+    safe_limit = max(1, min(limit, 50))
+    query = _apply_target_filter(_base_active_query(db), user).order_by(
+        Announcement.is_pinned.desc(),
+        Announcement.published_at.desc(),
+        Announcement.created_at.desc(),
+    )
+    items = query.limit(safe_limit).all()
+    ids = [item.id for item in items]
+    read_map = {}
+    if ids:
+        read_map = {
+            receipt.announcement_id: receipt.read_at is not None
+            for receipt in db.query(AnnouncementReceipt).filter(
+                AnnouncementReceipt.user_id == user.id,
+                AnnouncementReceipt.announcement_id.in_(ids),
+            )
+        }
+
+    return MessageListResponse(
+        success=True,
+        items=[_to_client_item(item, read_map.get(item.id, False)) for item in items],
+        unread_count=_compute_unread_count(db, user),
+        fetched_at=_now().isoformat(),
+    )
+
+
+def _emit_sse(event_name: str, payload: dict) -> str:
+    return f"event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+@router.get("", response_model=MessageListResponse)
+def list_messages(
+    limit: int = 20,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return _build_message_payload(db, current_user, limit)
+
+
+@router.get("/stream")
+async def stream_messages(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+):
+    async def event_stream():
+        last_version = -1
+        while True:
+            if await request.is_disconnected():
+                break
+
+            if last_version < 0:
+                with SessionLocal() as db:
+                    payload = _build_message_payload(db, current_user, 20).model_dump(mode="json")
+                yield _emit_sse("snapshot", payload)
+                last_version = stream_hub.version
+                continue
+
+            next_version = await stream_hub.wait_for_change(last_version, timeout=15.0)
+            if next_version == last_version:
+                yield ": heartbeat\n\n"
+                continue
+
+            last_version = next_version
+            with SessionLocal() as db:
+                payload = _build_message_payload(db, current_user, 20).model_dump(mode="json")
+            yield _emit_sse("snapshot", payload)
+
+    headers = {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+    }
+    return StreamingResponse(event_stream(), media_type="text/event-stream", headers=headers)
+
+
+@router.post("/{announcement_id}/read", response_model=MessageMarkReadResponse)
+def mark_message_read(
+    announcement_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    item = _announcement_or_404(db, announcement_id)
+    _upsert_receipts(db, current_user.id, [item])
+    stream_hub.notify()
+    return MessageMarkReadResponse(
+        success=True,
+        unread_count=_compute_unread_count(db, current_user),
+        updated_at=_now().isoformat(),
+    )
+
+
+@router.post("/read-all", response_model=MessageMarkReadResponse)
+def mark_all_messages_read(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    items = _apply_target_filter(_base_active_query(db), current_user).all()
+    _upsert_receipts(db, current_user.id, items)
+    stream_hub.notify()
+    return MessageMarkReadResponse(
+        success=True,
+        unread_count=0,
+        updated_at=_now().isoformat(),
+    )
+
+
+@admin_router.get("", response_model=PaginatedAdminAnnouncements)
+def admin_list_messages(
+    request: Request,
+    page: int = 1,
+    size: int = 20,
+    status_filter: Optional[str] = None,
+    admin: str = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    req_id = _req_id(request)
+    safe_page = max(page, 1)
+    safe_size = max(1, min(size, 100))
+    query = db.query(Announcement)
+    if status_filter:
+        query = query.filter(Announcement.status == status_filter)
+    total = query.count()
+    items = (
+        query.order_by(
+            Announcement.is_pinned.desc(),
+            Announcement.updated_at.desc(),
+            Announcement.created_at.desc(),
+        )
+        .offset((safe_page - 1) * safe_size)
+        .limit(safe_size)
+        .all()
+    )
+    auth_audit_log(
+        req_id,
+        str(request.url),
+        "list_announcements",
+        admin,
+        "success",
+        {"count": len(items), "page": safe_page},
+    )
+    return PaginatedAdminAnnouncements(
+        items=[_to_admin_item(item) for item in items],
+        total=total,
+        page=safe_page,
+        size=safe_size,
+    )
+
+
+@admin_router.post("", response_model=AdminAnnouncementActionResponse)
+def admin_create_message(
+    body: AdminAnnouncementUpsertBody,
+    request: Request,
+    admin: str = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    req_id = _req_id(request)
+    expires_at = _parse_optional_datetime(body.expires_at)
+    published_at = _now() if body.status == "published" else None
+    item = Announcement(
+        id=str(uuid.uuid4()),
+        title=body.title.strip(),
+        content=body.content.strip(),
+        type=body.type,
+        status=body.status,
+        target_scope=body.target_scope,
+        target_value=body.target_value.strip() if body.target_value else None,
+        is_pinned=body.is_pinned,
+        created_by=admin,
+        published_at=published_at,
+        expires_at=expires_at,
+        created_at=_now(),
+        updated_at=_now(),
+    )
+    db.add(item)
+    db.commit()
+    db.refresh(item)
+    stream_hub.notify()
+    auth_audit_log(
+        req_id,
+        str(request.url),
+        "create_announcement",
+        admin,
+        "success",
+        {"announcement_id": item.id, "status": item.status},
+    )
+    return AdminAnnouncementActionResponse(
+        ok=True,
+        message="消息创建成功",
+        item=_to_admin_item(item),
+    )
+
+
+@admin_router.put("/{announcement_id}", response_model=AdminAnnouncementActionResponse)
+def admin_update_message(
+    announcement_id: str,
+    body: AdminAnnouncementUpsertBody,
+    request: Request,
+    admin: str = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    req_id = _req_id(request)
+    item = _announcement_or_404(db, announcement_id)
+    next_status = body.status
+    expires_at = _parse_optional_datetime(body.expires_at)
+    item.title = body.title.strip()
+    item.content = body.content.strip()
+    item.type = body.type
+    item.target_scope = body.target_scope
+    item.target_value = body.target_value.strip() if body.target_value else None
+    item.is_pinned = body.is_pinned
+    item.expires_at = expires_at
+    if next_status == "published":
+        item.status = "published"
+        item.published_at = item.published_at or _now()
+    else:
+        item.status = "draft"
+        item.published_at = None
+    item.updated_at = _now()
+    db.commit()
+    db.refresh(item)
+    stream_hub.notify()
+    auth_audit_log(
+        req_id,
+        str(request.url),
+        "update_announcement",
+        admin,
+        "success",
+        {"announcement_id": item.id, "status": item.status},
+    )
+    return AdminAnnouncementActionResponse(
+        ok=True,
+        message="消息更新成功",
+        item=_to_admin_item(item),
+    )
+
+
+@admin_router.post("/{announcement_id}/publish", response_model=AdminAnnouncementActionResponse)
+def admin_publish_message(
+    announcement_id: str,
+    request: Request,
+    admin: str = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    req_id = _req_id(request)
+    item = _announcement_or_404(db, announcement_id)
+    item.status = "published"
+    item.published_at = _now()
+    item.updated_at = _now()
+    db.commit()
+    db.refresh(item)
+    stream_hub.notify()
+    auth_audit_log(
+        req_id,
+        str(request.url),
+        "publish_announcement",
+        admin,
+        "success",
+        {"announcement_id": item.id},
+    )
+    return AdminAnnouncementActionResponse(
+        ok=True,
+        message="消息已发布",
+        item=_to_admin_item(item),
+    )
+
+
+@admin_router.post("/{announcement_id}/revoke", response_model=AdminAnnouncementActionResponse)
+def admin_revoke_message(
+    announcement_id: str,
+    request: Request,
+    admin: str = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    req_id = _req_id(request)
+    item = _announcement_or_404(db, announcement_id)
+    item.status = "revoked"
+    item.updated_at = _now()
+    db.commit()
+    db.refresh(item)
+    stream_hub.notify()
+    auth_audit_log(
+        req_id,
+        str(request.url),
+        "revoke_announcement",
+        admin,
+        "success",
+        {"announcement_id": item.id},
+    )
+    return AdminAnnouncementActionResponse(
+        ok=True,
+        message="消息已撤回",
+        item=_to_admin_item(item),
+    )

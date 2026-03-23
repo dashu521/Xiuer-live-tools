@@ -184,6 +184,7 @@
     <div class="tab active" data-tab="users">用户管理</div>
     <div class="tab" data-tab="giftcards">礼品卡</div>
     <div class="tab" data-tab="feedbacks">反馈管理</div>
+    <div class="tab" data-tab="messages">消息管理</div>
     <div class="tab" data-tab="logs">操作日志</div>
   </div>
 
@@ -353,6 +354,44 @@
       <div id="logsBody"></div>
       <div id="logsLoading" class="hidden" style="text-align:center;padding:20px;color:var(--gray-500);"><span class="spinner"></span> 加载中...</div>
       <div class="pagination" id="logsPagination"></div>
+    </div>
+  </div>
+
+  <!-- Messages Tab -->
+  <div id="tabMessages" class="hidden">
+    <div class="toolbar">
+      <select id="msgStatusFilter">
+        <option value="">全部状态</option>
+        <option value="draft">草稿</option>
+        <option value="published">已发布</option>
+        <option value="revoked">已撤回</option>
+      </select>
+      <button id="btnMessageFilter">筛选</button>
+      <button class="sm" id="btnMessageReset">重置</button>
+      <div class="spacer"></div>
+      <span class="stats" id="msgStatsText"></span>
+      <button class="primary" id="btnCreateMessage">新建消息</button>
+    </div>
+    <div class="card" id="msgCard">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>标题</th>
+              <th>类型</th>
+              <th>状态</th>
+              <th>范围</th>
+              <th>发布时间</th>
+              <th>过期时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="msgBody"></tbody>
+        </table>
+      </div>
+      <div id="msgLoading" class="hidden" style="text-align:center;padding:20px;color:var(--gray-500);"><span class="spinner"></span> 加载中...</div>
+      <div id="msgEmpty" class="hidden" style="text-align:center;padding:20px;color:var(--gray-500);">暂无消息</div>
+      <div class="pagination" id="msgPagination"></div>
     </div>
   </div>
 
@@ -579,6 +618,66 @@
   </div>
 </div>
 
+<!-- Modal: Message Editor -->
+<div id="modalMessage" class="modal">
+  <div class="modal-content" style="min-width:640px;">
+    <div class="modal-title" id="messageModalTitle">新建消息</div>
+    <div class="modal-field">
+      <label>标题</label>
+      <input type="text" id="messageTitle" maxlength="200" placeholder="例如：系统维护通知" />
+    </div>
+    <div class="modal-field">
+      <label>内容</label>
+      <textarea id="messageContent" rows="8" style="width:100%;padding:10px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;font-family:inherit;resize:vertical;" placeholder="输入要同步给客户端的内容"></textarea>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;">
+      <div class="modal-field">
+        <label>类型</label>
+        <select id="messageType">
+          <option value="notice">通知</option>
+          <option value="update">更新</option>
+          <option value="warning">警告</option>
+          <option value="marketing">营销</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label>保存状态</label>
+        <select id="messageStatus">
+          <option value="draft">保存为草稿</option>
+          <option value="published">直接发布</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label>投放范围</label>
+        <select id="messageTargetScope">
+          <option value="all">全体用户</option>
+          <option value="plan">指定套餐</option>
+          <option value="user">指定用户</option>
+        </select>
+      </div>
+      <div class="modal-field">
+        <label>范围值</label>
+        <input type="text" id="messageTargetValue" placeholder="套餐名或用户 ID/用户名" />
+      </div>
+      <div class="modal-field">
+        <label>过期时间</label>
+        <input type="datetime-local" id="messageExpiresAt" />
+      </div>
+      <div class="modal-field" style="display:flex;align-items:flex-end;padding-bottom:8px;">
+        <label style="display:flex;align-items:center;gap:8px;margin:0;color:var(--gray-700);">
+          <input type="checkbox" id="messagePinned" />
+          置顶显示
+        </label>
+      </div>
+    </div>
+    <p id="messageFormError" class="error" style="display:none;"></p>
+    <div class="modal-actions">
+      <button id="btnCloseMessageModal">取消</button>
+      <button class="primary" id="btnSaveMessage">保存</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const API = window.location.origin;
 let token = '';
@@ -588,6 +687,10 @@ let currentQuery = '';
 let logsPage = 1;
 let currentTab = 'users';
 let isRefreshing = false;
+let msgPage = 1;
+let msgPageSize = 20;
+let currentMsgStatusFilter = '';
+let editingMessageId = '';
 
 // 【新增】筛选条件
 let currentFilters = {
@@ -692,6 +795,8 @@ async function refreshCurrentTab() {
       await Promise.all([loadGiftCards(), loadGcStats()]);
     } else if (currentTab === 'feedbacks') {
       await loadFeedbacks();
+    } else if (currentTab === 'messages') {
+      await loadAdminMessages();
     } else {
       await loadUsers();
     }
@@ -708,10 +813,12 @@ function switchTab(name) {
   $('tabUsers').classList.toggle('hidden', name !== 'users');
   $('tabGiftcards').classList.toggle('hidden', name !== 'giftcards');
   $('tabFeedbacks').classList.toggle('hidden', name !== 'feedbacks');
+  $('tabMessages').classList.toggle('hidden', name !== 'messages');
   $('tabLogs').classList.toggle('hidden', name !== 'logs');
   if (name === 'logs') loadAuditLogs();
   if (name === 'giftcards') { loadGiftCards(); loadGcStats(); }
   if (name === 'feedbacks') { loadFeedbacks(); }
+  if (name === 'messages') { loadAdminMessages(); }
 }
 
 /* Login */
@@ -1559,6 +1666,249 @@ async function loadLiveAccounts(username) {
   }
 }
 
+/* ======================== Messages ======================== */
+function messageTypeLabel(type) {
+  return {
+    notice: '通知',
+    update: '更新',
+    warning: '警告',
+    marketing: '营销'
+  }[type] || type || '-';
+}
+
+function messageStatusLabel(status) {
+  return {
+    draft: '草稿',
+    published: '已发布',
+    revoked: '已撤回'
+  }[status] || status || '-';
+}
+
+function messageScopeLabel(scope, value) {
+  if (scope === 'plan') return '套餐：' + (value || '-');
+  if (scope === 'user') return '用户：' + (value || '-');
+  return '全体用户';
+}
+
+function fmtDateTime(value) {
+  return value ? value.slice(0, 16).replace('T', ' ') : '-';
+}
+
+function isoToLocalInput(value) {
+  if (!value) return '';
+  return value.slice(0, 16);
+}
+
+async function loadAdminMessages() {
+  const tbody = $('msgBody');
+  clearNode(tbody);
+  $('msgLoading').classList.remove('hidden');
+  $('msgEmpty').classList.add('hidden');
+  clearNode($('msgPagination'));
+
+  let url = API + '/admin/messages?page=' + msgPage + '&size=' + msgPageSize;
+  if (currentMsgStatusFilter) url += '&status_filter=' + encodeURIComponent(currentMsgStatusFilter);
+
+  try {
+    const r = await fetch(url, { headers: hdrs() });
+    $('msgLoading').classList.add('hidden');
+    if (r.status === 401) { doLogout(); toast('登录已过期', 'error'); return; }
+    const data = await r.json();
+    if (!data.items || data.items.length === 0) {
+      $('msgEmpty').classList.remove('hidden');
+      $('msgStatsText').textContent = '共 0 条消息';
+      return;
+    }
+
+    $('msgStatsText').textContent = '共 ' + data.total + ' 条消息';
+    data.items.forEach(function(item) {
+      const tr = document.createElement('tr');
+      const titleCell = document.createElement('td');
+      titleCell.innerHTML =
+        '<div style="font-weight:600;">' + esc(item.title) + (item.is_pinned ? ' <span style="font-size:11px;color:#c2410c;">[置顶]</span>' : '') + '</div>' +
+        '<div style="font-size:12px;color:var(--gray-500);margin-top:4px;max-width:320px;white-space:normal;line-height:1.5;">' + esc(item.content.length > 72 ? item.content.slice(0, 72) + '…' : item.content) + '</div>';
+      tr.appendChild(titleCell);
+      tr.appendChild(el('td', { text: messageTypeLabel(item.type) }));
+
+      const statusCell = document.createElement('td');
+      const statusBadge = el('span', {
+        className: 'badge ' + (item.status === 'published' ? 'active' : item.status === 'revoked' ? 'disabled' : 'trial-none'),
+        text: messageStatusLabel(item.status)
+      });
+      statusCell.appendChild(statusBadge);
+      tr.appendChild(statusCell);
+
+      tr.appendChild(el('td', { text: messageScopeLabel(item.target_scope, item.target_value) }));
+      tr.appendChild(el('td', { text: fmtDateTime(item.published_at) }));
+      tr.appendChild(el('td', { text: fmtDateTime(item.expires_at) }));
+
+      const actionCell = document.createElement('td');
+      actionCell.style.whiteSpace = 'nowrap';
+      actionCell.appendChild(createActionButton('编辑', 'sm', function() { openMessageModal(item); }));
+      if (item.status !== 'published') {
+        actionCell.appendChild(createActionButton('发布', 'sm', function() { publishMessage(item.id); }));
+      }
+      if (item.status === 'published') {
+        actionCell.appendChild(createActionButton('撤回', 'sm danger', function() { revokeMessage(item.id); }));
+      }
+      tr.appendChild(actionCell);
+      tbody.appendChild(tr);
+    });
+
+    const totalPages = Math.ceil(data.total / msgPageSize) || 1;
+    if (totalPages > 1) {
+      renderPager($('msgPagination'), msgPage, Math.min(totalPages, 10), goMessagePage);
+    }
+  } catch (e) {
+    $('msgLoading').classList.add('hidden');
+    $('msgEmpty').classList.remove('hidden');
+    $('msgEmpty').textContent = '加载消息失败';
+  }
+}
+
+function goMessagePage(page) {
+  msgPage = page;
+  loadAdminMessages();
+}
+
+function resetMessageForm() {
+  editingMessageId = '';
+  $('messageModalTitle').textContent = '新建消息';
+  $('messageTitle').value = '';
+  $('messageContent').value = '';
+  $('messageType').value = 'notice';
+  $('messageStatus').value = 'draft';
+  $('messageTargetScope').value = 'all';
+  $('messageTargetValue').value = '';
+  $('messageExpiresAt').value = '';
+  $('messagePinned').checked = false;
+  hideErr('messageFormError');
+}
+
+function syncTargetValuePlaceholder() {
+  const scope = $('messageTargetScope').value;
+  $('messageTargetValue').disabled = scope === 'all';
+  $('messageTargetValue').placeholder =
+    scope === 'plan' ? '例如：pro / pro_max / ultra' :
+    scope === 'user' ? '输入用户 ID、用户名、手机号或邮箱' :
+    '全体用户无需填写';
+  if (scope === 'all') $('messageTargetValue').value = '';
+}
+
+function openMessageModal(item) {
+  resetMessageForm();
+  if (item) {
+    editingMessageId = item.id;
+    $('messageModalTitle').textContent = '编辑消息';
+    $('messageTitle').value = item.title || '';
+    $('messageContent').value = item.content || '';
+    $('messageType').value = item.type || 'notice';
+    $('messageStatus').value = item.status === 'published' ? 'published' : 'draft';
+    $('messageTargetScope').value = item.target_scope || 'all';
+    $('messageTargetValue').value = item.target_value || '';
+    $('messageExpiresAt').value = isoToLocalInput(item.expires_at);
+    $('messagePinned').checked = !!item.is_pinned;
+  }
+  syncTargetValuePlaceholder();
+  openModal('modalMessage');
+  setTimeout(function() { $('messageTitle').focus(); }, 60);
+}
+
+function closeMessageModal() {
+  closeModal('modalMessage');
+  resetMessageForm();
+}
+
+async function saveMessage() {
+  const title = $('messageTitle').value.trim();
+  const content = $('messageContent').value.trim();
+  const targetScope = $('messageTargetScope').value;
+  const targetValue = $('messageTargetValue').value.trim();
+
+  if (!title) { showErr('messageFormError', '请输入标题'); return; }
+  if (!content) { showErr('messageFormError', '请输入内容'); return; }
+  if (targetScope !== 'all' && !targetValue) { showErr('messageFormError', '请填写范围值'); return; }
+  hideErr('messageFormError');
+
+  const payload = {
+    title: title,
+    content: content,
+    type: $('messageType').value,
+    status: $('messageStatus').value,
+    target_scope: targetScope,
+    target_value: targetScope === 'all' ? null : targetValue,
+    is_pinned: $('messagePinned').checked,
+    expires_at: $('messageExpiresAt').value || null
+  };
+
+  const url = editingMessageId ? API + '/admin/messages/' + encodeURIComponent(editingMessageId) : API + '/admin/messages';
+  const method = editingMessageId ? 'PUT' : 'POST';
+  try {
+    const r = await fetch(url, { method: method, headers: hdrs(), body: JSON.stringify(payload) });
+    const d = await r.json();
+    if (r.ok && d.ok) {
+      closeMessageModal();
+      toast(d.message || '保存成功');
+      loadAdminMessages();
+      return;
+    }
+    showErr('messageFormError', (d.detail && d.detail.message) || d.message || '保存失败');
+  } catch (e) {
+    showErr('messageFormError', '网络错误');
+  }
+}
+
+async function publishMessage(messageId) {
+  if (!confirm('确定要发布这条消息吗？')) return;
+  try {
+    const r = await fetch(API + '/admin/messages/' + encodeURIComponent(messageId) + '/publish', {
+      method: 'POST',
+      headers: hdrs()
+    });
+    const d = await r.json();
+    if (r.ok && d.ok) {
+      toast(d.message || '已发布');
+      loadAdminMessages();
+    } else {
+      toast((d.detail && d.detail.message) || d.message || '发布失败', 'error');
+    }
+  } catch (e) {
+    toast('网络错误', 'error');
+  }
+}
+
+async function revokeMessage(messageId) {
+  if (!confirm('确定要撤回这条消息吗？')) return;
+  try {
+    const r = await fetch(API + '/admin/messages/' + encodeURIComponent(messageId) + '/revoke', {
+      method: 'POST',
+      headers: hdrs()
+    });
+    const d = await r.json();
+    if (r.ok && d.ok) {
+      toast(d.message || '已撤回');
+      loadAdminMessages();
+    } else {
+      toast((d.detail && d.detail.message) || d.message || '撤回失败', 'error');
+    }
+  } catch (e) {
+    toast('网络错误', 'error');
+  }
+}
+
+function applyMessageFilter() {
+  currentMsgStatusFilter = $('msgStatusFilter').value;
+  msgPage = 1;
+  loadAdminMessages();
+}
+
+function resetMessageFilter() {
+  $('msgStatusFilter').value = '';
+  currentMsgStatusFilter = '';
+  msgPage = 1;
+  loadAdminMessages();
+}
+
 function bindStaticUiEvents() {
   $('btnRefreshUsers').addEventListener('click', refreshCurrentTab);
   $('btnOpenAuditLogs').addEventListener('click', openAuditLogs);
@@ -1591,6 +1941,10 @@ function bindStaticUiEvents() {
 
   $('btnFeedbackFilter').addEventListener('click', applyFbFilters);
   $('btnFeedbackReset').addEventListener('click', resetFbFilters);
+  $('btnMessageFilter').addEventListener('click', applyMessageFilter);
+  $('btnMessageReset').addEventListener('click', resetMessageFilter);
+  $('btnCreateMessage').addEventListener('click', function() { openMessageModal(null); });
+  $('messageTargetScope').addEventListener('change', syncTargetValuePlaceholder);
 
   $('btnCloseResetModal').addEventListener('click', function() { closeModal('modalReset'); });
   $('btnConfirmResetPassword').addEventListener('click', doResetPassword);
@@ -1609,6 +1963,8 @@ function bindStaticUiEvents() {
   $('btnCloseGcResultModal').addEventListener('click', function() { closeModal('modalGcResult'); });
   $('btnCloseFeedbackDetailModal').addEventListener('click', function() { closeModal('modalFeedbackDetail'); });
   $('btnCloseLiveAccountsModal').addEventListener('click', function() { closeModal('modalLiveAccounts'); });
+  $('btnCloseMessageModal').addEventListener('click', closeMessageModal);
+  $('btnSaveMessage').addEventListener('click', saveMessage);
 }
 
 /* CSV export with auth — need to handle token in header, so use fetch + blob */
