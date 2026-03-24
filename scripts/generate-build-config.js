@@ -3,41 +3,62 @@
  * 构建时配置生成脚本
  * 在打包前运行，将环境变量写入 build-config.json
  * 主进程在运行时读取此配置文件
+ *
+ * 硬规则：
+ * - VITE_AUTH_API_BASE_URL 必须精确为 https://auth.xiuer.work
+ * - AUTH_STORAGE_SECRET 必须存在且长度 >= 32
+ * - 禁止使用 localhost/127.0.0.1 作为 API 地址
  */
 
 const fs = require('fs')
 const path = require('path')
 
 const PRODUCTION_API = 'https://auth.xiuer.work'
+const REQUIRED_API_LENGTH = 'https://auth.xiuer.work'.length
+
+function validateApiUrl(url) {
+  if (!url) {
+    return { valid: false, reason: 'VITE_AUTH_API_BASE_URL 未设置' }
+  }
+  if (url !== PRODUCTION_API) {
+    return { valid: false, reason: `VITE_AUTH_API_BASE_URL 必须精确为 ${PRODUCTION_API}，当前值: ${url}` }
+  }
+  if (url.includes('localhost') || url.includes('127.0.0.1')) {
+    return { valid: false, reason: `VITE_AUTH_API_BASE_URL 不能为本地地址，当前值: ${url}` }
+  }
+  return { valid: true }
+}
+
+function validateSecret(secret) {
+  if (!secret) {
+    return { valid: false, reason: 'AUTH_STORAGE_SECRET 未设置' }
+  }
+  const trimmed = secret.trim()
+  if (trimmed.length < 32) {
+    return { valid: false, reason: `AUTH_STORAGE_SECRET 长度不足 32 字符，当前长度: ${trimmed.length}` }
+  }
+  return { valid: true, value: trimmed }
+}
 
 function main() {
   console.log('\n🔧 [generate-build-config] Generating build-time configuration...\n')
 
   const authApiBaseUrl = process.env.VITE_AUTH_API_BASE_URL || process.env.AUTH_API_BASE_URL
-  const authStorageSecret = process.env.AUTH_STORAGE_SECRET?.trim()
+  const authStorageSecret = process.env.AUTH_STORAGE_SECRET
 
-  if (!authApiBaseUrl) {
-    console.error('❌ [generate-build-config] ERROR: VITE_AUTH_API_BASE_URL or AUTH_API_BASE_URL must be set')
-    console.error(`   Expected: ${PRODUCTION_API}`)
-    console.error('   Example: export VITE_AUTH_API_BASE_URL=' + PRODUCTION_API)
+  const urlValidation = validateApiUrl(authApiBaseUrl)
+  if (!urlValidation.valid) {
+    console.error(`❌ [generate-build-config] ERROR: ${urlValidation.reason}`)
+    console.error(`   正确用法：export VITE_AUTH_API_BASE_URL=${PRODUCTION_API}`)
+    console.error(`   生产构建禁止使用 localhost/127.0.0.1 或其他地址`)
     process.exit(1)
   }
 
-  if (
-    authApiBaseUrl.includes('localhost') ||
-    authApiBaseUrl.includes('127.0.0.1') ||
-    !authApiBaseUrl.startsWith('https://')
-  ) {
-    console.error('❌ [generate-build-config] ERROR: API base URL must be a HTTPS production address')
-    console.error(`   Current: ${authApiBaseUrl}`)
-    console.error(`   Expected: ${PRODUCTION_API}`)
-    process.exit(1)
-  }
-
-  if (!authStorageSecret) {
-    console.error('❌ [generate-build-config] ERROR: AUTH_STORAGE_SECRET must be set')
-    console.error('   Reason: packaged builds must not fall back to the development storage key')
-    console.error('   Example: export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)')
+  const secretValidation = validateSecret(authStorageSecret)
+  if (!secretValidation.valid) {
+    console.error(`❌ [generate-build-config] ERROR: ${secretValidation.reason}`)
+    console.error('   正确用法：export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)')
+    console.error('   生产构建必须使用长度 >= 32 的高熵随机字符串')
     process.exit(1)
   }
 
@@ -60,7 +81,7 @@ function main() {
   console.log('✅ [generate-build-config] Configuration generated:')
   console.log(`   Path: ${configPath}`)
   console.log(`   API Base URL: ${authApiBaseUrl}`)
-  console.log(`   AUTH_STORAGE_SECRET: [set, length=${authStorageSecret.length}]`)
+  console.log(`   AUTH_STORAGE_SECRET: [set, length=${secretValidation.value.length}]`)
   console.log(`   Build Time: ${config.buildTime}\n`)
 }
 

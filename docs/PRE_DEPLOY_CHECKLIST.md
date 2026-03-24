@@ -1,9 +1,9 @@
 # 上线前验收清单（Pre-Deploy Checklist）
 
-> **版本**: v1.1  
-> **最后更新**: 2026-03-18  
-> **状态**: 已固化  
-> **负责人**: TEAM  
+> **版本**: v1.2
+> **最后更新**: 2026-03-24
+> **状态**: 已固化
+> **负责人**: TEAM
 > **适用范围**: auth-api 生产部署 + 前端构建发布  
 
 ---
@@ -68,20 +68,24 @@ CORS_ORIGINS=http://localhost:3000,*
 
 | 检查项 | 要求 | 检查命令/方法 | 状态 |
 |--------|------|---------------|------|
-| VITE_AUTH_API_BASE_URL 已设置 | 非空，必须是生产地址 | `echo $VITE_AUTH_API_BASE_URL` | [ ] |
-| API 地址为生产地址 | 值为 HTTPS 生产地址，禁止裸 IP 明文 HTTP | 人工确认 | [ ] |
-| 不包含 localhost | 值中无 localhost/127.0.0.1 | 人工确认 | [ ] |
+| VITE_AUTH_API_BASE_URL 已设置 | 必须非空 | `echo $VITE_AUTH_API_BASE_URL` | [ ] |
+| VITE_AUTH_API_BASE_URL 精确为 `https://auth.xiuer.work` | 精确值，不得为其他地址 | `echo $VITE_AUTH_API_BASE_URL` | [ ] |
+| 不包含 localhost/127.0.0.1 | 禁止本地地址 | 人工确认 | [ ] |
+| 不包含裸 IP 明文 HTTP | 禁止 `http://121.41.179.197:8000` 等 | 人工确认 | [ ] |
+| AUTH_STORAGE_SECRET 已设置 | 32+ 字符随机字符串 | `echo $AUTH_STORAGE_SECRET` | [ ] |
 | Release Guard 检查通过 | 无 BLOCKER 级别错误 | `npm run release:guard` | [ ] |
 
-**生产环境 API 地址（规范）**：
+**生产环境 API 地址（已固化）**：
 ```bash
 export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
+export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
 ```
 
-**风险**: 
-- 未设置生产 API 地址会导致应用连接到错误的 API 服务器
+**风险**:
+- 未设置生产 API 地址会导致 renderer fallback 到 `localhost:8000`，安装包无法连接生产服务器
 - localhost fallback 进入发布包会导致生产环境无法正常使用
 - Release Guard 会拦截未设置或使用本地地址的发布
+- **安装包打完后必须取证验证**，不得仅凭 Release Guard 通过就认为合格
 
 **正确示例**:
 ```bash
@@ -89,11 +93,25 @@ export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
 export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
 
 # ❌ 错误（禁止发布）
+export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>   # 占位符地址
 export VITE_AUTH_API_BASE_URL=http://localhost:8000
 export VITE_AUTH_API_BASE_URL=http://127.0.0.1:8000
 export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
 # 或未设置环境变量
 ```
+
+### 2.2 构建产物取证检查（安装包验收）
+
+> **重要**：构建完成后、发布前，必须执行以下取证检查。
+
+| 检查项 | 要求 | 检查命令/方法 | 通过标准 | 状态 |
+|--------|------|---------------|---------|------|
+| renderer 产物中 API 地址为生产地址 | `dist/assets/` 中不含 localhost | `grep -r "localhost:8000" dist/assets/` | 无匹配 | [ ] |
+| renderer 产物不含 fallback 残留 | `dist/assets/` 中不含 127.0.0.1 | `grep -r "127.0.0.1:8000" dist/assets/` | 无匹配 | [ ] |
+| build-config.json 地址正确 | 主进程读取的地址正确 | `cat dist-electron/build-config.json` | `authApiBaseUrl` 为 `https://auth.xiuer.work` | [ ] |
+| /health 运行时发往 auth.xiuer.work | 启动安装包验证 | DevTools Network 或抓包 | 请求发往 `https://auth.xiuer.work/health` | [ ] |
+
+> **全部通过后，方可进入发布后续步骤**。任一项不通过，必须重新构建。
 
 ---
 
@@ -204,3 +222,4 @@ echo "=== 所有检查通过，可以上线 ==="
 |------|------|------|------|
 | 2026-03-15 | v1.0 | 初始版本，固化 JWT_SECRET/ADMIN_PASSWORD/CORS_ORIGINS 检查项 | - |
 | 2026-03-18 | v1.1 | 添加前端构建发布核查章节，固化 VITE_AUTH_API_BASE_URL 生产地址检查项，明确禁止 localhost fallback 进入发布包 | - |
+| 2026-03-24 | v1.2 | 生产 API 地址固化为 `https://auth.xiuer.work`（精确值，禁止占位符）；新增构建产物取证检查章节（2.2），要求构建后验证 renderer 和 main 进程实际地址；新增 AUTH_STORAGE_SECRET 必填检查 | - |

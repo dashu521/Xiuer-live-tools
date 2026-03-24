@@ -1,7 +1,7 @@
 # 回归验证清单
 
-> **版本**: v1.0
-> **最后更新**: 2026-03-14
+> **版本**: v1.1
+> **最后更新**: 2026-03-24
 > **状态**: 已固化
 > **负责人**: TEAM
 > **当前适用性**: 当前有效
@@ -10,6 +10,7 @@
 ---
 
 > 每次修改代码后，必须验证所有相关项目。标记 `[R]` 表示必须验证，`[O]` 表示可选验证。
+> **重要**：打包后回归测试前，必须确认安装包 API 地址已取证验证为 `https://auth.xiuer.work`，详见 [PRE_DEPLOY_CHECKLIST.md](./PRE_DEPLOY_CHECKLIST.md#_2-2-构建产物取证检查安装包验收)。
 
 ---
 
@@ -146,15 +147,27 @@
 
 ## 六、快速验证脚本
 
+> **警告**：以下构建命令中的环境变量为长期硬规则，不得省略或使用其他地址。
+
 ```bash
 # 开发态快速验证
 npm run dev
 
-# 打包后快速验证（macOS）
-export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain> && export AUTH_STORAGE_SECRET=$(openssl rand -hex 32) && npm run dist:mac
+# 打包后快速验证（macOS）- 必须显式注入环境变量
+export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
+export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
+npm run dist:mac
 
-# 打包后快速验证（Windows）
-export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain> && export AUTH_STORAGE_SECRET=$(openssl rand -hex 32) && npm run dist:win
+# 打包后快速验证（Windows）- 必须显式注入环境变量
+export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
+export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
+npm run dist:win
+
+# 构建后必验：安装包 API 地址取证
+grep -r "localhost:8000" dist/assets/ && echo "❌ FAIL: localhost fallback found" || echo "✅ PASS: no localhost fallback"
+grep -r "127.0.0.1:8000" dist/assets/ && echo "❌ FAIL: 127.0.0.1 found" || echo "✅ PASS: no 127.0.0.1 fallback"
+cat dist-electron/build-config.json | grep authApiBaseUrl
+# authApiBaseUrl 必须为 https://auth.xiuer.work
 ```
 
 ---
@@ -165,6 +178,16 @@ export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain> && export AUTH_STOR
 日期：YYYY-MM-DD
 修改内容：[描述修改了什么]
 修改文件：[列出修改的文件]
+
+环境变量确认（构建前必填）：
+- VITE_AUTH_API_BASE_URL = https://auth.xiuer.work
+- AUTH_STORAGE_SECRET = [已设置，长度 N]
+
+安装包取证（打包后必填）：
+- [ ] dist/assets/ 无 localhost:8000
+- [ ] dist/assets/ 无 127.0.0.1:8000
+- [ ] dist-electron/build-config.json authApiBaseUrl = https://auth.xiuer.work
+- [ ] /health 运行时发往 https://auth.xiuer.work
 
 验证结果：
 - [ ] 开发态密码登录

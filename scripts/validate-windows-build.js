@@ -86,12 +86,15 @@ for (const envVar of requiredEnvVars) {
   }
 }
 
-if (
-  process.env.VITE_AUTH_API_BASE_URL?.includes('localhost') ||
-  process.env.VITE_AUTH_API_BASE_URL?.includes('127.0.0.1') ||
-  (process.env.VITE_AUTH_API_BASE_URL && !process.env.VITE_AUTH_API_BASE_URL.startsWith('https://'))
-) {
-  errors.push(`❌ VITE_AUTH_API_BASE_URL 必须为 HTTPS 生产地址: ${process.env.VITE_AUTH_API_BASE_URL}`);
+const PRODUCTION_API = 'https://auth.xiuer.work';
+const apiBaseUrl = process.env.VITE_AUTH_API_BASE_URL;
+if (apiBaseUrl && apiBaseUrl !== PRODUCTION_API) {
+  errors.push(`❌ VITE_AUTH_API_BASE_URL 值不正确: ${apiBaseUrl}，必须为 ${PRODUCTION_API}`);
+}
+
+const authSecret = process.env.AUTH_STORAGE_SECRET?.trim();
+if (authSecret && authSecret.length < 32) {
+  errors.push(`❌ AUTH_STORAGE_SECRET 长度不足: ${authSecret.length} < 32`);
 }
 
 // 5. 检查 package.json 脚本
