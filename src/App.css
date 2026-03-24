@@ -97,8 +97,29 @@
   }
 }
 
+@keyframes message-center-button-pop {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgb(37 99 235 / 0);
+  }
+
+  45% {
+    transform: scale(1.06);
+    box-shadow: 0 0 0 0.55rem rgb(37 99 235 / 0.12);
+  }
+
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgb(37 99 235 / 0);
+  }
+}
+
 .message-center-item--highlight {
   animation: message-center-item-highlight 1.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.message-center-button--animate {
+  animation: message-center-button-pop 720ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 @keyframes message-center-item-highlight {
@@ -129,6 +150,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .message-center-item--highlight,
+  .message-center-button--animate,
   .message-center-bell--animate,
   .message-center-badge--animate {
     animation: none;

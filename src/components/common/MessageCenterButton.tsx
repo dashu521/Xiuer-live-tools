@@ -60,6 +60,7 @@ export const MessageCenterButton = memo(function MessageCenterButton() {
   const [isAttentionAnimating, setIsAttentionAnimating] = useState(false)
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
   const previousUnreadRef = useRef<number | null>(null)
+  const previousLatestUnreadIdRef = useRef<string | null>(null)
   const animationTimerRef = useRef<number | null>(null)
   const highlightTimerRef = useRef<number | null>(null)
 
@@ -68,14 +69,21 @@ export const MessageCenterButton = memo(function MessageCenterButton() {
     return unreadCount > 99 ? '99+' : String(unreadCount)
   }, [unreadCount])
 
+  const latestUnreadId = useMemo(() => items.find(item => !item.is_read)?.id ?? null, [items])
+
   useEffect(() => {
     const previousUnread = previousUnreadRef.current
-    const hasIncreased =
-      initialized && previousUnread !== null && unreadCount > previousUnread && isAuthenticated
+    const previousLatestUnreadId = previousLatestUnreadIdRef.current
+    const unreadIncreased = previousUnread !== null && unreadCount > previousUnread
+    const latestUnreadChanged =
+      previousLatestUnreadId !== null &&
+      latestUnreadId !== null &&
+      latestUnreadId !== previousLatestUnreadId
 
     previousUnreadRef.current = unreadCount
+    previousLatestUnreadIdRef.current = latestUnreadId
 
-    if (!hasIncreased) {
+    if (!initialized || !isAuthenticated || (!unreadIncreased && !latestUnreadChanged)) {
       return
     }
 
@@ -91,7 +99,7 @@ export const MessageCenterButton = memo(function MessageCenterButton() {
         animationTimerRef.current = null
       }, 900)
     })
-  }, [initialized, isAuthenticated, unreadCount])
+  }, [initialized, isAuthenticated, latestUnreadId, unreadCount])
 
   useEffect(() => {
     return () => {

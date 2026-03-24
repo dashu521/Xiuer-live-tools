@@ -126,7 +126,7 @@ const Sidebar = memo(function Sidebar() {
     () =>
       mainTabs.filter(tab => {
         if (tab.platform) {
-          return platform != null && tab.platform.includes(platform)
+          return !platform || tab.platform.includes(platform)
         }
         return true
       }),
