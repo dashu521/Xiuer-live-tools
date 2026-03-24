@@ -155,9 +155,7 @@ export const MessageCenterButton = memo(function MessageCenterButton() {
           aria-label="打开消息中心"
           title="消息中心"
         >
-          <Bell
-            className={cn('h-4 w-4', isAttentionAnimating && 'message-center-bell--animate')}
-          />
+          <Bell className={cn('h-4 w-4', isAttentionAnimating && 'message-center-bell--animate')} />
           {displayCount && (
             <span
               className={cn(
