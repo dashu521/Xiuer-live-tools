@@ -23,6 +23,8 @@ const colors = {
   bold: '\x1b[1m'
 };
 
+const VALID_REPO_SLUGS = ['Xiuer-Chinese/Xiuer-live-tools', 'dashu521/Xiuer-live-tools'];
+
 function logPass(message) {
   console.log(`${colors.green}✅ PASS${colors.reset} ${message}`);
 }
@@ -46,6 +48,12 @@ function exec(command, options = {}) {
     if (options.ignoreError) return '';
     throw error;
   }
+}
+
+function getRepoWebUrl() {
+  const originUrl = exec('git remote get-url origin', { ignoreError: true });
+  const matchedSlug = VALID_REPO_SLUGS.find(slug => originUrl.includes(slug)) || VALID_REPO_SLUGS[0];
+  return `https://github.com/${matchedSlug}`;
 }
 
 // 读取 package.json 版本
@@ -237,7 +245,7 @@ async function main() {
     console.log(`  自动更新: ${autoUpdateReady ? '✅ 可用' : '⚠️  不完整'}\n`);
 
     console.log(`${colors.cyan}${colors.bold}🔗 Release URL${colors.reset}`);
-    console.log(`  https://github.com/Xiuer-Chinese/Xiuer-live-tools/releases/tag/${tagName}\n`);
+    console.log(`  ${getRepoWebUrl()}/releases/tag/${tagName}\n`);
 
     console.log(`${colors.green}✅ 所有检查通过，发布完成！${colors.reset}\n`);
   } else if (windowsComplete && !macComplete) {
@@ -262,7 +270,7 @@ async function main() {
 
     console.log(`${colors.yellow}建议操作:${colors.reset}`);
     console.log('  1. 等待 Windows CI 构建完成');
-    console.log('  2. 检查 Actions: https://github.com/Xiuer-Chinese/Xiuer-live-tools/actions');
+    console.log(`  2. 检查 Actions: ${getRepoWebUrl()}/actions`);
     console.log('  3. 重新检查: npm run publish:check\n');
   } else {
     console.log(`${colors.red}${colors.bold}❌ 发布不完整${colors.reset}\n`);
