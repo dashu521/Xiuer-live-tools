@@ -292,15 +292,16 @@ function checkConfig() {
 function checkEnv() {
   console.log(`\n${colors.blue}${colors.bold}🔍 环境变量检查${colors.reset}\n`);
 
+  const PRODUCTION_API = 'https://auth.xiuer.work';
   const apiBaseUrl = process.env.VITE_AUTH_API_BASE_URL;
   const authStorageSecret = process.env.AUTH_STORAGE_SECRET?.trim();
 
   if (!apiBaseUrl) {
-    log('VITE_AUTH_API_BASE_URL 未设置', 'BLOCKER', '发布时必须设置生产环境 API 地址');
+    log('VITE_AUTH_API_BASE_URL 未设置', 'BLOCKER', '发布时必须设置为 https://auth.xiuer.work');
     addBlocker('环境变量', 'VITE_AUTH_API_BASE_URL 未设置');
-  } else if (apiBaseUrl.includes('localhost') || apiBaseUrl.includes('127.0.0.1')) {
-    log('VITE_AUTH_API_BASE_URL 包含本地地址', 'BLOCKER', `当前值: ${apiBaseUrl}`);
-    addBlocker('环境变量', 'API 地址为本地地址', apiBaseUrl);
+  } else if (apiBaseUrl !== PRODUCTION_API) {
+    log(`VITE_AUTH_API_BASE_URL 值不正确: ${apiBaseUrl}`, 'BLOCKER', `必须精确为 ${PRODUCTION_API}`);
+    addBlocker('环境变量', `VITE_AUTH_API_BASE_URL 值不正确，当前值: ${apiBaseUrl}，必须为 ${PRODUCTION_API}`);
   } else {
     log(`VITE_AUTH_API_BASE_URL: ${apiBaseUrl}`, 'PASS');
     addInfo('环境变量', `API 地址: ${apiBaseUrl}`);
@@ -313,18 +314,16 @@ function checkEnv() {
       '发布时必须设置主进程安全存储密钥，禁止回退到开发态默认密钥',
     );
     addBlocker('环境变量', 'AUTH_STORAGE_SECRET 未设置');
+  } else if (authStorageSecret.length < 32) {
+    log(
+      `AUTH_STORAGE_SECRET 长度不足: ${authStorageSecret.length} < 32`,
+      'BLOCKER',
+      '生产构建必须使用长度 >= 32 的高熵随机字符串',
+    );
+    addBlocker('环境变量', `AUTH_STORAGE_SECRET 长度不足 ${authStorageSecret.length} < 32`);
   } else {
     log(`AUTH_STORAGE_SECRET 已设置（长度: ${authStorageSecret.length}）`, 'PASS');
-    if (authStorageSecret.length < 32) {
-      addWarning('环境变量', 'AUTH_STORAGE_SECRET 长度较短', '建议使用至少 32 个字符的高熵随机字符串');
-      log(
-        'AUTH_STORAGE_SECRET 长度较短',
-        'WARNING',
-        '建议使用至少 32 个字符的高熵随机字符串',
-      );
-    } else {
-      addInfo('环境变量', `AUTH_STORAGE_SECRET 长度: ${authStorageSecret.length}`);
-    }
+    addInfo('环境变量', `AUTH_STORAGE_SECRET 长度: ${authStorageSecret.length}`);
   }
 }
 

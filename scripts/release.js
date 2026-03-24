@@ -25,7 +25,7 @@ const colors = {
   bold: '\x1b[1m'
 };
 
-const PRODUCTION_API = 'http://121.41.179.197:8000';
+const PRODUCTION_API = 'https://auth.xiuer.work';
 
 let step = 0;
 
@@ -207,6 +207,15 @@ async function main() {
     process.exit(1);
   }
 
+  if (apiBaseUrl !== PRODUCTION_API) {
+    logFail('VITE_AUTH_API_BASE_URL 值不正确');
+    logInfo(`当前值: ${apiBaseUrl}`);
+    logInfo(`必须是: ${PRODUCTION_API}`);
+    logInfo(`\n${colors.yellow}请设置为正确的生产地址:${colors.reset}`);
+    logInfo(`  export VITE_AUTH_API_BASE_URL=${PRODUCTION_API}`);
+    process.exit(1);
+  }
+
   if (apiBaseUrl.includes('localhost') || apiBaseUrl.includes('127.0.0.1')) {
     logFail('VITE_AUTH_API_BASE_URL 不能是本地地址');
     logInfo(`当前值: ${apiBaseUrl}`);
@@ -215,13 +224,7 @@ async function main() {
     process.exit(1);
   }
 
-  if (apiBaseUrl !== PRODUCTION_API) {
-    logWarn(`API 地址与生产环境不完全匹配`);
-    logInfo(`生产地址: ${PRODUCTION_API}`);
-    logInfo(`当前地址: ${apiBaseUrl}`);
-  } else {
-    logPass(`API 地址: ${apiBaseUrl}`);
-  }
+  logPass(`API 地址: ${apiBaseUrl}`);
 
   // Step 6: 运行审计
   logStep('运行发布审计');

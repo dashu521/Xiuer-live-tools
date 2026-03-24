@@ -68,7 +68,7 @@
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
 │  步骤 1: 本地 Mac 构建                                                    │
-│  ├── export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000           │
+│  ├── export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>        │
 │  ├── npm run release:mac                                                 │
 │  └── 产物: release/<version>/*.dmg + latest-mac.yml                      │
 │                                                                         │
@@ -309,8 +309,8 @@ echo $VITE_AUTH_API_BASE_URL
 
 ### 构建步骤（任何 Mac 均可执行）
 ```bash
-# 步骤 1：设置 API 地址
-export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
+# 步骤 1：设置 API 地址（必须是 HTTPS 生产地址）
+export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
 
 # 步骤 2：执行构建
 npm run build
@@ -334,47 +334,85 @@ ls -la release/*/mac*/
 ### 规范目的
 **确保正式发布使用生产环境 API 地址，通过 Release Guard 机制防止本地地址误用。**
 
+### ⚠️ 本规范为长期硬规则，不可绕过
+
+以下规则为永久性发布安全规范，**任何发布场景均必须遵守**，不得以任何理由豁免。
+
 ### 生产环境 API 地址
 
 | 环境变量 | 生产环境值 | 说明 |
 |----------|------------|------|
-| `VITE_AUTH_API_BASE_URL` | `http://121.41.179.197:8000` | 阿里云 ECS 生产 API 服务器 |
-| `AUTH_STORAGE_SECRET` | 32+ 字符高熵随机字符串 | 主进程安全存储密钥，保护本地加密凭据文件 |
+| `VITE_AUTH_API_BASE_URL` | `https://auth.xiuer.work` | 生产认证/管理 API 的 HTTPS 地址，**禁止裸 IP 明文 HTTP**，禁止使用示例占位符 |
+| `AUTH_STORAGE_SECRET` | 32+ 字符高熵随机字符串 | 主进程安全存储密钥；正式发布必须显式注入，不能依赖运行时兜底 |
+
+> **地址已固化**：`https://auth.xiuer.work` 是当前唯一认可的生产 API 地址，不再允许使用 `https://<your-auth-api-domain>` 等示例写法。
 
 ### 强制要求
 
-#### 1. 正式发布必须显式注入环境变量
+#### 1. 正式发布必须显式注入环境变量（硬规则）
 
 ```bash
-# ✅ 正确：显式设置生产环境 API 地址
-export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
+# ✅ 正确：显式设置生产环境 HTTPS API 地址
+export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
 export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
 npm run release
 
 # ❌ 错误：未设置环境变量
 npm run release
 # Release Guard 会拦截并阻止发布
+
+# ❌ 错误：设置了错误地址
+export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
+# Release Guard 会拦截并阻止发布（地址必须精确为 https://auth.xiuer.work）
 ```
 
-#### 2. Localhost Fallback 机制说明
+#### 2. 构建链路环境变量传递路径
 
-代码中可能存在 `import.meta.env.VITE_AUTH_API_BASE_URL || 'localhost'` 的 fallback 模式：
+```
+构建时环境变量传递链：
+┌──────────────────────────────────────────────────────────────┐
+│                                                              │
+│  VITE_AUTH_API_BASE_URL (shell env)                         │
+│       │                                                      │
+│       ├──→ npm run build ──→ Vite 编译时 bake ──→ renderer   │
+│       │                                                      │
+│       └──→ generate-build-config.js ──→ build-config.json    │
+│                                           │                  │
+│                                           └──→ main 进程读取  │
+│                                                              │
+│  AUTH_STORAGE_SECRET (shell env)                             │
+│       └──→ generate-build-config.js ──→ build-config.json    │
+└──────────────────────────────────────────────────────────────┘
+
+重要：dist:mac / dist:win 脚本本身不注入变量，必须在执行前手动 export。
+```
+
+#### 3. Localhost Fallback 机制说明
+
+代码中存在 `import.meta.env.VITE_AUTH_API_BASE_URL || 'localhost'` 的 fallback 模式：
 
 - **开发环境**：fallback 模式允许本地调试更方便
-- **发布构建**：当环境变量正确设置时，fallback 不会生效，构建产物使用生产地址
-- **风险控制**：Release Guard 会在发布前扫描并检查，若发现环境变量未正确配置将拦截
+- **发布构建**：当环境变量正确设置时，fallback 不会生效，构建产物使用 `https://auth.xiuer.work`
+- **风险控制**：若未设置环境变量，renderer 会 fallback 到 `http://localhost:8000`，**这是发布阻断项**
+- **开发/生产区分**：
 
-#### 3. Release Guard 检查机制
+| 环境 | 允许的 API 地址 | 说明 |
+|------|----------------|------|
+| 开发环境（`npm run dev`） | `http://localhost:8000` / `http://127.0.0.1:8000` | 仅限本地调试 |
+| 生产构建 | `https://auth.xiuer.work` | **禁止 localhost/127.0.0.1** |
+
+#### 4. Release Guard 检查机制
 
 Release Guard (`scripts/release-guard.js`) 在发布前执行以下检查：
 
 | 检查项 | 级别 | 行为 |
 |--------|------|------|
 | `VITE_AUTH_API_BASE_URL` 未设置 | BLOCKER | 阻止发布 |
+| `VITE_AUTH_API_BASE_URL` 值不为 `https://auth.xiuer.work` | BLOCKER | 阻止发布 |
 | `VITE_AUTH_API_BASE_URL` 包含 localhost | BLOCKER | 阻止发布 |
 | `VITE_AUTH_API_BASE_URL` 包含 127.0.0.1 | BLOCKER | 阻止发布 |
 | `AUTH_STORAGE_SECRET` 未设置 | BLOCKER | 阻止发布 |
-| `src/shared` 中存在 localhost/127.0.0.1 引用 | BLOCKER | 阻止发布（仅已识别的 fallback 场景在环境变量正确时可降级为 WARNING） |
+| `src/shared` 中存在 localhost/127.0.0.1 引用 | BLOCKER | 阻止发布 |
 
 **任何一项 BLOCKER 检查失败，都无法执行发布。**
 
@@ -382,27 +420,30 @@ Release Guard (`scripts/release-guard.js`) 在发布前执行以下检查：
 
 | 违规场景 | 处理方式 |
 |----------|----------|
-| 未设置 VITE_AUTH_API_BASE_URL | Release Guard 拦截，提示设置生产 API 地址 |
-| 使用 localhost/127.0.0.1 作为环境变量值 | Release Guard 拦截，提示使用生产地址 |
+| 未设置 VITE_AUTH_API_BASE_URL | Release Guard 拦截，提示设置 `https://auth.xiuer.work` |
+| VITE_AUTH_API_BASE_URL 值不正确（非 `https://auth.xiuer.work`） | Release Guard 拦截，提示必须为 `https://auth.xiuer.work` |
+| 使用 localhost/127.0.0.1 作为环境变量值 | Release Guard 拦截，提示使用 `https://auth.xiuer.work` |
 | 未设置 AUTH_STORAGE_SECRET | Release Guard 与构建脚本拦截，禁止回退到开发态默认密钥 |
-| `src/shared` 中存在硬编码 localhost/127.0.0.1 | Release Guard 扫描并拦截 |
-| 已识别的 localhost fallback 场景且环境变量已正确设置 | Release Guard 降级为 WARNING，不影响发布 |
+| renderer fallback 到 localhost:8000 | **发布阻断项**，构建产物不可发布，必须重新设置环境变量后重建 |
+| electron/main 中存在 localhost fallback | 视为高风险，Release Guard 拦截 |
 
 ### 快速验证
 
 发布前验证环境变量配置：
 
 ```bash
-# 验证环境变量已设置
+# 验证环境变量已设置（必须精确为 https://auth.xiuer.work）
 echo $VITE_AUTH_API_BASE_URL
-[ -n "$AUTH_STORAGE_SECRET" ] && echo "AUTH_STORAGE_SECRET is set"
+# 预期输出: https://auth.xiuer.work
 
-# 预期输出
-http://121.41.179.197:8000
+# 验证 AUTH_STORAGE_SECRET
+[ -n "$AUTH_STORAGE_SECRET" ] && echo "AUTH_STORAGE_SECRET is set (length: ${#AUTH_STORAGE_SECRET})"
 
 # 执行阻断检查
 npm run release:guard
 ```
+
+> **注意**：仅确认环境变量"已设置"不够，必须确认其值**精确为** `https://auth.xiuer.work`。
 
 ---
 
@@ -528,16 +569,19 @@ curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_m
 ## 修改记录
 
 | 日期 | 版本 | 修改内容 |
-|------|------|----------|
+|------|------|---------|
 | 2025-03-12 | v2.0 | 建立三层发布结构，明确区分测试构建和正式发布构建 |
 | 2025-03-12 | v2.1 | 更新 macOS 构建说明：删除 M3 Ultra 特定表述，明确任何 Mac 均可构建，当前使用无签名方式，未来可升级至 Apple Developer 签名 |
 | 2025-03-14 | v2.2 | 添加下载页部署规范：明确 download.xiuer.work/ 为正式下载页，/releases/latest/ 为自动更新目录，两者路径独立；添加发布后必验地址清单 |
-| 2026-03-18 | v2.3 | 添加生产环境 API 地址固化规范：明确 VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000 为生产环境地址，强制要求正式发布必须显式注入，禁止 localhost fallback 进入发布包，Release Guard 强制拦截 |
+| 2026-03-18 | v2.3 | 添加生产环境 API 地址固化规范：明确 VITE_AUTH_API_BASE_URL 必须为 HTTPS 生产地址，强制要求正式发布必须显式注入，禁止 localhost fallback 进入发布包，Release Guard 强制拦截 |
 | 2026-03-18 | v2.4 | 明确发布架构与职责边界：本地 Mac 不再依赖 OSS 凭证，OSS 上传统一走 GitHub Actions，npm run upload:mac:oss 保留为手工兜底方案 |
+| 2026-03-24 | v2.5 | **硬规则固化**：生产 API 地址固化为 `https://auth.xiuer.work`（精确值，禁止示例占位符）；新增构建链路环境变量传递路径说明；新增 5 个失败处理分支（分支 A-E）；新增 16 项安装包取证验收清单；明确所有失败分支均不可继续后续发布步骤 |
 
 ---
 
-## 附录：发布检查清单
+## 附录：发布检查清单（简化版）
+
+> **重要**：本清单为简略参考，正式发布请使用上方 [发布前必验清单（安装包验收）](#附录发布前必验清单安装包验收)，确保所有 16 项均已通过。
 
 发布前请逐项确认：
 
@@ -549,10 +593,9 @@ curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_m
 - [ ] macOS 11 及以上
 
 ### 配置检查
-- [ ] `VITE_AUTH_API_BASE_URL` 已设置为 `http://121.41.179.197:8000`
-- [ ] `VITE_AUTH_API_BASE_URL` 不包含 localhost/127.0.0.1
+- [ ] `VITE_AUTH_API_BASE_URL` 已设置为 `https://auth.xiuer.work`（**精确值，不得为其他地址**）
 - [ ] `AUTH_STORAGE_SECRET` 已设置为 32+ 字符随机字符串
-- [ ] Release Guard 检查通过
+- [ ] Release Guard 检查通过（无 BLOCKER）
 
 ### Git 检查
 - [ ] Git 工作区干净（无未提交修改）
@@ -570,6 +613,229 @@ curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.3.3_m
 - [ ] `latest-mac.yml` 可访问
 - [ ] Windows 安装包可下载
 - [ ] macOS 安装包可下载
+
+---
+
+## 附录：发布前必验清单（安装包验收）
+
+> **本清单为发布通过的前置条件**。所有项目必须逐项通过，方可认为发布验收合格。
+
+### 环境与构建检查
+
+| # | 验收项 | 检查命令/方法 | 通过标准 | 状态 |
+|---|--------|-------------|---------|------|
+| 1 | VITE_AUTH_API_BASE_URL 已设置 | `echo $VITE_AUTH_API_BASE_URL` | 输出为 `https://auth.xiuer.work` | [ ] |
+| 2 | AUTH_STORAGE_SECRET 已设置 | `echo $AUTH_STORAGE_SECRET` | 输出长度 ≥ 32 字符 | [ ] |
+| 3 | Release Guard 检查通过 | `npm run release:guard` | 无 BLOCKER 输出 | [ ] |
+| 4 | dist:mac 命令执行前 env 已 export | 人工确认 | 确认当前 shell 已 export | [ ] |
+| 5 | npm run build 成功完成 | `npm run build` | exit code = 0 | [ ] |
+
+### 安装包取证检查（Renderer 进程）
+
+| # | 验收项 | 检查方法 | 通过标准 | 状态 |
+|---|--------|---------|---------|------|
+| 6 | renderer API_BASE_URL 为生产地址 | 检查 `dist/assets/authApi.*.js` 中包含 `auth.xiuer.work` | 不含 `localhost`、不含 `127.0.0.1` | [ ] |
+| 7 | renderer 不含 localhost fallback 产物 | `grep -r "localhost:8000" dist/assets/` | 无匹配 | [ ] |
+
+### 安装包取证检查（Main 进程）
+
+| # | 验收项 | 检查方法 | 通过标准 | 状态 |
+|---|--------|---------|---------|------|
+| 8 | build-config.json 中 authApiBaseUrl 正确 | `cat dist-electron/build-config.json` | `authApiBaseUrl` 为 `https://auth.xiuer.work` | [ ] |
+| 9 | main 进程 fallback 为 localhost | `grep -r "localhost:8000" dist-electron/` | 仅出现在 fallback 默认值上下文，不是实际值 | [ ] |
+
+### 运行时验证
+
+| # | 验收项 | 检查命令/方法 | 通过标准 | 状态 |
+|---|--------|-------------|---------|------|
+| 10 | /health 访问地址为 auth.xiuer.work | 启动安装包，抓包或看 DevTools Network | 请求发往 `https://auth.xiuer.work/health` | [ ] |
+| 11 | 安装包运行日志中无 localhost 连接 | 应用日志 | 不出现 `localhost:8000`、`127.0.0.1:8000` 连接 | [ ] |
+
+### 发布产物完整性
+
+| # | 验收项 | 检查命令/方法 | 通过标准 | 状态 |
+|---|--------|-------------|---------|------|
+| 12 | GitHub Release 已创建 | `gh release view v<version>` | 存在对应 tag 的 Release | [ ] |
+| 13 | Windows 产物已上传 | `gh release view v<version> --json assets` | 包含 `.exe`/`.zip` 文件 | [ ] |
+| 14 | macOS 产物已上传 | 同上 | 包含 `.dmg` 文件 | [ ] |
+| 15 | CDN latest.yml 可访问 | `curl -I https://download.xiuer.work/releases/latest/latest.yml` | HTTP 200 | [ ] |
+| 16 | CDN latest-mac.yml 可访问 | `curl -I https://download.xiuer.work/releases/latest/latest-mac.yml` | HTTP 200 | [ ] |
+
+> **验收通过条件**：所有 16 项全部为 `[ ]` → `[x]`，方可签字发布。
+
+---
+
+## 附录：发布失败处理分支（环境变量相关）
+
+### 失败分支概览
+
+| 失败场景 | 严重程度 | 是否允许继续后续步骤 | 处理章节 |
+|----------|----------|---------------------|----------|
+| 未设置 VITE_AUTH_API_BASE_URL | 🔴 阻断 | ❌ 不可继续 | [分支 A](#分支-a-未设置-vite_auth_api_base_url) |
+| VITE_AUTH_API_BASE_URL 值非 `https://auth.xiuer.work` | 🔴 阻断 | ❌ 不可继续 | [分支 B](#分支-b-vite_auth_api_base_url-值不正确) |
+| 未设置 AUTH_STORAGE_SECRET | 🔴 阻断 | ❌ 不可继续 | [分支 C](#分支-c-未设置-auth_storage_secret) |
+| 构建后发现 API_BASE_URL 指向 localhost | 🔴 阻断 | ❌ 不可继续 | [分支 D](#分支-d-构建后发现-api_base_url-指向-localhost) |
+| /health 未命中 auth.xiuer.work | 🔴 阻断 | ❌ 不可继续 | [分支 E](#分支-e-health-未命中-authxiuerwork) |
+
+---
+
+### 分支 A: 未设置 VITE_AUTH_API_BASE_URL
+
+**现象**：Release Guard 或构建脚本报错 `VITE_AUTH_API_BASE_URL 未设置`
+
+**检查命令**：
+```bash
+echo $VITE_AUTH_API_BASE_URL
+# 无输出或为空
+```
+
+**处理原则**：
+1. 立即停止构建
+2. 显式设置环境变量
+3. 重新执行构建命令
+
+**允许继续后续发布步骤**：❌ 否。必须修复后从构建步骤重新开始。
+
+**正确操作**：
+```bash
+export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
+export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
+npm run release:mac   # 或 npm run build
+```
+
+---
+
+### 分支 B: VITE_AUTH_API_BASE_URL 值不正确
+
+**现象**：Release Guard 报错 `VITE_AUTH_API_BASE_URL 不能是本地地址` 或 `地址必须为 https://auth.xiuer.work`
+
+**检查命令**：
+```bash
+echo $VITE_AUTH_API_BASE_URL
+# 输出可能为 https://<your-auth-api-domain> 或 http://121.41.179.197:8000 等
+```
+
+**处理原则**：
+1. 立即停止构建
+2. 确认生产 API 地址为 `https://auth.xiuer.work`
+3. 更新环境变量为正确值
+4. 重新执行构建命令
+
+**允许继续后续发布步骤**：❌ 否。必须修复后重新构建。
+
+**正确操作**：
+```bash
+export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
+npm run release:mac
+```
+
+---
+
+### 分支 C: 未设置 AUTH_STORAGE_SECRET
+
+**现象**：构建脚本报错 `AUTH_STORAGE_SECRET must be set`
+
+**检查命令**：
+```bash
+echo $AUTH_STORAGE_SECRET
+# 无输出或为空
+```
+
+**处理原则**：
+1. 立即停止构建
+2. 生成高熵随机密钥并 export
+3. 重新执行构建命令
+
+**允许继续后续发布步骤**：❌ 否。必须修复后重新构建。
+
+**正确操作**：
+```bash
+export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
+npm run release:mac
+```
+
+---
+
+### 分支 D: 构建后发现 API_BASE_URL 指向 localhost
+
+**现象**：安装包打完后，取证发现 `dist/assets/` 中包含 `localhost:8000` 或 `127.0.0.1:8000`
+
+**检查命令**：
+```bash
+grep -r "localhost:8000" dist/assets/ | head -5
+# 或
+grep -r "127.0.0.1:8000" dist/assets/ | head -5
+```
+
+**处理原则**：
+1. **该安装包立即作废，不得发布**
+2. 确认构建时 VITE_AUTH_API_BASE_URL 已正确设置
+3. 删除旧的 `dist/` 和 `dist-electron/` 目录
+4. 重新执行完整构建流程
+
+**允许继续后续发布步骤**：❌ 否。该安装包已不可用，必须重新构建。
+
+**正确操作**：
+```bash
+# 1. 确认环境变量
+echo $VITE_AUTH_API_BASE_URL  # 必须为 https://auth.xiuer.work
+
+# 2. 清理旧产物
+rm -rf dist/ dist-electron/
+
+# 3. 重新构建
+export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
+export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
+npm run release:mac
+```
+
+**预防措施**：
+- 构建前必须确认 `echo $VITE_AUTH_API_BASE_URL` 输出为 `https://auth.xiuer.work`
+- 构建后、发布前必须执行取证检查（见"安装包取证检查"章节）
+
+---
+
+### 分支 E: /health 未命中 auth.xiuer.work
+
+**现象**：安装包运行时，网络请求发往了错误的地址（如 `localhost:8000` 或其他 IP）
+
+**检查命令**：
+```bash
+# 方法 1：启动应用，打开 DevTools → Network → 过滤 /health
+# 预期：https://auth.xiuer.work/health
+
+# 方法 2：抓包
+sudo tcpdump -i any -n | grep health
+
+# 方法 3：检查应用日志（electron-log）
+# 搜索包含 "http://localhost" 或 "127.0.0.1" 的日志
+```
+
+**处理原则**：
+1. **该安装包立即作废，不得发布**
+2. 排查为何 renderer 或 main 进程使用了错误的地址
+3. 确认环境变量设置正确后重新构建
+
+**允许继续后续发布步骤**：❌ 否。安装包运行时地址错误，说明构建配置有问题，必须重新构建。
+
+**常见根因**：
+- 构建时 VITE_AUTH_API_BASE_URL 未正确 export
+- build-config.json 中的地址被覆盖或读取了默认值
+
+**正确操作**：
+```bash
+# 1. 确认环境变量正确
+export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
+export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
+
+# 2. 清理并重建
+rm -rf dist/ dist-electron/
+npm run release:mac
+
+# 3. 重新取证验证
+grep -r "auth.xiuer.work" dist/assets/
+grep -r "localhost" dist/assets/
+```
 
 ---
 
@@ -591,7 +857,7 @@ git commit -m "chore: prepare release vX.X.X"
 
 **解决方案**：
 ```bash
-export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
+export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
 ```
 
 ### 3. 未设置 AUTH_STORAGE_SECRET
@@ -612,12 +878,12 @@ export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
 - `electron/main/` 目录中的 localhost 会被视为 WARNING（需确认）
 - `scripts/` 目录中的 localhost 会被视为 INFO（正常）
 
-**解决方案**：确保 `VITE_AUTH_API_BASE_URL` 已设置为生产地址。
+**解决方案**：确保 `VITE_AUTH_API_BASE_URL` 已设置为 HTTPS 生产地址。
 
 ---
 
-**最后更新**：2026-03-18
-**规范版本**：v2.4
+**最后更新**：2026-03-24
+**规范版本**：v2.5
 
 > **文档关系**：
 > - 本规范为发布架构与要求的权威定义

@@ -12,7 +12,8 @@ export function getBuildTimeConfig(): BuildTimeConfig {
   }
 
   const defaultConfig: BuildTimeConfig = {
-    authApiBaseUrl: 'http://localhost:8000',
+    authApiBaseUrl:
+      '[BUILD_CONFIG_NOT_SET:Check_generate-build-config.js_or_validate-build-env.js]',
   }
 
   if (typeof process === 'undefined') {
