@@ -78,9 +78,14 @@ export function setupAuthHandlers() {
     const refreshRes = await cloudRefresh(refresh_token)
     if (!refreshRes.success || !refreshRes.access_token) {
       await clearStoredTokens()
+      // [FIX] 将 error 对象转为字符串
+      const errorMessage =
+        typeof refreshRes.error === 'string'
+          ? refreshRes.error
+          : refreshRes.error?.message || refreshRes.error?.code || '刷新会话失败'
       return {
         success: false,
-        error: refreshRes.error ?? { code: 'refresh_failed', message: '刷新会话失败' },
+        error: errorMessage,
       }
     }
 
@@ -105,9 +110,14 @@ export function setupAuthHandlers() {
       }
       const res = await cloudRegister(identifier, data.password)
       if (!res.success) {
+        // [FIX] 将 error 对象转为字符串
+        const errorMessage =
+          typeof res.error === 'string'
+            ? res.error
+            : res.error?.message || res.error?.code || '注册失败'
         return {
           success: false,
-          error: res.error,
+          error: errorMessage,
           requestUrl: res.requestUrl,
           status: res.status,
           detail: res.responseDetail,
@@ -166,10 +176,14 @@ export function setupAuthHandlers() {
 
         console.error('[AUTH-DEBUG] Determined errorType:', errorType)
 
-        // 返回完整的错误对象，让前端处理错误提示
+        // [FIX] 将 error 对象转为字符串
+        const errorMessage =
+          typeof res.error === 'string'
+            ? res.error
+            : res.error?.message || res.error?.code || '登录失败'
         return {
           success: false,
-          error: res.error,
+          error: errorMessage,
           errorType,
           requestUrl: res.requestUrl,
           status: res.status,
@@ -207,9 +221,14 @@ export function setupAuthHandlers() {
       hasUser: !!res.user,
     })
     if (!res.success) {
+      // [FIX] 将 error 对象转为字符串，避免 React Error #31
+      const errorMessage =
+        typeof res.error === 'string'
+          ? res.error
+          : res.error?.message || res.error?.code || '验证码登录失败'
       return {
         success: false,
-        error: res.error,
+        error: errorMessage,
         status: res.status,
         responseDetail: res.responseDetail,
       }
