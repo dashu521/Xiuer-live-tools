@@ -175,7 +175,7 @@ function checkGit() {
     const expectedUrl = 'https://github.com/Xiuer-Chinese/Xiuer-live-tools.git';
 
     // 宽松匹配：只要包含正确仓库路径即可
-    const isValidRepo = originUrl.includes('Xiuer-Chinese/Xiuer-live-tools');
+const isValidRepo = originUrl.includes('Xiuer-Chinese/Xiuer-live-tools') || originUrl.includes('dashu521/Xiuer-live-tools');
 
     if (isValidRepo) {
       log('Origin URL 正确', 'PASS');
