@@ -46,8 +46,8 @@
 ### 步骤 1: 本地 Mac 构建
 
 ```bash
-# 设置生产环境 API 地址
-export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
+# 设置生产环境 HTTPS API 地址
+export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
 export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
 
 # 提升版本号（先定版本号）
@@ -136,7 +136,8 @@ curl -I https://download.xiuer.work/releases/latest/latest.yml
 
 ```bash
 # 1. 设置环境变量
-export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
+export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
+export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
 
 # 2. 提升版本号（先定版本号）
 npm version patch  # 或 minor

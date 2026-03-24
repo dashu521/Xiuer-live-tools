@@ -53,3 +53,106 @@
   align-items: center;
   justify-content: center;
 }
+
+@keyframes message-center-bell-ring {
+  0% {
+    transform: scale(1) rotate(0deg);
+  }
+
+  18% {
+    transform: scale(1.08) rotate(-12deg);
+  }
+
+  38% {
+    transform: scale(1.12) rotate(10deg);
+  }
+
+  58% {
+    transform: scale(1.04) rotate(-6deg);
+  }
+
+  78% {
+    transform: scale(1.02) rotate(3deg);
+  }
+
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes message-center-badge-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgb(37 99 235 / 0.35);
+  }
+
+  45% {
+    transform: scale(1.16);
+    box-shadow: 0 0 0 0.45rem rgb(37 99 235 / 0.12);
+  }
+
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgb(37 99 235 / 0);
+  }
+}
+
+@keyframes message-center-button-pop {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgb(37 99 235 / 0);
+  }
+
+  45% {
+    transform: scale(1.06);
+    box-shadow: 0 0 0 0.55rem rgb(37 99 235 / 0.12);
+  }
+
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgb(37 99 235 / 0);
+  }
+}
+
+.message-center-item--highlight {
+  animation: message-center-item-highlight 1.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.message-center-button--animate {
+  animation: message-center-button-pop 720ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes message-center-item-highlight {
+  0% {
+    background-color: color-mix(in srgb, var(--primary) 14%, transparent);
+    transform: translateY(0.2rem);
+  }
+
+  45% {
+    background-color: color-mix(in srgb, var(--primary) 20%, transparent);
+    transform: translateY(0);
+  }
+
+  100% {
+    background-color: color-mix(in srgb, var(--primary) 5%, transparent);
+    transform: translateY(0);
+  }
+}
+
+.message-center-bell--animate {
+  transform-origin: top center;
+  animation: message-center-bell-ring 720ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.message-center-badge--animate {
+  animation: message-center-badge-pulse 720ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-center-item--highlight,
+  .message-center-button--animate,
+  .message-center-bell--animate,
+  .message-center-badge--animate {
+    animation: none;
+  }
+}

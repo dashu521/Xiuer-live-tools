@@ -132,7 +132,7 @@ export function useFeatureAccess() {
         featureAccess: {
           can_access: false,
           requires_auth: true,
-          required_plan: 'free',
+          required_plan: 'trial',
         },
         user: null,
       }

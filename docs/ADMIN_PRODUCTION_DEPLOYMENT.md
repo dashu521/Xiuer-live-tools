@@ -7,10 +7,13 @@
 
 ## 1. 生产环境基本信息
 
-### 1.1 唯一生产后台地址
+### 1.1 唯一生产后台入口
 ```
-http://121.41.179.197:8000/admin/app
+https://auth.xiuer.work/admin/app
 ```
+
+> 说明：公网访问必须经 HTTPS 反向代理入口，禁止把 `http://121.41.179.197:8000/admin/app` 作为正式生产后台地址对外使用。
+> 当前目标正式域名为 `auth.xiuer.work`；若 DNS 尚未解析到当前 ECS，则 HTTPS 切换不能视为完成。
 
 ### 1.2 唯一生产目录
 ```
@@ -87,6 +90,44 @@ cd /opt/auth-api && docker compose logs api --tail=100
 cd /opt/auth-api && docker compose logs mysql --tail=100
 ```
 
+### 3.4 消息中心实时通道（SSE）
+
+消息中心使用：
+
+```text
+GET /messages/stream
+```
+
+生产环境应统一走 HTTPS 反向代理；若接入 Nginx / 其他反向代理，必须确保 `/messages/stream` 关闭代理缓冲：
+
+```nginx
+location /messages/stream {
+    proxy_pass http://127.0.0.1:8000/messages/stream;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header Authorization $http_authorization;
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+    add_header X-Accel-Buffering no;
+}
+```
+
+### 3.5 实时通道验证
+
+```bash
+curl -N https://auth.xiuer.work/messages/stream \
+  -H "Accept: text/event-stream" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+预期：
+
+1. 首次连接立即返回 `event: snapshot`
+2. 空闲时持续返回 `: heartbeat`
+3. 管理后台发布、撤回、编辑消息后，连接会马上收到新的 `snapshot`
+
 ---
 
 ## 4. 历史变更记录
@@ -117,6 +158,12 @@ cd /opt/auth-api && docker compose logs mysql --tail=100
 ```bash
 cd /opt/auth-api && docker compose up -d --force-recreate api
 ```
+
+### 5.3 消息中心不实时
+1. 查看日志：`docker compose logs api --tail=100 | grep messages`
+2. 用 `curl -N` 直接连接 HTTPS 入口 `https://auth.xiuer.work/messages/stream`
+3. 如果经过 Nginx，确认 `/messages/stream` 已配置 `proxy_buffering off`
+4. 确认客户端当前版本已包含消息中心实时通道改动
 
 ---
 

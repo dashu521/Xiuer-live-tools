@@ -36,7 +36,7 @@ Error: Command failed: npm run build
 ```bash
 # 1. 检查环境变量
 echo $VITE_AUTH_API_BASE_URL
-# 预期输出: http://121.41.179.197:8000
+# 预期输出: https://<your-auth-api-domain>
 
 # 2. 检查 Node.js 版本
 node --version
@@ -56,7 +56,7 @@ npm run release:mac 2>&1 | tee build-error.log
 
 | 错误类型 | 处理方式 |
 |----------|----------|
-| 环境变量未设置 | `export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000` |
+| 环境变量未设置 | `export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>` |
 | 环境变量包含 localhost | 设置正确的生产地址 |
 | 依赖缺失 | `npm install` |
 | 类型错误 | 修复 TypeScript 错误后重新构建 |

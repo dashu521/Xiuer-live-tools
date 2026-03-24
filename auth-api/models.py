@@ -1,6 +1,17 @@
 """数据表：users, refresh_tokens, subscriptions, sms_codes, gift_cards, gift_card_redemptions"""
 from datetime import datetime
-from sqlalchemy import Column, DateTime, ForeignKey, JSON, String, Boolean, Integer, Float
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -162,3 +173,49 @@ class Feedback(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     user = relationship("User", backref="feedbacks")
+
+
+class Announcement(Base):
+    """站内消息/公告"""
+
+    __tablename__ = "announcements"
+
+    id = Column(String(36), primary_key=True, index=True)
+    title = Column(String(200), nullable=False)
+    content = Column(Text, nullable=False)
+    type = Column(String(20), default="notice", index=True)
+    status = Column(String(20), default="draft", index=True)  # draft/published/revoked
+    target_scope = Column(String(20), default="all", index=True)  # all/plan/user
+    target_value = Column(String(255), nullable=True, index=True)
+    is_pinned = Column(Boolean, default=False, nullable=False)
+    created_by = Column(String(100), nullable=True)
+    published_at = Column(DateTime, nullable=True, index=True)
+    expires_at = Column(DateTime, nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    receipts = relationship("AnnouncementReceipt", back_populates="announcement")
+
+
+class AnnouncementReceipt(Base):
+    """用户消息已读状态"""
+
+    __tablename__ = "announcement_receipts"
+    __table_args__ = (
+        UniqueConstraint("announcement_id", "user_id", name="uq_announcement_receipt_user"),
+        Index("idx_receipt_user_read_at", "user_id", "read_at"),
+    )
+
+    id = Column(String(36), primary_key=True, index=True)
+    announcement_id = Column(
+        String(36),
+        ForeignKey("announcements.id"),
+        nullable=False,
+        index=True,
+    )
+    user_id = Column(String(36), nullable=False, index=True)
+    read_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    announcement = relationship("Announcement", back_populates="receipts")

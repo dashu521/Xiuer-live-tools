@@ -11,7 +11,7 @@ export function safeUserFromUsername(username: string): SafeUser {
     createdAt: new Date().toISOString(),
     lastLogin: null,
     status: 'active',
-    plan: 'free',
+    plan: 'trial',
     expire_at: null,
     deviceId: '',
     machineFingerprint: '',
@@ -30,7 +30,7 @@ export function backendUserToSafeUser(
     (backendUser.phone ?? backendUser.email ?? backendUser.id ?? fallbackUsername) ||
     fallbackUsername
 
-  const plan = normalizePlan(backendUser.plan) || 'free'
+  const plan = normalizePlan(backendUser.plan)
 
   return {
     id: String(backendUser.id),

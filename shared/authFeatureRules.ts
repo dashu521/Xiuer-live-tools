@@ -19,7 +19,7 @@ export const AUTH_FEATURE_RULES = authFeatureRulesData as Record<AuthFeature, Au
 
 const DEFAULT_AUTH_FEATURE_RULE: AuthFeatureRule = {
   requiresAuth: false,
-  requiredPlan: 'free',
+  requiredPlan: 'trial',
 }
 
 export function isAuthFeature(feature: string): feature is AuthFeature {

@@ -361,6 +361,32 @@ class GetUserConfigResponse(BaseModel):
     updated_at: Optional[str] = None
 
 
+# ----- 消息中心 -----
+class MessageItem(BaseModel):
+    id: str
+    title: str
+    content: str
+    type: str = "notice"
+    is_pinned: bool = False
+    is_read: bool = False
+    created_at: Optional[str] = None
+    published_at: Optional[str] = None
+    expires_at: Optional[str] = None
+
+
+class MessageListResponse(BaseModel):
+    success: bool = True
+    items: List[MessageItem] = Field(default_factory=list)
+    unread_count: int = 0
+    fetched_at: Optional[str] = None
+
+
+class MessageMarkReadResponse(BaseModel):
+    success: bool = True
+    unread_count: int = 0
+    updated_at: Optional[str] = None
+
+
 # ----- 用户反馈相关 -----
 class FeedbackCategory:
     """反馈类型常量"""

@@ -78,7 +78,7 @@ def _ensure_subscriptions_table():
         conn.execute(
             text(
                 "CREATE TABLE IF NOT EXISTS subscriptions("
-                "id TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE, plan TEXT DEFAULT 'free', "
+                "id TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE, plan TEXT DEFAULT 'trial', "
                 "status TEXT DEFAULT 'active', current_period_end DATETIME, features_json TEXT)"
             )
         )
@@ -214,7 +214,7 @@ def _ensure_user_columns_sqlite():
             "last_login_at": "DATETIME",
             "last_active_at": "DATETIME",
             "status": "TEXT DEFAULT 'active'",
-            "plan": "TEXT DEFAULT 'free'",
+            "plan": "TEXT DEFAULT 'trial'",
             "trial_start_at": "DATETIME",
             "trial_end_at": "DATETIME",
         }

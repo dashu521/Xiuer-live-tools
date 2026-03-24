@@ -4,6 +4,6 @@
   "auto_popup": { "requiresAuth": true, "requiredPlan": "trial" },
   "ai_chat": { "requiresAuth": true, "requiredPlan": "pro" },
   "live_control": { "requiresAuth": true, "requiredPlan": "trial" },
-  "settings": { "requiresAuth": false, "requiredPlan": "free" },
-  "preview": { "requiresAuth": false, "requiredPlan": "free" }
+  "settings": { "requiresAuth": false, "requiredPlan": "trial" },
+  "preview": { "requiresAuth": false, "requiredPlan": "trial" }
 }

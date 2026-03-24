@@ -14,6 +14,7 @@ const AIChat = lazy(() => import('@/pages/AIChat'))
 const AutoReply = lazy(() => import('@/pages/AutoReply'))
 const AutoReplySettings = lazy(() => import('@/pages/AutoReply/AutoReplySettings'))
 const ForgotPassword = lazy(() => import('@/pages/ForgotPassword'))
+const Messages = lazy(() => import('@/pages/Messages'))
 const SubAccount = lazy(() => import('@/pages/SubAccount'))
 
 export const router = createHashRouter([
@@ -56,6 +57,10 @@ export const router = createHashRouter([
       {
         path: '/sub-account',
         element: <SubAccount />,
+      },
+      {
+        path: '/messages',
+        element: <Messages />,
       },
       {
         path: '/auto-reply/settings',
