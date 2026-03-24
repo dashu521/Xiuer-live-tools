@@ -86,8 +86,12 @@ for (const envVar of requiredEnvVars) {
   }
 }
 
-if (process.env.VITE_AUTH_API_BASE_URL?.includes('localhost') || process.env.VITE_AUTH_API_BASE_URL?.includes('127.0.0.1')) {
-  errors.push(`❌ VITE_AUTH_API_BASE_URL 不能为本地地址: ${process.env.VITE_AUTH_API_BASE_URL}`);
+if (
+  process.env.VITE_AUTH_API_BASE_URL?.includes('localhost') ||
+  process.env.VITE_AUTH_API_BASE_URL?.includes('127.0.0.1') ||
+  (process.env.VITE_AUTH_API_BASE_URL && !process.env.VITE_AUTH_API_BASE_URL.startsWith('https://'))
+) {
+  errors.push(`❌ VITE_AUTH_API_BASE_URL 必须为 HTTPS 生产地址: ${process.env.VITE_AUTH_API_BASE_URL}`);
 }
 
 // 5. 检查 package.json 脚本

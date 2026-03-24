@@ -5,6 +5,8 @@ export interface BuildTimeConfig {
 }
 
 let cachedConfig: BuildTimeConfig | null = null
+const PRODUCTION_AUTH_API_BASE_URL = 'https://auth.xiuer.work'
+const DEVELOPMENT_AUTH_API_BASE_URL = 'http://localhost:8000'
 
 export function getBuildTimeConfig(): BuildTimeConfig {
   if (cachedConfig) {
@@ -12,7 +14,7 @@ export function getBuildTimeConfig(): BuildTimeConfig {
   }
 
   const defaultConfig: BuildTimeConfig = {
-    authApiBaseUrl: 'http://localhost:8000',
+    authApiBaseUrl: app?.isPackaged ? PRODUCTION_AUTH_API_BASE_URL : DEVELOPMENT_AUTH_API_BASE_URL,
   }
 
   if (typeof process === 'undefined') {
@@ -86,6 +88,10 @@ export function getAuthApiBaseUrl(): string {
 
   if (url?.includes(':8080')) {
     url = url.replace(/:8080(\/|$)/, ':8000$1')
+  }
+
+  if (app?.isPackaged && !url.startsWith('https://')) {
+    throw new Error(`Packaged auth API base URL must use HTTPS, got: ${url}`)
   }
 
   return url

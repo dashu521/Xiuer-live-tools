@@ -1,6 +1,9 @@
 /**
  * 云鉴权 Token 存储：主进程读写，优先安全存储。
  * 当前实现：加密文件（AES 简单封装）。可选接入 keytar（系统凭据库），见文档说明。
+ * 运行时策略：
+ * - 官方构建/CI/服务端链路要求显式设置 AUTH_STORAGE_SECRET
+ * - 终端用户打包客户端首次运行时，允许在本地 userData 生成 .key 作为设备密钥
  * 风险：加密文件仍可能被提取后离线破解，生产建议接入 keytar 或系统钥匙串。
  */
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto'
@@ -116,8 +119,8 @@ function getSecretKey(): Buffer {
 
   if (isProduction) {
     throw new Error(
-      '[SECURITY] AUTH_STORAGE_SECRET environment variable is required in production. ' +
-        'Token storage cannot be initialized without a secure key.',
+      '[SECURITY] Failed to initialize token storage key in packaged runtime. ' +
+        'Provide AUTH_STORAGE_SECRET during build/deploy, or ensure userData is writable so a local .key can be created.',
     )
   }
 

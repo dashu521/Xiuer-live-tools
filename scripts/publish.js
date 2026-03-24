@@ -92,17 +92,21 @@ function checkEnv() {
 
   if (!apiBaseUrl) {
     logFail('VITE_AUTH_API_BASE_URL 未设置');
-    logInfo('生产 API 地址: http://121.41.179.197:8000');
+    logInfo('生产 API 地址: https://auth.xiuer.work');
     logInfo(`\n${colors.yellow}请设置环境变量后重新运行:${colors.reset}`);
-    logInfo(`  export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000`);
+    logInfo(`  export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work`);
     return false;
   }
 
-  if (apiBaseUrl.includes('localhost') || apiBaseUrl.includes('127.0.0.1')) {
-    logFail('VITE_AUTH_API_BASE_URL 不能是本地地址');
+  if (
+    apiBaseUrl.includes('localhost') ||
+    apiBaseUrl.includes('127.0.0.1') ||
+    !apiBaseUrl.startsWith('https://')
+  ) {
+    logFail('VITE_AUTH_API_BASE_URL 必须是 HTTPS 生产地址');
     logInfo(`当前值: ${apiBaseUrl}`);
     logInfo(`\n${colors.yellow}请设置为生产地址:${colors.reset}`);
-    logInfo(`  export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000`);
+    logInfo(`  export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work`);
     return false;
   }
 

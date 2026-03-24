@@ -25,7 +25,8 @@ const colors = {
   bold: '\x1b[1m'
 };
 
-const PRODUCTION_API = 'http://121.41.179.197:8000';
+const PRODUCTION_API = 'https://auth.xiuer.work';
+const VALID_REPO_SLUGS = ['Xiuer-Chinese/Xiuer-live-tools', 'dashu521/Xiuer-live-tools'];
 
 let step = 0;
 
@@ -61,6 +62,19 @@ function exec(command, options = {}) {
     if (options.ignoreError) return '';
     throw error;
   }
+}
+
+function getOriginUrl() {
+  return exec('git remote get-url origin');
+}
+
+function getRepoSlugFromUrl(url) {
+  return VALID_REPO_SLUGS.find(slug => url.includes(slug)) || null;
+}
+
+function getRepoWebUrl() {
+  const slug = getRepoSlugFromUrl(getOriginUrl()) || VALID_REPO_SLUGS[0];
+  return `https://github.com/${slug}`;
 }
 
 function checkCommand(command) {
@@ -162,16 +176,17 @@ async function main() {
 
   // 检查 remote
   const remotes = exec('git remote').split('\n').filter(r => r.trim());
-  if (remotes.length !== 1 || remotes[0] !== 'origin') {
+  const allowedRemotes = new Set(['origin', 'backup', 'legacy-origin']);
+  const unexpectedRemotes = remotes.filter(remote => !allowedRemotes.has(remote));
+  if (!remotes.includes('origin') || unexpectedRemotes.length > 0) {
     logFail(`Remote 配置错误: ${remotes.join(', ')}`);
     process.exit(1);
   }
 
-  const originUrl = exec('git remote get-url origin');
-  const expectedUrl = 'https://github.com/Xiuer-Chinese/Xiuer-live-tools.git';
-  if (originUrl !== expectedUrl) {
+  const originUrl = getOriginUrl();
+  if (!getRepoSlugFromUrl(originUrl)) {
     logFail(`Origin URL 错误`);
-    logInfo(`期望: ${expectedUrl}`);
+    logInfo(`期望包含: ${VALID_REPO_SLUGS.join(' 或 ')}`);
     logInfo(`实际: ${originUrl}`);
     process.exit(1);
   }
@@ -207,8 +222,12 @@ async function main() {
     process.exit(1);
   }
 
-  if (apiBaseUrl.includes('localhost') || apiBaseUrl.includes('127.0.0.1')) {
-    logFail('VITE_AUTH_API_BASE_URL 不能是本地地址');
+  if (
+    apiBaseUrl.includes('localhost') ||
+    apiBaseUrl.includes('127.0.0.1') ||
+    !apiBaseUrl.startsWith('https://')
+  ) {
+    logFail('VITE_AUTH_API_BASE_URL 必须是 HTTPS 生产地址');
     logInfo(`当前值: ${apiBaseUrl}`);
     logInfo(`\n${colors.yellow}请设置为生产地址:${colors.reset}`);
     logInfo(`  export VITE_AUTH_API_BASE_URL=${PRODUCTION_API}`);
@@ -306,11 +325,11 @@ async function main() {
 
   logNext('Windows 构建状态');
   console.log('  推送 tag 后，GitHub Actions 将自动构建 Windows 安装包');
-  console.log('  请访问: https://github.com/Xiuer-Chinese/Xiuer-live-tools/actions\n');
+  console.log(`  请访问: ${getRepoWebUrl()}/actions\n`);
 
   logNext('发布到 GitHub Releases');
   console.log('  1. 等待 GitHub Actions Windows 构建完成');
-  console.log('  2. 访问: https://github.com/Xiuer-Chinese/Xiuer-live-tools/releases');
+  console.log(`  2. 访问: ${getRepoWebUrl()}/releases`);
   console.log('  3. 创建新 Release，选择 tag v' + version);
   console.log('  4. 上传文件:');
   for (const dmg of dmgFiles) {

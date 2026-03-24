@@ -9,10 +9,11 @@
 
 ### 1.1 唯一生产后台入口
 ```
-https://<your-admin-domain>/admin/app
+https://auth.xiuer.work/admin/app
 ```
 
 > 说明：公网访问必须经 HTTPS 反向代理入口，禁止把 `http://121.41.179.197:8000/admin/app` 作为正式生产后台地址对外使用。
+> 当前目标正式域名为 `auth.xiuer.work`；若 DNS 尚未解析到当前 ECS，则 HTTPS 切换不能视为完成。
 
 ### 1.2 唯一生产目录
 ```
@@ -116,7 +117,7 @@ location /messages/stream {
 ### 3.5 实时通道验证
 
 ```bash
-curl -N https://<your-admin-domain>/messages/stream \
+curl -N https://auth.xiuer.work/messages/stream \
   -H "Accept: text/event-stream" \
   -H "Authorization: Bearer <ACCESS_TOKEN>"
 ```
@@ -160,7 +161,7 @@ cd /opt/auth-api && docker compose up -d --force-recreate api
 
 ### 5.3 消息中心不实时
 1. 查看日志：`docker compose logs api --tail=100 | grep messages`
-2. 用 `curl -N` 直接连接 HTTPS 入口 `https://<your-admin-domain>/messages/stream`
+2. 用 `curl -N` 直接连接 HTTPS 入口 `https://auth.xiuer.work/messages/stream`
 3. 如果经过 Nginx，确认 `/messages/stream` 已配置 `proxy_buffering off`
 4. 确认客户端当前版本已包含消息中心实时通道改动
 

@@ -27,6 +27,9 @@ const colors = {
   bold: '\x1b[1m'
 };
 
+const VALID_REPO_SLUGS = ['Xiuer-Chinese/Xiuer-live-tools', 'dashu521/Xiuer-live-tools'];
+const ALLOWED_REMOTES = new Set(['origin', 'backup', 'legacy-origin']);
+
 let hasBlocker = false;
 const blockers = [];
 const warnings = [];
@@ -75,6 +78,14 @@ function exec(command, options = {}) {
     if (options.ignoreError) return '';
     throw error;
   }
+}
+
+function getOriginUrl() {
+  return exec('git remote get-url origin');
+}
+
+function getRepoSlugFromUrl(url) {
+  return VALID_REPO_SLUGS.find(slug => url.includes(slug)) || null;
 }
 
 // ==================== 1. Git 检查 ====================
@@ -136,8 +147,7 @@ function checkGit() {
   // 1.3 检查 remote 数量
   try {
     const remotes = exec('git remote').split('\n').filter(r => r.trim());
-    const allowedRemotes = new Set(['origin', 'backup']);
-    const unexpectedRemotes = remotes.filter(remote => !allowedRemotes.has(remote));
+    const unexpectedRemotes = remotes.filter(remote => !ALLOWED_REMOTES.has(remote));
     const hasOrigin = remotes.includes('origin');
 
     if (hasOrigin && unexpectedRemotes.length === 0) {
@@ -171,17 +181,25 @@ function checkGit() {
 
   // 1.4 检查 origin URL
   try {
-    const originUrl = exec('git remote get-url origin');
-    const expectedUrl = 'https://github.com/Xiuer-Chinese/Xiuer-live-tools.git';
+    const originUrl = getOriginUrl();
+    const matchedSlug = getRepoSlugFromUrl(originUrl);
 
-    // 宽松匹配：只要包含正确仓库路径即可
-    const isValidRepo = originUrl.includes('Xiuer-Chinese/Xiuer-live-tools');
-
-    if (isValidRepo) {
+    if (matchedSlug) {
       log('Origin URL 正确', 'PASS');
+      if (matchedSlug === 'dashu521/Xiuer-live-tools') {
+        addInfo('Git', `检测到新主仓库 origin: ${matchedSlug}`);
+      }
     } else {
-      log('Origin URL 错误', 'BLOCKER', `期望: ${expectedUrl}\n   实际: ${originUrl}`);
-      addBlocker('Git', 'Origin URL 错误', `期望: ${expectedUrl}, 实际: ${originUrl}`);
+      log(
+        'Origin URL 错误',
+        'BLOCKER',
+        `期望包含: ${VALID_REPO_SLUGS.join(' 或 ')}\n   实际: ${originUrl}`,
+      );
+      addBlocker(
+        'Git',
+        'Origin URL 错误',
+        `期望包含: ${VALID_REPO_SLUGS.join(' 或 ')}, 实际: ${originUrl}`,
+      );
     }
   } catch (error) {
     log('无法获取 origin URL', 'BLOCKER', error.message);
@@ -298,9 +316,13 @@ function checkEnv() {
   if (!apiBaseUrl) {
     log('VITE_AUTH_API_BASE_URL 未设置', 'BLOCKER', '发布时必须设置生产环境 API 地址');
     addBlocker('环境变量', 'VITE_AUTH_API_BASE_URL 未设置');
-  } else if (apiBaseUrl.includes('localhost') || apiBaseUrl.includes('127.0.0.1')) {
-    log('VITE_AUTH_API_BASE_URL 包含本地地址', 'BLOCKER', `当前值: ${apiBaseUrl}`);
-    addBlocker('环境变量', 'API 地址为本地地址', apiBaseUrl);
+  } else if (
+    apiBaseUrl.includes('localhost') ||
+    apiBaseUrl.includes('127.0.0.1') ||
+    !apiBaseUrl.startsWith('https://')
+  ) {
+    log('VITE_AUTH_API_BASE_URL 不是 HTTPS 生产地址', 'BLOCKER', `当前值: ${apiBaseUrl}`);
+    addBlocker('环境变量', 'API 地址不是 HTTPS 生产地址', apiBaseUrl);
   } else {
     log(`VITE_AUTH_API_BASE_URL: ${apiBaseUrl}`, 'PASS');
     addInfo('环境变量', `API 地址: ${apiBaseUrl}`);
@@ -382,14 +404,23 @@ function scanHighRiskContent() {
   }
 
   function isFallbackPattern(line) {
-    // 检测是否是 fallback 模式：env || 'localhost'
+    // 检测是否是 fallback 模式：env || 'localhost' 或 production/dev ternary fallback
     const fallbackPatterns = [
       /import\.meta\.env\.\w+.*\|\|.*localhost/,
       /process\.env\.\w+.*\|\|.*localhost/,
       /\|\|.*localhost/,
-      /\|\|.*127\.0\.0\.1/
+      /\|\|.*127\.0\.0\.1/,
+      /import\.meta\.env\.PROD.*localhost/,
     ];
     return fallbackPatterns.some(p => p.test(line));
+  }
+
+  function isSafeProdDevAuthApiFallback(line) {
+    return (
+      line.includes('import.meta.env.PROD') &&
+      line.includes('https://auth.xiuer.work') &&
+      line.includes('http://localhost:8000')
+    );
   }
 
   function scanFile(filePath) {
@@ -411,14 +442,18 @@ function scanHighRiskContent() {
             };
 
             // 特殊处理 src/config/authApiBase.ts（兼容 Windows 路径）
-            if ((filePath.includes('src/config/authApiBase.ts') || filePath.includes('src\\config\\authApiBase.ts')) && finding.isFallback) {
-              // 如果环境变量已设置且不是 localhost
-              const apiBaseUrl = process.env.VITE_AUTH_API_BASE_URL;
-              if (apiBaseUrl && !apiBaseUrl.includes('localhost') && !apiBaseUrl.includes('127.0.0.1')) {
-                // CI 模式下降级为 WARNING，本地模式也降级为 WARNING（因为环境变量已设置）
-                warningFindings.push({ ...finding, note: 'fallback 模式，但环境变量已正确设置' });
+            if ((filePath.includes('src/config/authApiBase.ts') || filePath.includes('src\\config\\authApiBase.ts')) && (finding.isFallback || line.includes('localhost'))) {
+              if (isSafeProdDevAuthApiFallback(line)) {
+                infoFindings.push({ ...finding, note: '生产走 HTTPS、开发走 localhost 的显式分流' });
               } else {
-                blockerFindings.push({ ...finding, note: 'fallback 模式且环境变量未设置或无效' });
+                // 如果环境变量已设置且不是 localhost
+                const apiBaseUrl = process.env.VITE_AUTH_API_BASE_URL;
+                if (apiBaseUrl && !apiBaseUrl.includes('localhost') && !apiBaseUrl.includes('127.0.0.1')) {
+                  // CI 模式下降级为 WARNING，本地模式也降级为 WARNING（因为环境变量已设置）
+                  warningFindings.push({ ...finding, note: 'fallback 模式，但环境变量已正确设置' });
+                } else {
+                  blockerFindings.push({ ...finding, note: 'fallback 模式且环境变量未设置或无效' });
+                }
               }
             } else {
               // 根据目录风险级别分类

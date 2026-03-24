@@ -1,3 +1,8 @@
+/**
+ * AI API Key 存储：
+ * - 官方构建/CI/服务端链路要求显式设置 AUTH_STORAGE_SECRET
+ * - 终端用户打包客户端首次运行时，允许在本地 userData 生成 .key 作为设备密钥
+ */
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
@@ -113,8 +118,8 @@ function getSecretKey(): Buffer {
 
   if (isProduction) {
     throw new Error(
-      '[SECURITY] AUTH_STORAGE_SECRET environment variable is required in production. ' +
-        'AI key storage cannot be initialized without a secure key.',
+      '[SECURITY] Failed to initialize AI key storage in packaged runtime. ' +
+        'Provide AUTH_STORAGE_SECRET during build/deploy, or ensure userData is writable so a local .key can be created.',
     )
   }
 

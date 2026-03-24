@@ -26,6 +26,8 @@ const colors = {
   bold: '\x1b[1m'
 };
 
+const VALID_REPO_SLUGS = ['Xiuer-Chinese/Xiuer-live-tools', 'dashu521/Xiuer-live-tools'];
+
 function logPass(message) {
   console.log(`${colors.green}✅ PASS${colors.reset} ${message}`);
 }
@@ -49,6 +51,12 @@ function exec(command, options = {}) {
     if (options.ignoreError) return '';
     throw error;
   }
+}
+
+function getRepoWebUrl() {
+  const originUrl = exec('git remote get-url origin', { ignoreError: true });
+  const matchedSlug = VALID_REPO_SLUGS.find(slug => originUrl.includes(slug)) || VALID_REPO_SLUGS[0];
+  return `https://github.com/${matchedSlug}`;
 }
 
 // 读取 package.json 版本
@@ -166,7 +174,7 @@ async function main() {
 
   console.log(`${colors.cyan}${colors.bold}🔄 GitHub Actions 状态${colors.reset}`);
   console.log(`  Windows 构建已触发`);
-  console.log(`  查看地址: https://github.com/Xiuer-Chinese/Xiuer-live-tools/actions\n`);
+  console.log(`  查看地址: ${getRepoWebUrl()}/actions\n`);
 
   logNext('等待 Windows 构建完成后，执行检查:');
   console.log(`  ${colors.cyan}npm run publish:check${colors.reset}\n`);
