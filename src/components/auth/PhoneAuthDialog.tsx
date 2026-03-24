@@ -325,7 +325,11 @@ export function PhoneAuthDialog({
           window.dispatchEvent(new CustomEvent('auth:closeMainDialog'))
         }
       } else if (!result.success) {
-        const errorMsg = result.error || '验证码不对，请重新输入'
+        // [FIX] 防御性处理：error 可能是对象或字符串，统一转为字符串
+        const errorMsg =
+          typeof result.error === 'string'
+            ? result.error
+            : result.error?.message || result.error?.code || '验证码不对，请重新输入'
         setValidationError(errorMsg)
       } else {
         setValidationError('验证码不对，请重新输入')
