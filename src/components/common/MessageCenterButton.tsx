@@ -9,7 +9,7 @@ import {
   ShieldAlert,
   Sparkles,
 } from 'lucide-react'
-import { memo, useMemo, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -57,11 +57,78 @@ export const MessageCenterButton = memo(function MessageCenterButton() {
   const markRead = useMessageCenterStore(state => state.markRead)
   const markAllRead = useMessageCenterStore(state => state.markAllRead)
   const [open, setOpen] = useState(false)
+  const [isAttentionAnimating, setIsAttentionAnimating] = useState(false)
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null)
+  const previousUnreadRef = useRef<number | null>(null)
+  const animationTimerRef = useRef<number | null>(null)
+  const highlightTimerRef = useRef<number | null>(null)
 
   const displayCount = useMemo(() => {
     if (unreadCount <= 0) return null
     return unreadCount > 99 ? '99+' : String(unreadCount)
   }, [unreadCount])
+
+  useEffect(() => {
+    const previousUnread = previousUnreadRef.current
+    const hasIncreased =
+      initialized && previousUnread !== null && unreadCount > previousUnread && isAuthenticated
+
+    previousUnreadRef.current = unreadCount
+
+    if (!hasIncreased) {
+      return
+    }
+
+    if (animationTimerRef.current) {
+      window.clearTimeout(animationTimerRef.current)
+    }
+
+    setIsAttentionAnimating(false)
+    window.requestAnimationFrame(() => {
+      setIsAttentionAnimating(true)
+      animationTimerRef.current = window.setTimeout(() => {
+        setIsAttentionAnimating(false)
+        animationTimerRef.current = null
+      }, 900)
+    })
+  }, [initialized, isAuthenticated, unreadCount])
+
+  useEffect(() => {
+    return () => {
+      if (animationTimerRef.current) {
+        window.clearTimeout(animationTimerRef.current)
+      }
+      if (highlightTimerRef.current) {
+        window.clearTimeout(highlightTimerRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!open) {
+      setHighlightedMessageId(null)
+      if (highlightTimerRef.current) {
+        window.clearTimeout(highlightTimerRef.current)
+        highlightTimerRef.current = null
+      }
+      return
+    }
+
+    const latestUnread = items.find(item => !item.is_read)
+    if (!latestUnread) {
+      setHighlightedMessageId(null)
+      return
+    }
+
+    setHighlightedMessageId(latestUnread.id)
+    if (highlightTimerRef.current) {
+      window.clearTimeout(highlightTimerRef.current)
+    }
+    highlightTimerRef.current = window.setTimeout(() => {
+      setHighlightedMessageId(current => (current === latestUnread.id ? null : current))
+      highlightTimerRef.current = null
+    }, 1800)
+  }, [items, open])
 
   if (!isAuthenticated) {
     return null
@@ -73,13 +140,23 @@ export const MessageCenterButton = memo(function MessageCenterButton() {
         <Button
           variant="subtle"
           size="icon"
-          className="relative h-9 w-9 rounded-lg"
+          className={cn(
+            'relative h-9 w-9 rounded-lg',
+            isAttentionAnimating && 'message-center-button--animate',
+          )}
           aria-label="打开消息中心"
           title="消息中心"
         >
-          <Bell className="h-4 w-4" />
+          <Bell
+            className={cn('h-4 w-4', isAttentionAnimating && 'message-center-bell--animate')}
+          />
           {displayCount && (
-            <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-[var(--primary)] px-1.5 py-0.5 text-[10px] font-semibold leading-none text-[var(--on-primary)]">
+            <span
+              className={cn(
+                'absolute -right-1 -top-1 min-w-5 rounded-full bg-[var(--primary)] px-1.5 py-0.5 text-[10px] font-semibold leading-none text-[var(--on-primary)]',
+                isAttentionAnimating && 'message-center-badge--animate',
+              )}
+            >
               {displayCount}
             </span>
           )}
@@ -152,6 +229,7 @@ export const MessageCenterButton = memo(function MessageCenterButton() {
                     className={cn(
                       'flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition-colors duration-150 hover:bg-muted/60',
                       !item.is_read && 'bg-primary/5',
+                      highlightedMessageId === item.id && 'message-center-item--highlight',
                     )}
                     onClick={() => {
                       void markRead(item.id)

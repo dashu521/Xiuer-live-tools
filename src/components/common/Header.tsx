@@ -2,6 +2,7 @@ import { User } from 'lucide-react'
 import { memo, useCallback } from 'react'
 import { useAuthStore } from '@/stores/authStore'
 import { AccountSwitcher } from './AccountSwitcher'
+import { MessageCenterButton } from './MessageCenterButton'
 import { ThemeSelector } from './ThemeSelector'
 
 export const Header = memo(function Header() {
@@ -40,6 +41,7 @@ export const Header = memo(function Header() {
 
       <div className="flex min-w-0 items-center gap-2 md:gap-3">
         <ThemeSelector />
+        <MessageCenterButton />
 
         <div data-tour="account-switcher" className="w-[8.5rem] md:w-[12.5rem]">
           <AccountSwitcher />
