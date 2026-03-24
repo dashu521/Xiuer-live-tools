@@ -183,7 +183,11 @@ function auditApiConfig() {
         const isLocal = defaultUrl.includes('localhost') || defaultUrl.includes('127.0.0.1');
         const isFallback = content.includes('||') && isLocal;
 
-        if (isFallback && envApiUrl && !envApiUrl.includes('localhost') && !envApiUrl.includes('127.0.0.1')) {
+        const isProdDevFallback =
+          content.includes('import.meta.env.PROD') &&
+          (content.includes('http://localhost') || content.includes('127.0.0.1'))
+
+        if ((isFallback || isProdDevFallback) && envApiUrl && !envApiUrl.includes('localhost') && !envApiUrl.includes('127.0.0.1')) {
           // 环境变量已正确设置，fallback 只是安全网
           printItem('代码默认地址', `${defaultUrl} (fallback 模式)`, 'ok');
           console.log('   ℹ️  环境变量已正确设置，fallback 地址不会生效');

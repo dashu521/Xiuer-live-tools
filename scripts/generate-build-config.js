@@ -8,7 +8,7 @@
 const fs = require('fs')
 const path = require('path')
 
-const PRODUCTION_API = 'http://121.41.179.197:8000'
+const PRODUCTION_API = 'https://auth.xiuer.work'
 
 function main() {
   console.log('\n🔧 [generate-build-config] Generating build-time configuration...\n')
@@ -23,8 +23,12 @@ function main() {
     process.exit(1)
   }
 
-  if (authApiBaseUrl.includes('localhost') || authApiBaseUrl.includes('127.0.0.1')) {
-    console.error('❌ [generate-build-config] ERROR: API base URL cannot be localhost')
+  if (
+    authApiBaseUrl.includes('localhost') ||
+    authApiBaseUrl.includes('127.0.0.1') ||
+    !authApiBaseUrl.startsWith('https://')
+  ) {
+    console.error('❌ [generate-build-config] ERROR: API base URL must be a HTTPS production address')
     console.error(`   Current: ${authApiBaseUrl}`)
     console.error(`   Expected: ${PRODUCTION_API}`)
     process.exit(1)

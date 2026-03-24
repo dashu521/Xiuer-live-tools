@@ -235,7 +235,7 @@ function main() {
   // 历史构建复现建议
   console.log(`\n${colors.cyan}${colors.bold}📝 历史构建复现建议${colors.reset}\n`)
   console.log(`如果这台 Mac 之前成功构建过，请尝试复现：`)
-  console.log(`   export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000`)
+  console.log(`   export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work`)
   console.log(`   export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)`)
   console.log(`   npm run build`)
   console.log(`   npx electron-builder --mac --publish never`)

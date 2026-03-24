@@ -298,9 +298,13 @@ function checkEnv() {
   if (!apiBaseUrl) {
     log('VITE_AUTH_API_BASE_URL 未设置', 'BLOCKER', '发布时必须设置生产环境 API 地址');
     addBlocker('环境变量', 'VITE_AUTH_API_BASE_URL 未设置');
-  } else if (apiBaseUrl.includes('localhost') || apiBaseUrl.includes('127.0.0.1')) {
-    log('VITE_AUTH_API_BASE_URL 包含本地地址', 'BLOCKER', `当前值: ${apiBaseUrl}`);
-    addBlocker('环境变量', 'API 地址为本地地址', apiBaseUrl);
+  } else if (
+    apiBaseUrl.includes('localhost') ||
+    apiBaseUrl.includes('127.0.0.1') ||
+    !apiBaseUrl.startsWith('https://')
+  ) {
+    log('VITE_AUTH_API_BASE_URL 不是 HTTPS 生产地址', 'BLOCKER', `当前值: ${apiBaseUrl}`);
+    addBlocker('环境变量', 'API 地址不是 HTTPS 生产地址', apiBaseUrl);
   } else {
     log(`VITE_AUTH_API_BASE_URL: ${apiBaseUrl}`, 'PASS');
     addInfo('环境变量', `API 地址: ${apiBaseUrl}`);
@@ -382,12 +386,13 @@ function scanHighRiskContent() {
   }
 
   function isFallbackPattern(line) {
-    // 检测是否是 fallback 模式：env || 'localhost'
+    // 检测是否是 fallback 模式：env || 'localhost' 或 production/dev ternary fallback
     const fallbackPatterns = [
       /import\.meta\.env\.\w+.*\|\|.*localhost/,
       /process\.env\.\w+.*\|\|.*localhost/,
       /\|\|.*localhost/,
-      /\|\|.*127\.0\.0\.1/
+      /\|\|.*127\.0\.0\.1/,
+      /import\.meta\.env\.PROD.*localhost/,
     ];
     return fallbackPatterns.some(p => p.test(line));
   }
@@ -411,7 +416,7 @@ function scanHighRiskContent() {
             };
 
             // 特殊处理 src/config/authApiBase.ts（兼容 Windows 路径）
-            if ((filePath.includes('src/config/authApiBase.ts') || filePath.includes('src\\config\\authApiBase.ts')) && finding.isFallback) {
+            if ((filePath.includes('src/config/authApiBase.ts') || filePath.includes('src\\config\\authApiBase.ts')) && (finding.isFallback || line.includes('localhost'))) {
               // 如果环境变量已设置且不是 localhost
               const apiBaseUrl = process.env.VITE_AUTH_API_BASE_URL;
               if (apiBaseUrl && !apiBaseUrl.includes('localhost') && !apiBaseUrl.includes('127.0.0.1')) {

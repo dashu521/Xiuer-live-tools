@@ -25,7 +25,7 @@ const colors = {
   bold: '\x1b[1m'
 };
 
-const PRODUCTION_API = 'http://121.41.179.197:8000';
+const PRODUCTION_API = 'https://auth.xiuer.work';
 
 let step = 0;
 
@@ -207,8 +207,12 @@ async function main() {
     process.exit(1);
   }
 
-  if (apiBaseUrl.includes('localhost') || apiBaseUrl.includes('127.0.0.1')) {
-    logFail('VITE_AUTH_API_BASE_URL 不能是本地地址');
+  if (
+    apiBaseUrl.includes('localhost') ||
+    apiBaseUrl.includes('127.0.0.1') ||
+    !apiBaseUrl.startsWith('https://')
+  ) {
+    logFail('VITE_AUTH_API_BASE_URL 必须是 HTTPS 生产地址');
     logInfo(`当前值: ${apiBaseUrl}`);
     logInfo(`\n${colors.yellow}请设置为生产地址:${colors.reset}`);
     logInfo(`  export VITE_AUTH_API_BASE_URL=${PRODUCTION_API}`);

@@ -21,7 +21,7 @@
 |------|--------|--------|------|
 | `import.meta.env.VITE_*` | ✅ 渲染进程可用 | ✅ 渲染进程可用（构建时替换） | Vite 在构建时会将值硬编码到代码中 |
 | `process.env.VITE_*` | ❌ 主进程不可用 | ❌ 主进程不可用 | 主进程不经过 Vite 处理 |
-| `process.env.AUTH_STORAGE_SECRET` | ⚠️ 可选（有 fallback） | ✅ 必须显式设置 | 生产环境合规要求 |
+| `process.env.AUTH_STORAGE_SECRET` | ⚠️ 可选（有 fallback） | ✅ 构建/服务端必须显式设置 | 终端用户客户端运行时允许本地设备密钥 |
 
 ### 1.2 主进程配置读取方式
 
@@ -119,7 +119,8 @@ const userDataPath = app.getPath('userData')
 | 环境 | 要求 | 行为 |
 |------|------|------|
 | 开发态 | 可选 | 未设置时使用 fallback 密钥 + 警告日志 |
-| 生产态 | **必须显式设置** | 未设置视为发布不合规；当前代码中的自动生成/兜底逻辑仅用于排障，不作为正式发布路径 |
+| 生产态（服务端 / CI / 打包链路） | **必须显式设置** | 未设置视为发布不合规 |
+| 生产态（终端用户客户端运行时） | 允许首次生成本地 `.key` | 依赖 `userData/auth/.key` 作为设备密钥；不要求终端用户手工配置环境变量 |
 
 **解决方案**：
 
@@ -128,11 +129,11 @@ const userDataPath = app.getPath('userData')
    export AUTH_STORAGE_SECRET="your-secure-key"
    ```
 
-2. **仅排障兜底，不作为生产规范**：代码自动生成并存储
+2. **客户端运行时允许的设备兜底**：代码自动生成并存储
    ```typescript
    // CloudAuthStorage.ts 已实现
    // 当前实现可能自动生成随机密钥存储到 userData/auth/.key
-   // 该行为不视为满足生产发布规范
+   // 这不替代 CI/打包链路的显式密钥配置，但允许终端用户客户端首次运行
    ```
 
 ### 3.2 Token 存储位置

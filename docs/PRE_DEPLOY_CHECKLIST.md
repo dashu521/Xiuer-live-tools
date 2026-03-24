@@ -75,7 +75,7 @@ CORS_ORIGINS=http://localhost:3000,*
 
 **生产环境 API 地址（规范）**：
 ```bash
-export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
+export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
 ```
 
 **风险**: 
@@ -86,7 +86,7 @@ export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
 **正确示例**:
 ```bash
 # ✅ 正确
-export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
+export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
 
 # ❌ 错误（禁止发布）
 export VITE_AUTH_API_BASE_URL=http://localhost:8000

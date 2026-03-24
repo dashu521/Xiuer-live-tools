@@ -68,7 +68,7 @@
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
 │  步骤 1: 本地 Mac 构建                                                    │
-│  ├── export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>        │
+│  ├── export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work               │
 │  ├── npm run release:mac                                                 │
 │  └── 产物: release/<version>/*.dmg + latest-mac.yml                      │
 │                                                                         │
@@ -310,7 +310,7 @@ echo $VITE_AUTH_API_BASE_URL
 ### 构建步骤（任何 Mac 均可执行）
 ```bash
 # 步骤 1：设置 API 地址（必须是 HTTPS 生产地址）
-export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
+export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
 
 # 步骤 2：执行构建
 npm run build
@@ -338,8 +338,8 @@ ls -la release/*/mac*/
 
 | 环境变量 | 生产环境值 | 说明 |
 |----------|------------|------|
-| `VITE_AUTH_API_BASE_URL` | `https://<your-auth-api-domain>` | 生产认证/管理 API 的 HTTPS 地址，禁止裸 IP 明文 HTTP |
-| `AUTH_STORAGE_SECRET` | 32+ 字符高熵随机字符串 | 主进程安全存储密钥；正式发布必须显式注入，不能依赖运行时兜底 |
+| `VITE_AUTH_API_BASE_URL` | `https://auth.xiuer.work` | 生产认证/管理 API 的 HTTPS 地址，禁止裸 IP 明文 HTTP |
+| `AUTH_STORAGE_SECRET` | 32+ 字符高熵随机字符串 | 服务端 / CI / 打包链路必须显式注入；终端用户客户端运行时允许首次生成本地 `.key` |
 
 ### 强制要求
 
@@ -347,7 +347,7 @@ ls -la release/*/mac*/
 
 ```bash
 # ✅ 正确：显式设置生产环境 HTTPS API 地址
-export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
+export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
 export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
 npm run release
 
@@ -398,7 +398,7 @@ echo $VITE_AUTH_API_BASE_URL
 [ -n "$AUTH_STORAGE_SECRET" ] && echo "AUTH_STORAGE_SECRET is set"
 
 # 预期输出
-https://<your-auth-api-domain>
+https://auth.xiuer.work
 
 # 执行阻断检查
 npm run release:guard
@@ -591,7 +591,7 @@ git commit -m "chore: prepare release vX.X.X"
 
 **解决方案**：
 ```bash
-export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
+export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
 ```
 
 ### 3. 未设置 AUTH_STORAGE_SECRET
