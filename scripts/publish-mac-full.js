@@ -144,7 +144,7 @@ function main() {
     
     log('发布摘要:', 'info');
     log(`  版本: ${tag}`, 'info');
-    log(`  GitHub Release: https://github.com/Xiuer-Chinese/Xiuer-live-tools/releases/tag/${tag}`, 'cyan');
+    log(`  GitHub Release: https://github.com/dashu521/Xiuer-live-tools/releases/tag/${tag}`, 'cyan');
     log(`  CDN 下载地址: https://download.xiuer.work/releases/latest/`, 'cyan');
     
     log('\n已发布文件:', 'info');
