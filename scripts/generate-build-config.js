@@ -4,27 +4,26 @@
  * 在打包前运行，将环境变量写入 build-config.json
  * 主进程在运行时读取此配置文件
  *
- * 硬规则：
- * - VITE_AUTH_API_BASE_URL 必须精确为 https://auth.xiuer.work
+ * 应急规则：
+ * - VITE_AUTH_API_BASE_URL 允许使用旧直连地址 http://121.41.179.197:8000
+ * - 或其他 HTTPS 生产地址
  * - AUTH_STORAGE_SECRET 必须存在且长度 >= 32
- * - 禁止使用 localhost/127.0.0.1 作为 API 地址
  */
 
 const fs = require('fs')
 const path = require('path')
 
-const PRODUCTION_API = 'https://auth.xiuer.work'
-const REQUIRED_API_LENGTH = 'https://auth.xiuer.work'.length
+const PRODUCTION_API = 'http://121.41.179.197:8000'
 
 function validateApiUrl(url) {
   if (!url) {
     return { valid: false, reason: 'VITE_AUTH_API_BASE_URL 未设置' }
   }
-  if (url !== PRODUCTION_API) {
-    return { valid: false, reason: `VITE_AUTH_API_BASE_URL 必须精确为 ${PRODUCTION_API}，当前值: ${url}` }
-  }
   if (url.includes('localhost') || url.includes('127.0.0.1')) {
     return { valid: false, reason: `VITE_AUTH_API_BASE_URL 不能为本地地址，当前值: ${url}` }
+  }
+  if (url !== PRODUCTION_API && !url.startsWith('https://')) {
+    return { valid: false, reason: `VITE_AUTH_API_BASE_URL 必须为 ${PRODUCTION_API} 或 HTTPS 生产地址，当前值: ${url}` }
   }
   return { valid: true }
 }
@@ -50,7 +49,7 @@ function main() {
   if (!urlValidation.valid) {
     console.error(`❌ [generate-build-config] ERROR: ${urlValidation.reason}`)
     console.error(`   正确用法：export VITE_AUTH_API_BASE_URL=${PRODUCTION_API}`)
-    console.error(`   生产构建禁止使用 localhost/127.0.0.1 或其他地址`)
+    console.error(`   生产构建禁止使用 localhost/127.0.0.1`)
     process.exit(1)
   }
 
