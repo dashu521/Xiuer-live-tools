@@ -1,4 +1,11 @@
-# 秀儿直播助手 - 发布规范 v2.4
+# 秀儿直播助手 - 发布规范 v2.5
+
+> **当前正式版本**: v1.5.1  
+> **当前正式 API 基线**: `http://121.41.179.197:8000`  
+> **最后更新**: 2026-03-27  
+> **历史版本**: v1.5.0 对应旧 API 基线 `https://auth.xiuer.work`，仅作为历史记录保留
+
+---
 
 ## 三层发布结构
 
@@ -342,10 +349,16 @@ ls -la release/*/mac*/
 
 | 环境变量 | 生产环境值 | 说明 |
 |----------|------------|------|
-| `VITE_AUTH_API_BASE_URL` | `https://auth.xiuer.work` | 生产认证/管理 API 的 HTTPS 地址，**禁止裸 IP 明文 HTTP**，禁止使用示例占位符 |
+| `VITE_AUTH_API_BASE_URL` | `http://121.41.179.197:8000` | **当前正式生产 API 地址** (v1.5.1 起) |
 | `AUTH_STORAGE_SECRET` | 32+ 字符高熵随机字符串 | 主进程安全存储密钥；正式发布必须显式注入，不能依赖运行时兜底 |
 
-> **地址已固化**：`https://auth.xiuer.work` 是当前唯一认可的生产 API 地址，不再允许使用 `https://<your-auth-api-domain>` 等示例写法。
+> **⚠️ 重要变更 (v1.5.1)**: 生产 API 基线已从 `https://auth.xiuer.work` 切回 `http://121.41.179.197:8000`。
+> 
+> **历史记录**:
+> - v1.5.1 (当前): `http://121.41.179.197:8000` - 当前正式生产 API 地址
+> - v1.5.0: `https://auth.xiuer.work` - 旧基线，仅作为历史记录保留
+>
+> **发布前必须验证**: API 基线真实可用，域名可解析，服务可访问。
 
 ### 强制要求
 
@@ -392,14 +405,15 @@ export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
 代码中存在 `import.meta.env.VITE_AUTH_API_BASE_URL || 'localhost'` 的 fallback 模式：
 
 - **开发环境**：fallback 模式允许本地调试更方便
-- **发布构建**：当环境变量正确设置时，fallback 不会生效，构建产物使用 `https://auth.xiuer.work`
+- **发布构建**：当环境变量正确设置时，fallback 不会生效，构建产物使用 `http://121.41.179.197:8000`
 - **风险控制**：若未设置环境变量，renderer 会 fallback 到 `http://localhost:8000`，**这是发布阻断项**
 - **开发/生产区分**：
 
 | 环境 | 允许的 API 地址 | 说明 |
 |------|----------------|------|
 | 开发环境（`npm run dev`） | `http://localhost:8000` / `http://127.0.0.1:8000` | 仅限本地调试 |
-| 生产构建 | `https://auth.xiuer.work` | **禁止 localhost/127.0.0.1** |
+| 生产构建 (v1.5.1+) | `http://121.41.179.197:8000` | **当前正式生产 API 地址** |
+| 生产构建 (v1.5.0) | `https://auth.xiuer.work` | 旧基线，仅历史记录 |
 
 #### 4. Release Guard 检查机制
 
@@ -408,7 +422,7 @@ Release Guard (`scripts/release-guard.js`) 在发布前执行以下检查：
 | 检查项 | 级别 | 行为 |
 |--------|------|------|
 | `VITE_AUTH_API_BASE_URL` 未设置 | BLOCKER | 阻止发布 |
-| `VITE_AUTH_API_BASE_URL` 值不为 `https://auth.xiuer.work` | BLOCKER | 阻止发布 |
+| `VITE_AUTH_API_BASE_URL` 值不为 `http://121.41.179.197:8000` | BLOCKER | 阻止发布 |
 | `VITE_AUTH_API_BASE_URL` 包含 localhost | BLOCKER | 阻止发布 |
 | `VITE_AUTH_API_BASE_URL` 包含 127.0.0.1 | BLOCKER | 阻止发布 |
 | `AUTH_STORAGE_SECRET` 未设置 | BLOCKER | 阻止发布 |
@@ -420,10 +434,49 @@ Release Guard (`scripts/release-guard.js`) 在发布前执行以下检查：
 
 | 违规场景 | 处理方式 |
 |----------|----------|
-| 未设置 VITE_AUTH_API_BASE_URL | Release Guard 拦截，提示设置 `https://auth.xiuer.work` |
-| VITE_AUTH_API_BASE_URL 值不正确（非 `https://auth.xiuer.work`） | Release Guard 拦截，提示必须为 `https://auth.xiuer.work` |
-| 使用 localhost/127.0.0.1 作为环境变量值 | Release Guard 拦截，提示使用 `https://auth.xiuer.work` |
+| 未设置 VITE_AUTH_API_BASE_URL | Release Guard 拦截，提示设置 `http://121.41.179.197:8000` |
+| VITE_AUTH_API_BASE_URL 值不正确（非 `http://121.41.179.197:8000`） | Release Guard 拦截，提示必须为 `http://121.41.179.197:8000` |
+| 使用 localhost/127.0.0.1 作为环境变量值 | Release Guard 拦截，提示使用 `http://121.41.179.197:8000` |
 | 未设置 AUTH_STORAGE_SECRET | Release Guard 与构建脚本拦截，禁止回退到开发态默认密钥 |
+
+---
+
+## v1.5.1 发布经验与教训
+
+### 本次发布关键经验
+
+#### 1. API 基线必须真实可用
+- **教训**: 不能把不可访问的域名 (`https://auth.xiuer.work`) 当生产基线
+- **措施**: 发布前必须验证 API 基线真实可用，域名可解析，服务可访问
+- **当前**: v1.5.1 已切回 `http://121.41.179.197:8000`
+
+#### 2. 发布门禁必须先通过再发版
+- **教训**: release:guard / publish 脚本需要先过门禁再发版
+- **措施**: 严格执行 `npm run release:guard`，任何 BLOCKER 都不能跳过
+- **当前**: v1.5.1 已通过全部门禁检查
+
+#### 3. 版本号升级规则
+- **教训**: 若旧 tag 已推远端且新代码不同，必须升级版本号，不能强改旧 tag
+- **措施**: v1.5.0 保留为历史记录，v1.5.1 作为新正式版本
+- **当前**: v1.5.0 → v1.5.1 已按 patch 升级
+
+#### 4. 延期项隔离
+- **教训**: 延期项必须先隔离，不能带着脏工作区 merge main
+- **措施**: 51 个延期文件已隔离到 `feature/v1.5.1-enhancements` 分支
+- **当前**: main 分支干净，只包含 v1.5.1 正式功能
+
+#### 5. 质量门禁
+- **教训**: TypeScript/lint/test 必须在 main 上最终全部通过后再发布
+- **措施**: v1.5.1 发布前 lint ✅ test ✅ tsc ✅ 全部通过
+- **当前**: 构建产物已验证可用
+
+### 版本历史记录
+
+| 版本 | API 基线 | 状态 | 说明 |
+|------|----------|------|------|
+| v1.5.1 | `http://121.41.179.197:8000` | ✅ 当前正式版本 | 切回 IP 基线，修复域名不可访问问题 |
+| v1.5.0 | `https://auth.xiuer.work` | 📋 历史记录 | 旧基线，仅作为版本历史保留 |
+| v1.4.7 | - | 📋 历史记录 | 上一稳定版本 |
 | renderer fallback 到 localhost:8000 | **发布阻断项**，构建产物不可发布，必须重新设置环境变量后重建 |
 | electron/main 中存在 localhost fallback | 视为高风险，Release Guard 拦截 |
 
