@@ -8,10 +8,9 @@
  */
 
 import { EventEmitter } from 'node:events'
-import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { createLogger, type ScopedLogger } from '#/logger'
+import { emitAccountEvent } from '#/services/AccountEventBus'
 import { taskRuntimeMonitor } from '#/services/TaskRuntimeMonitor'
-import windowManager from '#/windowManager'
 
 export type ControlState = 'connected' | 'disconnected'
 export type StreamState = 'live' | 'offline' | 'unknown'
@@ -146,7 +145,16 @@ export class AccountScopedRuntimeManager extends EventEmitter {
     runtime.streamState = 'offline'
 
     // 发送 streamStateChanged 事件到前端
-    windowManager.send(IPC_CHANNELS.tasks.liveControl.streamStateChanged, accountId, 'offline')
+    const payload = {
+      accountId,
+      streamState: 'offline',
+    } as const
+    emitAccountEvent({
+      domain: 'liveControl',
+      type: 'streamStateChanged',
+      accountId,
+      payload,
+    })
     taskRuntimeMonitor.logEventCustom('STREAM_ENDED', accountId, { reason })
 
     this.emit(EVENTS.TASKS_STOPPED, accountId, reason)
@@ -176,7 +184,16 @@ export class AccountScopedRuntimeManager extends EventEmitter {
     runtime.isDisconnected = true
 
     // 发送 disconnectedEvent
-    windowManager.send(IPC_CHANNELS.tasks.liveControl.disconnectedEvent, accountId, reason)
+    const payload = {
+      accountId,
+      reason,
+    } as const
+    emitAccountEvent({
+      domain: 'liveControl',
+      type: 'disconnected',
+      accountId,
+      payload,
+    })
     taskRuntimeMonitor.logEventCustom('CONTROL_DETACHED', accountId, { reason })
 
     runtime.isDisconnecting = false
@@ -197,7 +214,16 @@ export class AccountScopedRuntimeManager extends EventEmitter {
     runtime.streamState = 'offline'
 
     // 发送 streamStateChanged
-    windowManager.send(IPC_CHANNELS.tasks.liveControl.streamStateChanged, accountId, 'offline')
+    const payload = {
+      accountId,
+      streamState: 'offline',
+    } as const
+    emitAccountEvent({
+      domain: 'liveControl',
+      type: 'streamStateChanged',
+      accountId,
+      payload,
+    })
 
     // 断开控制
     await this.detachControl(accountId, reason)

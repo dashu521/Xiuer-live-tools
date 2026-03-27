@@ -1,15 +1,18 @@
 import { useMemoizedFn } from 'ahooks'
 import {
+  CheckCircle2,
   EraserIcon,
   FolderSearchIcon,
   Globe,
+  Loader2,
+  RefreshCw,
   SearchIcon,
   ShieldAlert,
   TrashIcon,
+  TriangleAlert,
 } from 'lucide-react'
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
-import { SimpleIconsGooglechrome, SimpleIconsMicrosoftedge } from '@/components/icons/simpleIcons'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,10 +24,11 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Switch } from '@/components/ui/switch'
 import {
   AUTH_LAST_IDENTIFIER_KEY,
@@ -32,19 +36,65 @@ import {
   AUTH_ZUSTAND_PERSIST_KEY,
 } from '@/constants/authStorageKeys'
 import { useAccounts } from '@/hooks/useAccounts'
-import { useCurrentChromeConfig, useCurrentChromeConfigActions } from '@/hooks/useChromeConfig'
+import {
+  useCurrentChromeConfig,
+  useCurrentChromeConfigActions,
+  useCurrentSelectedBrowser,
+} from '@/hooks/useChromeConfig'
 import { useCurrentLiveControl } from '@/hooks/useLiveControl'
 import { useToast } from '@/hooks/useToast'
 import { useAuthStore } from '@/stores/authStore'
 import { SettingRow } from './SettingRow'
 
 export function CoreConfigCard() {
-  const path = useCurrentChromeConfig(context => context.path)
-  const { setPath, setStorageState } = useCurrentChromeConfigActions()
-  const [isDetecting, setIsDetecting] = useState(false)
+  const browsers = useCurrentChromeConfig(context => context.browsers)
+  const selectedBrowserId = useCurrentChromeConfig(context => context.selectedBrowserId)
+  const selectedBrowser = useCurrentSelectedBrowser()
+  const { setPath, setStorageState, setBrowsers, setSelectedBrowser, updateBrowserStatus } =
+    useCurrentChromeConfigActions()
+  const [isRefreshingBrowsers, setIsRefreshingBrowsers] = useState(false)
+  const [isTestingBrowser, setIsTestingBrowser] = useState(false)
   const [edgeFirst, setEdgeFirst] = useState(false)
   const { toast } = useToast()
   const edgeFirstId = useId()
+
+  const refreshBrowsers = useMemoizedFn(async (silent = false) => {
+    try {
+      setIsRefreshingBrowsers(true)
+      const detectedBrowsers = await window.ipcRenderer.invoke(
+        IPC_CHANNELS.chrome.listBrowsers,
+        edgeFirst,
+      )
+      setBrowsers(detectedBrowsers)
+
+      if (!silent) {
+        toast.success({
+          title: detectedBrowsers.length > 0 ? '浏览器列表已更新' : '未检测到浏览器',
+          description:
+            detectedBrowsers.length > 0
+              ? '已更新可用浏览器列表，请选择要连接的浏览器。'
+              : '未检测到可用浏览器，你也可以手动导入自定义浏览器。',
+          dedupeKey: 'browser-list-refreshed',
+        })
+      }
+    } catch {
+      if (!silent) {
+        toast.error({
+          title: '检测失败',
+          description: '浏览器检测失败，请稍后重试。',
+          dedupeKey: 'browser-list-refresh-failed',
+        })
+      }
+    } finally {
+      setIsRefreshingBrowsers(false)
+    }
+  })
+
+  useEffect(() => {
+    if (browsers.length === 0) {
+      void refreshBrowsers(true)
+    }
+  }, [browsers.length, refreshBrowsers])
 
   const handleSelectChrome = async () => {
     try {
@@ -66,32 +116,49 @@ export function CoreConfigCard() {
     }
   }
 
-  const handleAutoDetect = async () => {
+  const handleTestSelectedBrowser = async () => {
+    if (!selectedBrowser) {
+      toast.warning({
+        title: '请先选择浏览器',
+        description: '先从浏览器列表中选择一个浏览器，再进行测试。',
+        dedupeKey: 'browser-test-missing-selection',
+      })
+      return
+    }
+
     try {
-      setIsDetecting(true)
-      const result = await window.ipcRenderer.invoke(IPC_CHANNELS.chrome.getPath, edgeFirst)
-      if (result) {
-        setPath(result)
+      setIsTestingBrowser(true)
+      const result = await window.ipcRenderer.invoke(
+        IPC_CHANNELS.chrome.testBrowser,
+        selectedBrowser.path,
+      )
+
+      updateBrowserStatus(selectedBrowser.id, {
+        status: result.success ? 'verified' : 'failed',
+        lastError: result.success ? null : result.error || '浏览器启动失败',
+      })
+
+      if (result.success) {
         toast.success({
-          title: '已自动检测到浏览器',
-          description: '浏览器路径已自动填入。',
-          dedupeKey: 'chrome-path-detected',
+          title: '浏览器测试通过',
+          description: `${selectedBrowser.name} 可以正常启动，可用于连接直播中控台。`,
+          dedupeKey: `browser-test-success:${selectedBrowser.id}`,
         })
       } else {
-        toast.warning({
-          title: '未检测到浏览器',
-          description: '请先打开 Chrome 或 Edge，再点击自动检测。',
-          dedupeKey: 'chrome-path-not-found',
+        toast.error({
+          title: '浏览器测试失败',
+          description: result.error || '浏览器无法正常启动，请尝试切换其他浏览器。',
+          dedupeKey: `browser-test-failed:${selectedBrowser.id}`,
         })
       }
     } catch {
       toast.error({
-        title: '自动检测失败',
-        description: '浏览器路径检测失败，请稍后重试。',
-        dedupeKey: 'chrome-path-detect-failed',
+        title: '测试失败',
+        description: '浏览器测试失败，请稍后重试。',
+        dedupeKey: 'browser-test-error',
       })
     } finally {
-      setIsDetecting(false)
+      setIsTestingBrowser(false)
     }
   }
 
@@ -142,17 +209,38 @@ export function CoreConfigCard() {
           </div>
 
           <div className="pl-3 space-y-4">
-            {/* 检测按钮和 Edge 优先 */}
-            <div className="flex flex-wrap items-center gap-4">
+            <div className="flex flex-wrap items-center gap-3">
               <Button
                 variant="default"
                 size="sm"
-                onClick={handleAutoDetect}
-                disabled={isDetecting}
+                onClick={() => void refreshBrowsers()}
+                disabled={isRefreshingBrowsers}
                 className="h-9"
               >
-                <SearchIcon className={`mr-2 h-4 w-4 ${isDetecting ? 'animate-spin' : ''}`} />
-                {isDetecting ? '检测中...' : '自动检测'}
+                {isRefreshingBrowsers ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                )}
+                {isRefreshingBrowsers ? '检测中...' : '刷新列表'}
+              </Button>
+              <Button variant="outline" size="sm" className="h-9" onClick={handleSelectChrome}>
+                <FolderSearchIcon className="mr-2 h-4 w-4" />
+                导入自定义浏览器
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-9"
+                onClick={handleTestSelectedBrowser}
+                disabled={!selectedBrowser || isTestingBrowser}
+              >
+                {isTestingBrowser ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <SearchIcon className="mr-2 h-4 w-4" />
+                )}
+                {isTestingBrowser ? '测试中...' : '测试当前浏览器'}
               </Button>
               <div className="flex items-center gap-2">
                 <Switch id={edgeFirstId} checked={edgeFirst} onCheckedChange={setEdgeFirst} />
@@ -165,37 +253,70 @@ export function CoreConfigCard() {
               </div>
             </div>
 
-            {/* 路径输入和浏览 */}
-            <div className="flex flex-col items-stretch gap-3 md:flex-row md:items-center">
-              <Input
-                value={path}
-                onChange={e => setPath(e.target.value)}
-                placeholder="浏览器可执行文件路径"
-                className="font-mono text-sm h-10 flex-1 min-w-0"
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-10 shrink-0 px-4"
-                onClick={handleSelectChrome}
-              >
-                <FolderSearchIcon className="mr-2 h-4 w-4" />
-                浏览
-              </Button>
+            <div className="rounded-xl border bg-muted/20">
+              <div className="border-b px-4 py-3">
+                <div className="text-sm font-medium">浏览器选择</div>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  连接直播中控台时将优先使用这里选中的浏览器。
+                </div>
+              </div>
+
+              {browsers.length > 0 ? (
+                <RadioGroup
+                  value={selectedBrowserId}
+                  onValueChange={value => setSelectedBrowser(value)}
+                  className="p-3"
+                >
+                  {browsers.map(browser => (
+                    <label
+                      key={browser.id}
+                      className="flex cursor-pointer items-start gap-3 rounded-lg border px-3 py-3 transition-colors hover:bg-muted/50"
+                    >
+                      <RadioGroupItem value={browser.id} className="mt-1" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-medium">{browser.name}</span>
+                          {browser.source === 'manual' && <Badge variant="outline">自定义</Badge>}
+                          {browser.status === 'verified' && (
+                            <Badge className="bg-emerald-600 hover:bg-emerald-600">
+                              <CheckCircle2 className="mr-1 h-3 w-3" />
+                              已验证
+                            </Badge>
+                          )}
+                          {browser.status === 'failed' && (
+                            <Badge variant="destructive">
+                              <TriangleAlert className="mr-1 h-3 w-3" />
+                              启动失败
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                          {browser.path}
+                        </div>
+                        {browser.lastError && browser.status === 'failed' && (
+                          <div className="mt-2 text-xs text-destructive">{browser.lastError}</div>
+                        )}
+                      </div>
+                    </label>
+                  ))}
+                </RadioGroup>
+              ) : (
+                <div className="px-4 py-6 text-sm text-muted-foreground">
+                  还没有检测到浏览器。你可以点击上方“刷新列表”，或者导入自定义浏览器。
+                </div>
+              )}
             </div>
 
-            {/* 支持的浏览器提示 */}
-            <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-              <span>支持：</span>
-              <span className="flex items-center gap-1">
-                <SimpleIconsGooglechrome className="w-3.5 h-3.5" />
-                Chrome
-              </span>
-              <span className="text-muted-foreground/50">|</span>
-              <span className="flex items-center gap-1">
-                <SimpleIconsMicrosoftedge className="w-3.5 h-3.5" />
-                Edge
-              </span>
+            <div className="rounded-lg bg-muted/50 px-3 py-3 text-sm text-muted-foreground">
+              <div>推荐浏览器：Edge、Chrome</div>
+              <div className="mt-1">
+                也支持导入 Brave、360 极速浏览器、搜狗浏览器等 Chromium 内核浏览器。
+              </div>
+              {selectedBrowser && (
+                <div className="mt-2 text-foreground">
+                  当前默认浏览器：<span className="font-medium">{selectedBrowser.name}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>

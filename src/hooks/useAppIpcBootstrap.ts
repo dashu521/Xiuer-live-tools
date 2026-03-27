@@ -1,7 +1,13 @@
-import { useEffect } from 'react'
+import { createElement } from 'react'
+import type { AccountEventPayload } from 'shared/accountEvents'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
+import type {
+  LiveControlDisconnectedPayload,
+  LiveControlStreamStatePayload,
+} from 'shared/liveControlEvents'
 import type { StreamStatus } from 'shared/streamStatus'
-import { useAccounts } from '@/hooks/useAccounts'
+import type { TaskStoppedEventPayload } from 'shared/taskEvents'
+import { Button } from '@/components/ui/button'
 import { useAutoMessageStore } from '@/hooks/useAutoMessage'
 import { useAutoPopUpStore } from '@/hooks/useAutoPopUp'
 import { useAutoReply, useAutoReplyStore } from '@/hooks/useAutoReply'
@@ -16,10 +22,211 @@ import { markCommentListenerStopped } from '@/utils/commentListenerRuntime'
 import { getFriendlyErrorMessage } from '@/utils/errorMessages'
 import { stopAllLiveTasks } from '@/utils/stopAllLiveTasks'
 
+export function applyAutoMessageStoppedEvent(
+  payload: TaskStoppedEventPayload,
+  deps: {
+    setIsRunningAutoMessage: (accountId: string, running: boolean) => void
+    syncStatus: (taskId: 'autoSpeak', status: 'stopped', accountId: string) => void
+  },
+) {
+  deps.setIsRunningAutoMessage(payload.accountId, false)
+  deps.syncStatus('autoSpeak', 'stopped', payload.accountId)
+}
+
+export function applyAutoPopupStoppedEvent(
+  payload: TaskStoppedEventPayload,
+  deps: {
+    setIsRunningAutoPopUp: (accountId: string, running: boolean) => void
+    syncStatus: (taskId: 'autoPopup', status: 'stopped', accountId: string) => void
+  },
+) {
+  deps.setIsRunningAutoPopUp(payload.accountId, false)
+  deps.syncStatus('autoPopup', 'stopped', payload.accountId)
+}
+
+export function applyCommentListenerStoppedEvent(
+  payload: TaskStoppedEventPayload,
+  deps: {
+    markCommentListenerStopped: (accountId: string) => void
+    setIsListening: (accountId: string, status: 'stopped') => void
+    setIsRunningAutoReply: (accountId: string, running: boolean) => void
+    setLiveStatsListening: (accountId: string, listening: boolean) => void
+    syncStatus: (taskId: 'autoReply', status: 'stopped', accountId: string) => void
+  },
+) {
+  deps.markCommentListenerStopped(payload.accountId)
+  deps.setIsListening(payload.accountId, 'stopped')
+  deps.setIsRunningAutoReply(payload.accountId, false)
+  deps.setLiveStatsListening(payload.accountId, false)
+  deps.syncStatus('autoReply', 'stopped', payload.accountId)
+}
+
+export async function applyDisconnectedLiveControlEvent(
+  payload: LiveControlDisconnectedPayload,
+  deps: {
+    getConnectState: (
+      accountId: string,
+    ) =>
+      | { status?: 'disconnected' | 'connecting' | 'connected' | 'error'; phase?: string }
+      | undefined
+    showErrorToast: (accountId: string, reason: string, isErrorState: boolean) => void
+    stopAllTasks: (accountId: string) => Promise<void>
+  },
+) {
+  const reasonStr = payload.reason || ''
+  const isFatalDisconnect =
+    reasonStr.includes('browser has been closed') ||
+    reasonStr.includes('连接已取消') ||
+    reasonStr.includes('连接超时') ||
+    reasonStr.includes('网络连接失败')
+
+  const currentStatus = deps.getConnectState(payload.accountId)
+  if (currentStatus?.phase === 'waiting_for_login' && !isFatalDisconnect) {
+    return { ignored: true }
+  }
+
+  if (payload.reason && !reasonStr.includes('用户主动断开')) {
+    deps.showErrorToast(payload.accountId, payload.reason, currentStatus?.status === 'error')
+  }
+
+  await deps.stopAllTasks(payload.accountId)
+  return { ignored: false }
+}
+
+export async function applyStreamStateChangedEvent(
+  payload: LiveControlStreamStatePayload,
+  deps: {
+    getPreviousStreamState: (accountId: string) => StreamStatus | undefined
+    setStreamState: (accountId: string, streamState: StreamStatus) => void
+    stopAllTasksForStreamEnd: (accountId: string) => Promise<void>
+  },
+) {
+  const prevState = deps.getPreviousStreamState(payload.accountId)
+  deps.setStreamState(payload.accountId, payload.streamState)
+
+  if (prevState === 'live' && payload.streamState !== 'live') {
+    await deps.stopAllTasksForStreamEnd(payload.accountId)
+  }
+}
+
+export async function applyAccountEvent(
+  event: AccountEventPayload,
+  deps: {
+    task: {
+      setIsRunningAutoMessage: (accountId: string, running: boolean) => void
+      setIsRunningAutoPopUp: (accountId: string, running: boolean) => void
+      markCommentListenerStopped: (accountId: string) => void
+      setIsListening: (accountId: string, status: 'stopped') => void
+      setIsRunningAutoReply: (accountId: string, running: boolean) => void
+      setLiveStatsListening: (accountId: string, listening: boolean) => void
+      syncStatus: (
+        taskId: 'autoSpeak' | 'autoPopup' | 'autoReply',
+        status: 'stopped',
+        accountId: string,
+      ) => void
+    }
+    liveControl: {
+      getConnectState: (
+        accountId: string,
+      ) =>
+        | { status?: 'disconnected' | 'connecting' | 'connected' | 'error'; phase?: string }
+        | undefined
+      showErrorToast: (accountId: string, reason: string, isErrorState: boolean) => void
+      stopAllTasks: (accountId: string) => Promise<void>
+      getPreviousStreamState: (accountId: string) => StreamStatus | undefined
+      setStreamState: (accountId: string, streamState: StreamStatus) => void
+      stopAllTasksForStreamEnd: (accountId: string) => Promise<void>
+      getPreviousConnectState: (
+        accountId: string,
+      ) => { status?: string; phase?: string } | undefined
+      setConnectState: (
+        accountId: string,
+        connectState: Partial<{
+          status: 'disconnected' | 'connecting' | 'connected' | 'error'
+          phase:
+            | 'idle'
+            | 'preparing'
+            | 'launching_browser'
+            | 'waiting_for_login'
+            | 'verifying_session'
+            | 'streaming'
+            | 'tasks_running'
+            | 'error'
+          error?: string | null
+          session?: string | null
+          lastVerifiedAt?: number | null
+        }>,
+      ) => void
+      showConnectedToast: (accountId: string) => void
+    }
+  },
+) {
+  switch (event.domain) {
+    case 'task': {
+      switch (event.type) {
+        case 'autoMessageStopped':
+          applyAutoMessageStoppedEvent(event.payload, {
+            setIsRunningAutoMessage: deps.task.setIsRunningAutoMessage,
+            syncStatus: deps.task.syncStatus,
+          })
+          return
+        case 'autoPopupStopped':
+          applyAutoPopupStoppedEvent(event.payload, {
+            setIsRunningAutoPopUp: deps.task.setIsRunningAutoPopUp,
+            syncStatus: deps.task.syncStatus,
+          })
+          return
+        case 'commentListenerStopped':
+          applyCommentListenerStoppedEvent(event.payload, {
+            markCommentListenerStopped: deps.task.markCommentListenerStopped,
+            setIsListening: deps.task.setIsListening,
+            setIsRunningAutoReply: deps.task.setIsRunningAutoReply,
+            setLiveStatsListening: deps.task.setLiveStatsListening,
+            syncStatus: deps.task.syncStatus,
+          })
+          return
+      }
+      break
+    }
+    case 'liveControl': {
+      switch (event.type) {
+        case 'disconnected':
+          await applyDisconnectedLiveControlEvent(event.payload, {
+            getConnectState: deps.liveControl.getConnectState,
+            showErrorToast: deps.liveControl.showErrorToast,
+            stopAllTasks: deps.liveControl.stopAllTasks,
+          })
+          return
+        case 'streamStateChanged':
+          await applyStreamStateChangedEvent(event.payload, {
+            getPreviousStreamState: deps.liveControl.getPreviousStreamState,
+            setStreamState: deps.liveControl.setStreamState,
+            stopAllTasksForStreamEnd: deps.liveControl.stopAllTasksForStreamEnd,
+          })
+          return
+        case 'stateChanged': {
+          const prevContext = deps.liveControl.getPreviousConnectState(event.accountId)
+          const shouldToastConnected =
+            event.payload.connectState.status === 'connected' &&
+            event.payload.connectState.phase === 'streaming' &&
+            (prevContext?.status !== 'connected' || prevContext?.phase !== 'streaming')
+
+          deps.liveControl.setConnectState(event.accountId, event.payload.connectState)
+
+          if (shouldToastConnected) {
+            deps.liveControl.showConnectedToast(event.accountId)
+          }
+          return
+        }
+      }
+      break
+    }
+  }
+}
+
 export function useAppIpcBootstrap() {
   useCommentIpcSync()
-  useTaskEventIpcSync()
-  useLiveControlIpcSync()
+  useAccountEventIpcSync()
   useChromeIpcSync()
   useUpdateIpcSync()
 }
@@ -32,153 +239,57 @@ function useCommentIpcSync() {
   })
 }
 
-function useTaskEventIpcSync() {
-  const accounts = useAccounts(s => s.accounts)
+function useAccountEventIpcSync() {
   const setIsListening = useAutoReplyStore(s => s.setIsListening)
   const setIsRunningAutoReply = useAutoReplyStore(s => s.setIsRunning)
   const setIsRunningAutoMessage = useAutoMessageStore(s => s.setIsRunning)
   const setIsRunningAutoPopUp = useAutoPopUpStore(s => s.setIsRunning)
   const setLiveStatsListening = useLiveStatsStore(s => s.setListening)
-
-  useIpcListener(IPC_CHANNELS.tasks.autoMessage.stoppedEvent, id => {
-    setIsRunningAutoMessage(id, false)
-    taskManager.syncStatus('autoSpeak', 'stopped', id)
-    console.log(`[TaskGate] Auto message stopped event for account ${id}`)
-  })
-
-  useIpcListener(IPC_CHANNELS.tasks.autoPopUp.stoppedEvent, id => {
-    setIsRunningAutoPopUp(id, false)
-    taskManager.syncStatus('autoPopup', 'stopped', id)
-    console.log(`[TaskGate] Auto popup stopped event for account ${id}`)
-  })
-
-  useIpcListener(IPC_CHANNELS.tasks.commentListener.stopped, id => {
-    markCommentListenerStopped(id)
-    setIsListening(id, 'stopped')
-    setIsRunningAutoReply(id, false)
-    setLiveStatsListening(id, false)
-    taskManager.syncStatus('autoReply', 'stopped', id)
-    console.log(`[TaskGate] Auto reply listener stopped event for account ${id}`)
-  })
-
-  useEffect(() => {
-    if (!window.ipcRenderer?.on) return
-
-    const cleanupFns: Array<() => void> = []
-
-    for (const account of accounts) {
-      cleanupFns.push(
-        window.ipcRenderer.on(
-          IPC_CHANNELS.tasks.autoMessage.stoppedFor(
-            account.id,
-          ) as `tasks:autoMessage:stopped:${string}`,
-          (id: string) => {
-            setIsRunningAutoMessage(id, false)
-            taskManager.syncStatus('autoSpeak', 'stopped', id)
-            console.log(`[TaskGate] Auto message stopped(scoped) for account ${id}`)
-          },
-        ),
-      )
-
-      cleanupFns.push(
-        window.ipcRenderer.on(
-          IPC_CHANNELS.tasks.autoPopUp.stoppedFor(
-            account.id,
-          ) as `tasks:autoPopUp:stopped:${string}`,
-          (id: string) => {
-            setIsRunningAutoPopUp(id, false)
-            taskManager.syncStatus('autoPopup', 'stopped', id)
-            console.log(`[TaskGate] Auto popup stopped(scoped) for account ${id}`)
-          },
-        ),
-      )
-
-      cleanupFns.push(
-        window.ipcRenderer.on(
-          IPC_CHANNELS.tasks.commentListener.stoppedFor(
-            account.id,
-          ) as `tasks:commentListener:stopped:${string}`,
-          (id: string) => {
-            markCommentListenerStopped(id)
-            setIsListening(id, 'stopped')
-            setIsRunningAutoReply(id, false)
-            setLiveStatsListening(id, false)
-            taskManager.syncStatus('autoReply', 'stopped', id)
-            console.log(`[TaskGate] Auto reply listener stopped(scoped) for account ${id}`)
-          },
-        ),
-      )
-    }
-
-    return () => {
-      for (const cleanup of cleanupFns) {
-        cleanup()
-      }
-    }
-  }, [
-    accounts,
-    setIsListening,
-    setIsRunningAutoReply,
-    setIsRunningAutoMessage,
-    setIsRunningAutoPopUp,
-    setLiveStatsListening,
-  ])
-}
-
-function useLiveControlIpcSync() {
   const { setConnectState, setAccountName, setStreamState } = useLiveControlStore()
   const { toast } = useToast()
 
-  useIpcListener(IPC_CHANNELS.tasks.liveControl.disconnectedEvent, async (id, reason) => {
-    console.log(`[renderer][${id}] ==============================================`)
-    console.log(`[renderer][${id}][event] 🚨 收到 disconnectedEvent 事件`, {
-      accountId: id,
-      reason: reason || '未知原因',
-      timestamp: new Date().toISOString(),
+  useIpcListener(IPC_CHANNELS.account.event, async event => {
+    await applyAccountEvent(event, {
+      task: {
+        setIsRunningAutoMessage,
+        setIsRunningAutoPopUp,
+        markCommentListenerStopped,
+        setIsListening,
+        setIsRunningAutoReply,
+        setLiveStatsListening,
+        syncStatus: taskManager.syncStatus.bind(taskManager),
+      },
+      liveControl: {
+        getConnectState: accountId =>
+          useLiveControlStore.getState().contexts[accountId]?.connectState,
+        showErrorToast: (accountId, reason, isErrorState) => {
+          toast.error({
+            title: isErrorState ? '连接失败' : '连接已断开',
+            description: getFriendlyErrorMessage(reason),
+            dedupeKey: `live-control-disconnected:${accountId}`,
+            duration: 4500,
+            priority: 4,
+          })
+        },
+        stopAllTasks: accountId => stopAllLiveTasks(accountId, 'disconnected', false),
+        getPreviousStreamState: accountId =>
+          useLiveControlStore.getState().contexts[accountId]?.streamState,
+        setStreamState,
+        stopAllTasksForStreamEnd: accountId => stopAllLiveTasks(accountId, 'stream_ended', false),
+        getPreviousConnectState: accountId =>
+          useLiveControlStore.getState().contexts[accountId]?.connectState,
+        setConnectState,
+        showConnectedToast: accountId => {
+          toast.success({
+            title: '连接成功',
+            description: '已成功连接到直播控制台',
+            dedupeKey: `live-control-connected:${accountId}`,
+            duration: 2500,
+            priority: 2,
+          })
+        },
+      },
     })
-
-    const reasonStr = (reason || '') as string
-    const isFatalDisconnect =
-      reasonStr.includes('browser has been closed') ||
-      reasonStr.includes('连接已取消') ||
-      reasonStr.includes('连接超时') ||
-      reasonStr.includes('网络连接失败')
-
-    const currentStatus = useLiveControlStore.getState().contexts[id]?.connectState
-    if (currentStatus?.phase === 'waiting_for_login' && !isFatalDisconnect) {
-      console.log(`[renderer][${id}][event] ⏭️ 忽略 disconnectedEvent：用户正在登录中（非致命断开）`)
-      return
-    }
-
-    if (reason && !reasonStr.includes('用户主动断开')) {
-      const latestConnectState = useLiveControlStore.getState().contexts[id]?.connectState
-      toast.error({
-        title: latestConnectState?.status === 'error' ? '连接失败' : '连接已断开',
-        description: getFriendlyErrorMessage(reason),
-        dedupeKey: `live-control-disconnected:${id}`,
-      })
-    }
-
-    await stopAllLiveTasks(id, 'disconnected', false)
-    console.log(`[renderer][${id}] ==============================================`)
-  })
-
-  useIpcListener(IPC_CHANNELS.tasks.liveControl.stateChanged, ({ accountId, connectState }) => {
-    const prevContext = useLiveControlStore.getState().contexts[accountId]
-    const shouldToastConnected =
-      connectState.status === 'connected' &&
-      connectState.phase === 'streaming' &&
-      (prevContext?.connectState.status !== 'connected' ||
-        prevContext?.connectState.phase !== 'streaming')
-
-    setConnectState(accountId, connectState)
-
-    if (shouldToastConnected) {
-      toast.success({
-        description: '已成功连接到直播控制台',
-        dedupeKey: `live-control-connected:${accountId}`,
-      })
-    }
   })
 
   useIpcListener(IPC_CHANNELS.tasks.liveControl.notifyAccountName, params => {
@@ -189,18 +300,6 @@ function useLiveControlIpcSync() {
 
     setAccountName(params.accountId, params.accountName)
   })
-
-  useIpcListener(
-    IPC_CHANNELS.tasks.liveControl.streamStateChanged,
-    async (accountId: string, streamState: StreamStatus) => {
-      const prevState = useLiveControlStore.getState().contexts[accountId]?.streamState
-      setStreamState(accountId, streamState)
-
-      if (prevState === 'live' && streamState !== 'live') {
-        await stopAllLiveTasks(accountId, 'stream_ended', false)
-      }
-    },
-  )
 }
 
 function useChromeIpcSync() {
@@ -213,6 +312,7 @@ function useChromeIpcSync() {
 
 function useUpdateIpcSync() {
   const enableAutoCheckUpdate = useUpdateConfigStore(s => s.enableAutoCheckUpdate)
+  const { toast } = useToast()
   const handleUpdate = useUpdateStore.use.handleUpdate()
   const handleCheckResult = useUpdateStore.use.handleCheckResult()
 
@@ -222,7 +322,24 @@ function useUpdateIpcSync() {
 
   useIpcListener(IPC_CHANNELS.app.notifyUpdate, info => {
     if (enableAutoCheckUpdate) {
-      handleUpdate(info)
+      toast.info({
+        title: `发现新版本 v${info.latestVersion}`,
+        description: '已在后台完成检查，点击查看更新内容后再决定是否下载。',
+        duration: 8000,
+        dedupeKey: `app-update-notify:${info.latestVersion}`,
+        priority: 2,
+        action: createElement(
+          Button,
+          {
+            size: 'sm',
+            variant: 'outline',
+            onClick: () => {
+              handleUpdate(info)
+            },
+          },
+          '查看更新',
+        ),
+      })
     }
   })
 }

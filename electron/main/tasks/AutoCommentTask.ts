@@ -1,12 +1,11 @@
 import { Result } from '@praha/byethrow'
 import { ErrorFactory } from '@praha/error-factory'
 import { merge } from 'lodash-es'
-import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { AbortError } from '#/errors/AppError'
 import type { ScopedLogger } from '#/logger'
 import type { IPerformComment } from '#/platforms/IPlatform'
+import { emitAccountEvent } from '#/services/AccountEventBus'
 import { insertRandomSpaces, randomInt, replaceVariant, takeScreenshot } from '#/utils'
-import windowManager from '#/windowManager'
 import { createIntervalTask } from './IntervalTask'
 import { runWithRetry } from './retry'
 
@@ -166,10 +165,12 @@ export function createAutoCommentTask(
   }
 
   intervalTask.addStopListener(() => {
-    // 发送账号隔离的停止事件
-    windowManager.send(IPC_CHANNELS.tasks.autoMessage.stoppedFor(account.id), account.id)
-    // 同时发送旧事件以保持兼容（后续可移除）
-    windowManager.send(IPC_CHANNELS.tasks.autoMessage.stoppedEvent, account.id)
+    emitAccountEvent({
+      domain: 'task',
+      type: 'autoMessageStopped',
+      accountId: account.id,
+      payload: { accountId: account.id },
+    })
   })
 
   return Result.pipe(

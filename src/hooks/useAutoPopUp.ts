@@ -354,7 +354,6 @@ export function useLoadAutoPopUpOnLogin() {
     if (isAuthenticated && user?.id) {
       // 延迟加载，确保存储系统已初始化
       setTimeout(() => {
-        console.log('[AutoPopUp] 加载用户配置:', user.id)
         loadUserContexts(user.id)
       }, 0)
     }

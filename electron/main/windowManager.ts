@@ -5,6 +5,7 @@ import { taskRuntimeMonitor } from './services/TaskRuntimeMonitor'
 
 class WindowManager {
   private mainWindow?: BrowserWindow
+  private readonly debugIpc = process.env.LOG_LEVEL === 'debug'
 
   setMainWindow(win: BrowserWindow) {
     this.mainWindow = win
@@ -28,7 +29,6 @@ class WindowManager {
 
     // 应用退出时不发送任何消息，避免 "Object has been destroyed" 错误
     if (isAppQuitting) {
-      console.log(`[windowManager][send] SKIP: app is quitting, channel: ${String(channel)}`)
       taskRuntimeMonitor.logEventCustom('IPC_SEND_SKIPPED', accountId, { reason: 'app quitting' })
       return false
     }
@@ -41,9 +41,10 @@ class WindowManager {
       !this.mainWindow.webContents.isDestroyed()
     ) {
       try {
-        console.log(`[windowManager][send] >>> Sending to renderer: ${String(channel)}`, ...args)
+        if (this.debugIpc) {
+          console.log(`[windowManager][send] ${String(channel)}`, ...args)
+        }
         this.mainWindow.webContents.send(channel, ...args)
-        console.log(`[windowManager][send] >>> Success: ${String(channel)}`)
         taskRuntimeMonitor.logEventCustom('IPC_SEND_SUCCESS', accountId, {
           channel: String(channel),
           sendTime,

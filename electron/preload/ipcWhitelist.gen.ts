@@ -6,6 +6,7 @@
 
 // 静态通道白名单
 const ALLOWED_STATIC_CHANNELS: string[] = [
+  'account:event',
   'account:switch',
   'app:clearLocalLoginData',
   'app:getHideToTrayTipDismissed',
@@ -32,9 +33,11 @@ const ALLOWED_STATIC_CHANNELS: string[] = [
   'auth:updateUserProfile',
   'auth:validateToken',
   'chrome:getPath',
+  'chrome:listBrowsers',
   'chrome:saveState',
   'chrome:selectPath',
   'chrome:setPath',
+  'chrome:testBrowser',
   'chrome:toggleDevTools',
   'config:load',
   'config:save',
@@ -56,11 +59,9 @@ const ALLOWED_STATIC_CHANNELS: string[] = [
   'tasks:autoMessage:sendBatchMessages',
   'tasks:autoMessage:start',
   'tasks:autoMessage:stop',
-  'tasks:autoMessage:stoppedEvent',
   'tasks:autoMessage:updateConfig',
   'tasks:autoPopUp:start',
   'tasks:autoPopUp:stop',
-  'tasks:autoPopUp:stoppedEvent',
   'tasks:autoPopUp:updateConfig',
   'tasks:autoPopup:registerShortcut',
   'tasks:autoPopup:unregisterShortcut',
@@ -71,16 +72,12 @@ const ALLOWED_STATIC_CHANNELS: string[] = [
   'tasks:commentListener:showComment',
   'tasks:commentListener:start',
   'tasks:commentListener:stop',
-  'tasks:commentListener:stopped',
   'tasks:liveControl:connect',
   'tasks:liveControl:disconnect',
-  'tasks:liveControl:disconnectedEvent',
   'tasks:liveControl:getLiveRoomUrl',
   'tasks:liveControl:notifyAccountName',
   'tasks:liveControl:reconnectFailedEvent',
   'tasks:liveControl:reconnectedEvent',
-  'tasks:liveControl:stateChanged',
-  'tasks:liveControl:streamStateChanged',
   'tasks:liveControl:waitingForLogin',
   'tasks:pinComment',
   'tasks:subAccount:accountStatusChanged',
@@ -116,13 +113,7 @@ const ALLOWED_STATIC_CHANNELS: string[] = [
 ]
 
 // 动态通道前缀（用于账号隔离事件，如 tasks:autoMessage:stopped:{accountId}）
-const ALLOWED_DYNAMIC_PREFIXES: string[] = [
-  'tasks:autoMessage:stopped:',
-  'tasks:autoPopUp:stopped:',
-  'tasks:autoReply:listenerStopped:',
-  'tasks:commentListener:stopped:',
-  'tasks:subAccount:stopped:',
-]
+const ALLOWED_DYNAMIC_PREFIXES: string[] = ['tasks:subAccount:stopped:']
 
 /**
  * 检查通道是否允许

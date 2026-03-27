@@ -78,8 +78,14 @@ class ConfigSyncService {
   private syncTimeout: ReturnType<typeof setTimeout> | null = null
   private isSyncing = false
   private lastSyncTime = 0
-  private readonly SYNC_DEBOUNCE_MS = 2000
-  private readonly MIN_SYNC_INTERVAL_MS = 5000
+  private lastQueuedSignature: string | null = null
+  private lastSyncedSignature: string | null = null
+  private readonly SYNC_DEBOUNCE_MS = 4000
+  private readonly MIN_SYNC_INTERVAL_MS = 15000
+
+  private getConfigSignature(config: UserConfigData): string {
+    return JSON.stringify(config)
+  }
 
   collectConfigData(): UserConfigData {
     const accountsState = useAccounts.getState()
@@ -122,19 +128,24 @@ class ConfigSyncService {
 
     try {
       const config = this.collectConfigData()
+      const signature = this.getConfigSignature(config)
 
       const result = await syncUserConfig(config)
 
       if (result.ok && result.data?.success) {
+        this.lastSyncedSignature = signature
+        this.lastQueuedSignature = null
         if (DEBUG) console.log('[ConfigSync] Sync to cloud successful')
         return { success: true }
       }
 
       const errorMsg = result.ok ? result.data?.message : result.error?.message
+      this.lastQueuedSignature = null
       console.error('[ConfigSync] Sync failed:', errorMsg)
       return { success: false, error: errorMsg }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+      this.lastQueuedSignature = null
       console.error('[ConfigSync] Sync error:', errorMsg)
       return { success: false, error: errorMsg }
     } finally {
@@ -160,6 +171,8 @@ class ConfigSyncService {
       }
 
       this.applyConfig(config)
+      this.lastSyncedSignature = this.getConfigSignature(config)
+      this.lastQueuedSignature = null
 
       if (DEBUG) {
         console.log('[ConfigSync] Load from cloud successful:', {
@@ -276,6 +289,13 @@ class ConfigSyncService {
   }
 
   scheduleSync(): void {
+    const signature = this.getConfigSignature(this.collectConfigData())
+    if (signature === this.lastQueuedSignature || signature === this.lastSyncedSignature) {
+      return
+    }
+
+    this.lastQueuedSignature = signature
+
     if (this.syncTimeout) {
       clearTimeout(this.syncTimeout)
     }

@@ -5,19 +5,51 @@ import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { ErrorFactory } from '@praha/error-factory'
+import type { BrowserCandidate } from 'shared/browser'
 import { createLogger } from '../logger'
 
 const execAsync = promisify(exec)
 const logger = createLogger('ChromiumChecker')
 
+interface BrowserConfig {
+  id: string
+  name: string
+  commonPaths: string[]
+  processNames: string[]
+  appNameForMac?: string
+}
+
+type SupportedPlatform = 'win32' | 'darwin'
+
+function uniqByPath<T extends { path: string }>(items: T[]): T[] {
+  const seen = new Set<string>()
+  return items.filter(item => {
+    const key = process.platform === 'win32' ? item.path.toLowerCase() : item.path
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
+function toCandidate(config: BrowserConfig, browserPath: string): BrowserCandidate {
+  return {
+    id: config.id,
+    name: config.name,
+    path: browserPath,
+    source: 'detected',
+    engine: 'chromium',
+    status: 'unknown',
+    lastError: null,
+  }
+}
+
 function findWindowsByCommonPath(relativePaths: string[]) {
   const roots = [
-    process.env.ProgramFiles, // 'C:\Program Files'
-    process.env['ProgramFiles(x86)'], // 'C:\Program Files (x86)'
-    process.env.LocalAppData, // 'C:\Users\xxx\AppData\Local'
-  ].filter((r): r is string => !!r) // 过滤掉 undefined
+    process.env.ProgramFiles,
+    process.env['ProgramFiles(x86)'],
+    process.env.LocalAppData,
+  ].filter((r): r is string => !!r)
 
-  // 2. 组合所有可能的完整路径
   for (const root of roots) {
     for (const relativePath of relativePaths) {
       const fullPath = path.join(root, relativePath)
@@ -29,123 +61,164 @@ function findWindowsByCommonPath(relativePaths: string[]) {
   return null
 }
 
-async function findWindowsByPowerShell(processName: string) {
-  try {
-    // 移除扩展名 (chrome.exe -> chrome) 因为 Get-Process 使用的是进程名
-    const name = path.parse(processName).name
+async function findWindowsByPowerShell(processNames: string[]) {
+  for (const processName of processNames) {
+    try {
+      const name = path.parse(processName).name
+      const command = `powershell -NoProfile -Command "Get-Process -Name '${name}' -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Path"`
+      const { stdout } = await execAsync(command)
+      const result = stdout.trim()
 
-    const command = `powershell -NoProfile -Command "Get-Process -Name '${name}' -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Path"`
-
-    const { stdout } = await execAsync(command)
-    const result = stdout.trim()
-
-    if (result && fs.existsSync(result)) {
-      return result
+      if (result && fs.existsSync(result)) {
+        return result
+      }
+    } catch (err) {
+      logger.debug(`PowerShell 查找 ${processName} 失败 (可能未运行): ${err}`)
     }
-  } catch (err) {
-    logger.debug(`PowerShell 查找 ${processName} 失败 (可能未运行): ${err}`)
   }
   return null
 }
 
-async function findChromiumOnWindows(config: BrowserConfig) {
+async function findChromiumOnWindows(config: BrowserConfig): Promise<BrowserCandidate | null> {
   const pathFromCommon = findWindowsByCommonPath(config.commonPaths)
   if (pathFromCommon) {
     logger.debug(`通过通用路径找到 ${config.name}: ${pathFromCommon}`)
-    return pathFromCommon
+    return toCandidate(config, pathFromCommon)
   }
 
-  const pathFromProcess = await findWindowsByPowerShell(config.name)
+  const pathFromProcess = await findWindowsByPowerShell(config.processNames)
   if (pathFromProcess) {
     logger.debug(`通过进程列表找到 ${config.name}: ${pathFromProcess}`)
-    return pathFromProcess
+    return toCandidate(config, pathFromProcess)
   }
 
-  logger.warn(`未能找到 ${config.name} (Windows)`)
+  logger.debug(`未能找到 ${config.name} (Windows)`)
   return null
 }
 
-async function findChromiumOnMac(config: BrowserConfig) {
+async function findChromiumOnMac(config: BrowserConfig): Promise<BrowserCandidate | null> {
   for (const p of config.commonPaths) {
     if (fs.existsSync(p)) {
       logger.debug(`通过预定义路径找到 ${config.name}: ${p}`)
-      return p
+      return toCandidate(config, p)
     }
   }
 
-  // 使用 mdfind (Spotlight) 或 osascript
-  const appName = config.appNameForMac || config.name // 处理 .app 名字
+  const appName = config.appNameForMac || config.name
   const command = `osascript -e 'POSIX path of (path to application "${appName}")'`
 
   try {
     const { stdout } = await execAsync(command)
-    const appRoot = stdout.trim() // e.g. /Applications/Google Chrome.app/
+    const appRoot = stdout.trim()
 
     if (appRoot) {
-      // 构造二进制路径: /Applications/Google Chrome.app/Contents/MacOS/Google Chrome
       const binaryPath = path.join(appRoot, 'Contents', 'MacOS', appName)
       if (fs.existsSync(binaryPath)) {
         logger.debug(`通过 osascript 找到: ${binaryPath}`)
-        return binaryPath
+        return toCandidate(config, binaryPath)
       }
     }
   } catch (error) {
     logger.debug(`osascript 查找失败 ${appName}: ${error}`)
   }
 
-  logger.warn(`未能找到 ${config.name} (MacOS)`)
+  logger.debug(`未能找到 ${config.name} (MacOS)`)
   return null
 }
 
-interface BrowserConfig {
-  // Windows 下存的是相对路径，Mac 下是绝对路径
-  commonPaths: string[]
-  name: string // Windows 下是 exe 名 (chrome.exe)
-  appNameForMac?: string // Mac 下是应用名 (Google Chrome)
-}
-
-const CONFIGS = {
+const CONFIGS: Record<
+  SupportedPlatform,
+  {
+    browsers: BrowserConfig[]
+    finder: (config: BrowserConfig) => Promise<BrowserCandidate | null>
+  }
+> = {
   win32: {
-    edge: {
-      commonPaths: ['Microsoft/Edge/Application/msedge.exe'],
-      name: 'msedge.exe',
-    },
-    chrome: {
-      commonPaths: ['Google/Chrome/Application/chrome.exe'],
-      name: 'chrome.exe',
-    },
+    browsers: [
+      {
+        id: 'edge',
+        name: 'Microsoft Edge',
+        commonPaths: ['Microsoft/Edge/Application/msedge.exe'],
+        processNames: ['msedge.exe'],
+      },
+      {
+        id: 'chrome',
+        name: 'Google Chrome',
+        commonPaths: ['Google/Chrome/Application/chrome.exe'],
+        processNames: ['chrome.exe'],
+      },
+      {
+        id: 'brave',
+        name: 'Brave',
+        commonPaths: ['BraveSoftware/Brave-Browser/Application/brave.exe'],
+        processNames: ['brave.exe'],
+      },
+      {
+        id: '360se',
+        name: '360 极速浏览器',
+        commonPaths: [
+          '360Chrome/Chrome/Application/360chrome.exe',
+          '360Chrome/Chrome/Application/360se.exe',
+        ],
+        processNames: ['360chrome.exe', '360se.exe'],
+      },
+      {
+        id: 'sogou',
+        name: '搜狗浏览器',
+        commonPaths: ['SogouExplorer/SogouExplorer.exe'],
+        processNames: ['SogouExplorer.exe'],
+      },
+    ],
     finder: findChromiumOnWindows,
   },
   darwin: {
-    edge: {
-      commonPaths: ['/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge'],
-      name: 'Microsoft Edge',
-      appNameForMac: 'Microsoft Edge', // 用于 osascript
-    },
-    chrome: {
-      commonPaths: ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'],
-      name: 'Google Chrome',
-      appNameForMac: 'Google Chrome',
-    },
+    browsers: [
+      {
+        id: 'chrome',
+        name: 'Google Chrome',
+        commonPaths: ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'],
+        processNames: [],
+        appNameForMac: 'Google Chrome',
+      },
+      {
+        id: 'edge',
+        name: 'Microsoft Edge',
+        commonPaths: ['/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge'],
+        processNames: [],
+        appNameForMac: 'Microsoft Edge',
+      },
+      {
+        id: 'brave',
+        name: 'Brave',
+        commonPaths: ['/Applications/Brave Browser.app/Contents/MacOS/Brave Browser'],
+        processNames: [],
+        appNameForMac: 'Brave Browser',
+      },
+    ],
     finder: findChromiumOnMac,
   },
 }
 
-export async function findChromium(edge = false): Promise<string> {
+export async function listDetectedBrowsers(preferEdge = false): Promise<BrowserCandidate[]> {
   const platform = os.platform()
   assert(platform === 'win32' || platform === 'darwin')
   const platformConfig = CONFIGS[platform]
 
-  const targets = edge
-    ? [platformConfig.edge, platformConfig.chrome]
-    : [platformConfig.chrome, platformConfig.edge]
+  const orderedConfigs =
+    preferEdge && platform === 'win32'
+      ? [...platformConfig.browsers].sort(config => (config.id === 'edge' ? -1 : 1))
+      : platformConfig.browsers
 
-  for (const browser of targets) {
-    const result = await platformConfig.finder(browser)
-    if (result) {
-      logger.info(`找到浏览器路径：${result}`)
-      return result
-    }
+  const results = await Promise.all(orderedConfigs.map(config => platformConfig.finder(config)))
+  return uniqByPath(results.filter((item): item is BrowserCandidate => !!item))
+}
+
+export async function findChromium(edge = false): Promise<string> {
+  const browsers = await listDetectedBrowsers(edge)
+  const browser = browsers[0]
+  if (browser) {
+    logger.info(`找到浏览器路径：${browser.path}`)
+    return browser.path
   }
 
   logger.error('未找到任何浏览器路径，请手动选择')

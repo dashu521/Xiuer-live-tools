@@ -242,7 +242,6 @@ export const useCurrentAutoMessage = <T>(getter: (context: AutoMessageContext) =
       const state = useAutoMessageStore.getState()
       // 如果当前账号的配置不存在，重新加载
       if (!state.contexts[currentAccountId]) {
-        console.log('[AutoMessage] 账号切换，加载配置:', currentAccountId)
         loadUserContexts(user.id)
       }
     }
@@ -266,7 +265,6 @@ export function useLoadAutoMessageOnLogin() {
     if (isAuthenticated && user?.id) {
       // 延迟加载，确保存储系统已初始化
       setTimeout(() => {
-        console.log('[AutoMessage] 加载用户配置:', user.id)
         loadUserContexts(user.id)
       }, 0)
     }

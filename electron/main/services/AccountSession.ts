@@ -28,6 +28,7 @@ import {
   isPerformPopup,
   isPinComment,
 } from '#/platforms/IPlatform'
+import { emitAccountEvent } from '#/services/AccountEventBus'
 import { accountRuntimeManager } from '#/services/AccountScopedRuntimeManager'
 import { type ReconnectReason, reconnectManager } from '#/services/ReconnectManager'
 import { StreamStateDetector } from '#/services/StreamStateDetector'
@@ -92,9 +93,14 @@ export class AccountSession {
       lastVerifiedAt: number | null
     }>,
   ) {
-    windowManager.send(IPC_CHANNELS.tasks.liveControl.stateChanged, {
+    emitAccountEvent({
+      domain: 'liveControl',
+      type: 'stateChanged',
       accountId: this.account.id,
-      connectState,
+      payload: {
+        accountId: this.account.id,
+        connectState,
+      },
     })
   }
 
@@ -402,14 +408,32 @@ export class AccountSession {
         session: null,
         lastVerifiedAt: null,
       })
-      windowManager.send(IPC_CHANNELS.tasks.liveControl.disconnectedEvent, accountId, reason)
+      const payload = {
+        accountId,
+        reason,
+      } as const
+      emitAccountEvent({
+        domain: 'liveControl',
+        type: 'disconnected',
+        accountId,
+        payload,
+      })
       accountRuntimeManager.setDisconnected(accountId)
     } else {
       // 关播：只发送 streamStateChanged
       this.logger.info(
         `[disconnect][${accountId}] >>> Step 5: sending streamStateChanged (stream ended, not disconnected)`,
       )
-      windowManager.send(IPC_CHANNELS.tasks.liveControl.streamStateChanged, accountId, 'offline')
+      const payload = {
+        accountId,
+        streamState: 'offline',
+      } as const
+      emitAccountEvent({
+        domain: 'liveControl',
+        type: 'streamStateChanged',
+        accountId,
+        payload,
+      })
     }
   }
 

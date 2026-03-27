@@ -2,6 +2,7 @@ import { Result } from '@praha/byethrow'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import type { ScopedLogger } from '#/logger'
 import type { ICommentListener } from '#/platforms/IPlatform'
+import { emitAccountEvent } from '#/services/AccountEventBus'
 import { WebSocketService } from '#/services/WebSocketService'
 import windowManager from '#/windowManager'
 import { createTask } from './BaseTask'
@@ -93,10 +94,12 @@ export function createCommentListenerTask(
       logger.info('开始监听评论')
     } catch (err) {
       // 失败了还要告诉渲染层关闭按钮
-      // 发送账号隔离的停止事件
-      windowManager.send(IPC_CHANNELS.tasks.commentListener.stoppedFor(account.id), account.id)
-      // 同时发送旧事件以保持兼容（后续可移除）
-      windowManager.send(IPC_CHANNELS.tasks.commentListener.stopped, account.id)
+      emitAccountEvent({
+        domain: 'task',
+        type: 'commentListenerStopped',
+        accountId: account.id,
+        payload: { accountId: account.id },
+      })
       // 【P0修复】移除重复的 task.stop()，统一由 BaseTask.start() 的 catch 块处理
       // task.stop(TaskStopReason.ERROR, err)
       // 【P0修复】向上抛出异常，让上层感知启动失败

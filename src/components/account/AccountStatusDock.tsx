@@ -312,12 +312,16 @@ export const AccountStatusDock = React.memo(function AccountStatusDock({
   // 启动状态轮询
   const { startPolling, stopPolling } = useAccountStatus()
   useEffect(() => {
-    const cleanup = startPolling(2000)
+    const cleanup = startPolling(
+      isExpanded
+        ? { currentInterval: 2000, backgroundInterval: 8000 }
+        : { currentInterval: 5000, backgroundInterval: 15000 },
+    )
     return () => {
       cleanup()
       stopPolling()
     }
-  }, [startPolling, stopPolling])
+  }, [isExpanded, startPolling, stopPolling])
 
   // 点击外部收起悬浮栏
   useEffect(() => {

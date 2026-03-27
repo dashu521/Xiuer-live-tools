@@ -2,6 +2,7 @@
  * 自动发言任务实现
  */
 
+import type { AccountEventPayload } from 'shared/accountEvents'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { getEffectiveAutoMessages, useAutoMessageStore } from '@/hooks/useAutoMessage'
 import type { StopReason, TaskContext } from './types'
@@ -55,21 +56,21 @@ export class AutoSpeakTask extends BaseTask {
 
       // 注册 IPC 事件监听器（用于后端主动停止时同步状态）
       // 【P2方案】使用账号隔离的事件通道，避免全局广播干扰
-      const handleStopped = (accountId: string) => {
-        // 由于使用账号隔离的事件，这里不需要再检查 accountId
-        if (this.status === 'running') {
-          console.log(`[AutoSpeakTask] Task stopped by backend for account ${accountId}`)
-          this.stop('error')
+      const handleStopped = (event: AccountEventPayload) => {
+        if (
+          event.domain !== 'task' ||
+          event.type !== 'autoMessageStopped' ||
+          event.accountId !== ctx.accountId ||
+          this.status !== 'running'
+        ) {
+          return
         }
+        console.log(`[AutoSpeakTask] Task stopped by backend for account ${event.accountId}`)
+        this.stop('error')
       }
 
       if (window.ipcRenderer) {
-        // 【P2方案】监听账号隔离的事件通道
-        const eventChannel = IPC_CHANNELS.tasks.autoMessage.stoppedFor(ctx.accountId)
-        const unsubscribe = window.ipcRenderer.on(
-          eventChannel as `tasks:autoMessage:stopped:${string}`,
-          handleStopped as (id: string) => void,
-        )
+        const unsubscribe = window.ipcRenderer.on(IPC_CHANNELS.account.event, handleStopped)
         this.registerDisposable(() => unsubscribe())
       }
 

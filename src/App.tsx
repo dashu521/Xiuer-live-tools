@@ -2,7 +2,6 @@ import { RefreshCwIcon, TerminalIcon } from 'lucide-react'
 import { Outlet } from 'react-router'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { DefaultErrorFallback, ErrorBoundary } from '@/components/common/ErrorBoundary'
-import LogDisplayer from '@/components/common/LogDisplayer'
 import Sidebar from '@/components/common/Sidebar'
 import {
   ContextMenu,
@@ -41,7 +40,6 @@ import { useLiveControlStore, useLoadLiveControlOnLogin } from './hooks/useLiveC
 import { useLoadSubAccountOnLogin } from './hooks/useSubAccount'
 import { useTaskConnectionGuard } from './hooks/useTaskConnectionGuard'
 import { useToast } from './hooks/useToast'
-import { cn } from './lib/utils'
 
 const UpdateDialog = lazy(async () => {
   const module = await import('./components/update/UpdateDialog')
@@ -54,11 +52,6 @@ function AppContent() {
   const hydrateApiKeys = useAIChatStore(state => state.hydrateApiKeys)
   // 【修复】直接解构 setConnectState，避免 selector 返回新对象导致无限循环
   const setConnectState = useLiveControlStore(state => state.setConnectState)
-  const [logCollapsed, setLogCollapsed] = useState(() => {
-    const saved = localStorage.getItem('logPanelCollapsed')
-    // 默认折叠状态为 true（折叠）
-    return saved === null ? true : saved === 'true'
-  })
 
   // 全局 IPC 同步集中在专用 bootstrap hook，App 只负责装配
   useAppIpcBootstrap()
@@ -146,10 +139,6 @@ function AppContent() {
     accounts,
   ])
 
-  useEffect(() => {
-    localStorage.setItem('logPanelCollapsed', String(logCollapsed))
-  }, [logCollapsed])
-
   const handleRefresh = () => {
     window.location.reload()
   }
@@ -207,21 +196,6 @@ function AppContent() {
               </main>
             </div>
 
-            <div
-              className={cn(
-                'shrink-0 transition-all duration-200',
-                logCollapsed ? 'h-12 shadow-none opacity-50' : 'h-[11.25rem] opacity-100',
-              )}
-              style={{
-                backgroundColor: logCollapsed ? 'var(--surface-muted)' : 'var(--surface)',
-                boxShadow: logCollapsed ? 'none' : '0 -1px 0 rgba(0,0,0,0.06)',
-              }}
-            >
-              <LogDisplayer
-                collapsed={logCollapsed}
-                onToggleCollapsed={() => setLogCollapsed(prev => !prev)}
-              />
-            </div>
             <Suspense fallback={null}>
               <UpdateDialog />
             </Suspense>
@@ -283,12 +257,9 @@ function AppWithOnboarding() {
       // 【修复】登录成功后立即从云端加载配置（只执行一次）
       if (!hasLoadedFromCloudRef.current) {
         hasLoadedFromCloudRef.current = true
-        console.log('[App] Login detected, loading config from cloud...')
         configSyncService
           .loadFromCloud()
-          .then(() => {
-            console.log('[App] Config loaded from cloud successfully')
-          })
+          .then(() => {})
           .catch(err => {
             console.error('[App] Failed to load config from cloud:', err)
           })

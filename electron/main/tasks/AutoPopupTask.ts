@@ -1,10 +1,9 @@
 import { Result } from '@praha/byethrow'
-import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { AbortError } from '#/errors/AppError'
 import type { ScopedLogger } from '#/logger'
 import type { IPerformPopup } from '#/platforms/IPlatform'
+import { emitAccountEvent } from '#/services/AccountEventBus'
 import { mergeWithoutArray, randomInt, takeScreenshot } from '#/utils'
-import windowManager from '#/windowManager'
 import { createIntervalTask } from './IntervalTask'
 import { runWithRetry } from './retry'
 
@@ -186,10 +185,12 @@ export function createAutoPopupTask(
   }
 
   intervalTask.addStopListener(() => {
-    // 发送账号隔离的停止事件
-    windowManager.send(IPC_CHANNELS.tasks.autoPopUp.stoppedFor(account.id), account.id)
-    // 同时发送旧事件以保持兼容（后续可移除）
-    windowManager.send(IPC_CHANNELS.tasks.autoPopUp.stoppedEvent, account.id)
+    emitAccountEvent({
+      domain: 'task',
+      type: 'autoPopupStopped',
+      accountId: account.id,
+      payload: { accountId: account.id },
+    })
   })
 
   return Result.pipe(

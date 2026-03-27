@@ -1,3 +1,4 @@
+import { flushAllPersists, flushPersist, schedulePersist } from '@/utils/debouncedPersist'
 import { storageManager } from '@/utils/storage/StorageManager'
 import type { StorageDataType } from '@/utils/storage/types'
 import { useAccounts } from './useAccounts'
@@ -13,6 +14,7 @@ interface AccountScopedStorageOptions<
   context: Context
   logPrefix: string
   serialize?: (context: Context) => Persisted
+  immediate?: boolean
 }
 
 interface LoadAccountScopedContextsOptions<Context, Namespace extends StorageDataType> {
@@ -44,6 +46,7 @@ export function removeAccountScopedContext(
   }
 
   try {
+    flushPersist(`${namespace}:${userId}:${accountId}`)
     storageManager.remove(namespace, {
       level: 'account',
       userId,
@@ -65,21 +68,30 @@ export function persistAccountScopedContext<
   context,
   logPrefix,
   serialize,
+  immediate,
 }: AccountScopedStorageOptions<Context, Namespace, Persisted>): void {
   if (!userId) {
     return
   }
 
   try {
-    storageManager.set(
-      namespace,
-      serialize ? serialize(context) : (context as unknown as Persisted),
-      {
+    const persistKey = `${namespace}:${userId}:${accountId}`
+    const payload = serialize ? serialize(context) : (context as unknown as Persisted)
+    const write = () => {
+      storageManager.set(namespace, payload, {
         level: 'account',
         userId,
         accountId,
-      },
-    )
+      })
+    }
+
+    if (immediate) {
+      flushPersist(persistKey)
+      write()
+      return
+    }
+
+    schedulePersist(persistKey, write, 250)
   } catch (error) {
     console.error(`${logPrefix} 保存到存储失败:`, error)
   }
@@ -90,6 +102,7 @@ export function loadAccountScopedContexts<Context, Namespace extends StorageData
   userId,
   restoreContext,
 }: LoadAccountScopedContextsOptions<Context, Namespace>): Record<string, Context> {
+  flushAllPersists()
   const { accounts } = useAccounts.getState()
   const contexts: Record<string, Context> = {}
 
@@ -122,6 +135,7 @@ export function persistAllAccountScopedContexts<
     return
   }
 
+  flushAllPersists()
   for (const [accountId, context] of Object.entries(contexts)) {
     persistAccountScopedContext({
       namespace,
@@ -130,6 +144,7 @@ export function persistAllAccountScopedContexts<
       context,
       logPrefix,
       serialize,
+      immediate: true,
     })
   }
 }

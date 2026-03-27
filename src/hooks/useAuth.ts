@@ -25,7 +25,9 @@ export function useAuthInit() {
           lastSyncedAtRef.current = Date.now()
         }
       } catch (error) {
-        console.warn('[useAuthInit] Failed to sync user status:', error)
+        if (import.meta.env.DEV) {
+          console.warn('[useAuthInit] Failed to sync user status:', error)
+        }
       } finally {
         syncInFlightRef.current = false
       }

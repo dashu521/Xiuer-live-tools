@@ -1,5 +1,7 @@
 import type { LogMessage } from 'electron-log'
 import type { ProgressInfo, UpdateDownloadedEvent } from 'electron-updater'
+import type { AccountEventPayload } from 'shared/accountEvents'
+import type { BrowserCandidate, BrowserTestResult } from 'shared/browser'
 import type { PlanType } from 'shared/planRules'
 import type { providers } from 'shared/providers'
 
@@ -100,7 +102,7 @@ export interface IpcChannels {
 
   // LiveControl
   [IPC_CHANNELS.tasks.liveControl.connect]: (params: {
-    chromePath?: string
+    browserPath?: string
     headless?: boolean
     storageState?: string
     platform: LiveControlPlatform
@@ -112,27 +114,8 @@ export interface IpcChannels {
     error?: string
     needsLogin?: boolean
   }>
-  [IPC_CHANNELS.tasks.liveControl.stateChanged]: (params: {
-    accountId: string
-    connectState: {
-      status: 'disconnected' | 'connecting' | 'connected' | 'error'
-      phase:
-        | 'idle'
-        | 'preparing'
-        | 'launching_browser'
-        | 'waiting_for_login'
-        | 'verifying_session'
-        | 'streaming'
-        | 'tasks_running'
-        | 'error'
-      error?: string | null
-      session?: string | null
-      lastVerifiedAt?: number | null
-    }
-  }) => void
   [IPC_CHANNELS.tasks.liveControl.waitingForLogin]: (accountId: string) => void
   [IPC_CHANNELS.tasks.liveControl.disconnect]: (accountId: string) => boolean
-  [IPC_CHANNELS.tasks.liveControl.disconnectedEvent]: (id: string, reason?: string) => void
   [IPC_CHANNELS.tasks.liveControl.notifyAccountName]: (
     params:
       | {
@@ -142,10 +125,6 @@ export interface IpcChannels {
         }
       | { ok: false },
   ) => void
-  [IPC_CHANNELS.tasks.liveControl.streamStateChanged]: (
-    accountId: string,
-    streamState: import('shared/streamStatus').StreamStatus,
-  ) => void
   [IPC_CHANNELS.tasks.liveControl.getLiveRoomUrl]: (
     accountId: string,
   ) => Promise<{ success: boolean; url?: string; error?: string }>
@@ -153,9 +132,7 @@ export interface IpcChannels {
   // AutoMessage
   [IPC_CHANNELS.tasks.autoMessage.start]: (accountId: string, config: AutoCommentConfig) => boolean
   [IPC_CHANNELS.tasks.autoMessage.stop]: (accountId: string) => boolean
-  [IPC_CHANNELS.tasks.autoMessage.stoppedEvent]: (id: string) => void
   /** 账号隔离的停止事件 */
-  [key: `tasks:autoMessage:stopped:${string}`]: (id: string) => void
   [IPC_CHANNELS.tasks.autoMessage.sendBatchMessages]: (
     accountId: string,
     messages: string[],
@@ -169,9 +146,7 @@ export interface IpcChannels {
   // AutoPopup
   [IPC_CHANNELS.tasks.autoPopUp.start]: (accountId: string, config: AutoPopupConfig) => boolean
   [IPC_CHANNELS.tasks.autoPopUp.stop]: (accountId: string) => boolean
-  [IPC_CHANNELS.tasks.autoPopUp.stoppedEvent]: (id: string) => void
   /** 账号隔离的停止事件 */
-  [key: `tasks:autoPopUp:stopped:${string}`]: (id: string) => void
   [IPC_CHANNELS.tasks.autoPopUp.updateConfig]: (
     accountId: string,
     config: Parital<AutoPopupConfig>,
@@ -188,9 +163,6 @@ export interface IpcChannels {
     config: CommentListenerConfig,
   ) => boolean
   [IPC_CHANNELS.tasks.commentListener.stop]: (accountId: string) => void
-  [IPC_CHANNELS.tasks.commentListener.stopped]: (accountId: string) => void
-  /** 账号隔离的监听器停止事件 */
-  [key: `tasks:commentListener:stopped:${string}`]: (accountId: string) => void
   [IPC_CHANNELS.tasks.commentListener.showComment]: (data: {
     comment: LiveMessage
     accountId: string
@@ -417,7 +389,9 @@ export interface IpcChannels {
 
   // Chrome
   [IPC_CHANNELS.chrome.selectPath]: () => string | null
+  [IPC_CHANNELS.chrome.listBrowsers]: (preferEdge?: boolean) => Promise<BrowserCandidate[]>
   [IPC_CHANNELS.chrome.getPath]: (edge?: boolean) => string | null
+  [IPC_CHANNELS.chrome.testBrowser]: (browserPath: string) => Promise<BrowserTestResult>
   [IPC_CHANNELS.chrome.toggleDevTools]: () => void
   [IPC_CHANNELS.chrome.setPath]: (path: string) => void
   [IPC_CHANNELS.chrome.saveState]: (accountId: string, state: string) => void
@@ -435,6 +409,7 @@ export interface IpcChannels {
   [IPC_CHANNELS.app.getHideToTrayTipDismissed]: () => Promise<boolean>
   [IPC_CHANNELS.app.clearLocalLoginData]: () => Promise<void>
 
+  [IPC_CHANNELS.account.event]: (payload: AccountEventPayload) => void
   [IPC_CHANNELS.account.switch]: (params: { account: Account }) => void
 
   // Log

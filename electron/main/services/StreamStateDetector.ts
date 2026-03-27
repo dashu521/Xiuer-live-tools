@@ -4,12 +4,11 @@
  * 优化：直播中 2s 轮询，未开播 5s 轮询；多账号错峰避免同时触发
  */
 
-import { IPC_CHANNELS } from 'shared/ipcChannels'
 import type { StreamStatus } from 'shared/streamStatus'
 import type { ScopedLogger } from '#/logger'
 import type { BrowserSession } from '#/managers/BrowserSessionManager'
 import type { IPlatform } from '#/platforms/IPlatform'
-import windowManager from '#/windowManager'
+import { emitAccountEvent } from '#/services/AccountEventBus'
 
 const POLL_INTERVAL_LIVE_MS = 2000 // 直播中 2 秒
 const POLL_INTERVAL_OFFLINE_MS = 5000 // 未开播 5 秒，降低 CPU
@@ -160,11 +159,16 @@ export class StreamStateDetector {
           `[stream] Stream state changed: ${prevState} -> ${newState} (isLive=${isLive})`,
         )
         this.lastState = newState
-        windowManager.send(
-          IPC_CHANNELS.tasks.liveControl.streamStateChanged,
-          this.accountId,
-          newState,
-        )
+        const payload = {
+          accountId: this.accountId,
+          streamState: newState,
+        } as const
+        emitAccountEvent({
+          domain: 'liveControl',
+          type: 'streamStateChanged',
+          accountId: this.accountId,
+          payload,
+        })
 
         // 【核心修复】当检测到直播结束（从 live 变为 offline）时，自动触发断开连接
         // 解决页面刷新/导航时不触发 page.on('close') 的问题
@@ -190,11 +194,16 @@ export class StreamStateDetector {
         const newState: StreamStatus = 'offline'
         this.logger.warn('[stream] Stream state set to offline due to detection error')
         this.lastState = newState
-        windowManager.send(
-          IPC_CHANNELS.tasks.liveControl.streamStateChanged,
-          this.accountId,
-          newState,
-        )
+        const payload = {
+          accountId: this.accountId,
+          streamState: newState,
+        } as const
+        emitAccountEvent({
+          domain: 'liveControl',
+          type: 'streamStateChanged',
+          accountId: this.accountId,
+          payload,
+        })
         // 【核心修复】检测出错导致状态变为 offline 时，也要触发断开
         if (prevState === 'live' && newState === 'offline' && this.onStreamEnded) {
           this.logger.info('[stream] Detection error triggered stream end, disconnecting...')
@@ -211,7 +220,16 @@ export class StreamStateDetector {
     if (state !== this.lastState) {
       this.logger.info(`[stream] Stream state manually set: ${this.lastState} -> ${state}`)
       this.lastState = state
-      windowManager.send(IPC_CHANNELS.tasks.liveControl.streamStateChanged, this.accountId, state)
+      const payload = {
+        accountId: this.accountId,
+        streamState: state,
+      } as const
+      emitAccountEvent({
+        domain: 'liveControl',
+        type: 'streamStateChanged',
+        accountId: this.accountId,
+        payload,
+      })
     }
   }
 }

@@ -90,7 +90,6 @@ describe('IPC 通道契约测试', () => {
       const allowedDuplicateChannels = new Set([
         IPC_CHANNELS.tasks.autoReply.startCommentListener,
         IPC_CHANNELS.tasks.autoReply.stopCommentListener,
-        IPC_CHANNELS.tasks.autoReply.listenerStopped,
         IPC_CHANNELS.tasks.autoReply.showComment,
       ])
 
@@ -170,10 +169,10 @@ describe('IPC 通道契约测试', () => {
     it('函数类型通道应返回符合规范的字符串', () => {
       // 测试 stoppedFor 函数
       const accountId = 'test_account_123'
-      const stoppedChannel = IPC_CHANNELS.tasks.autoMessage.stoppedFor(accountId)
+      const stoppedChannel = IPC_CHANNELS.tasks.subAccount.stoppedFor(accountId)
       // 允许字母、数字、冒号、连字符和下划线
       expect(stoppedChannel).toMatch(/^[a-zA-Z0-9:_-]+$/)
-      expect(stoppedChannel).toBe(`tasks:autoMessage:stopped:${accountId}`)
+      expect(stoppedChannel).toBe(`tasks:subAccount:stopped:${accountId}`)
     })
   })
 })

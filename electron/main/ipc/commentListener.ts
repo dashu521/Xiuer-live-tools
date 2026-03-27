@@ -2,8 +2,8 @@ import { Result } from '@praha/byethrow'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { createLogger } from '#/logger'
 import { accountManager } from '#/managers/AccountManager'
+import { emitAccountEvent } from '#/services/AccountEventBus'
 import { typedIpcMainHandle } from '#/utils'
-import windowManager from '#/windowManager'
 
 const TASK_NAME = '监听评论'
 const TASK_TYPE = 'comment-listener'
@@ -35,8 +35,12 @@ function setupIpcHandlers() {
         accountSession.stopTask(TASK_TYPE)
         // 正常停止也要广播 stopped 事件，避免前端 TaskManager /
         // 自动回复 / 数据监控状态残留到下一次开播。
-        windowManager.send(IPC_CHANNELS.tasks.commentListener.stoppedFor(accountId), accountId)
-        windowManager.send(IPC_CHANNELS.tasks.commentListener.stopped, accountId)
+        emitAccountEvent({
+          domain: 'task',
+          type: 'commentListenerStopped',
+          accountId,
+          payload: { accountId },
+        })
       }),
       Result.inspectError(error => {
         const logger = createLogger(`@${accountManager.getAccountName(accountId)}`).scope(TASK_NAME)

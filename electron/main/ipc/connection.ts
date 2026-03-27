@@ -4,8 +4,8 @@ import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { createLogger } from '#/logger'
 import { accountManager } from '#/managers/AccountManager'
 import { browserManager } from '#/managers/BrowserSessionManager'
+import { emitAccountEvent } from '#/services/AccountEventBus'
 import { typedIpcMainHandle } from '#/utils'
-import windowManager from '#/windowManager'
 
 const TASK_NAME = '中控台'
 
@@ -30,23 +30,29 @@ function emitConnectionState(
     lastVerifiedAt?: number | null
   },
 ) {
-  windowManager.send(IPC_CHANNELS.tasks.liveControl.stateChanged, {
+  const payload = {
     accountId,
     connectState,
+  }
+  emitAccountEvent({
+    domain: 'liveControl',
+    type: 'stateChanged',
+    accountId,
+    payload,
   })
 }
 
 function setupIpcHandlers() {
   typedIpcMainHandle(
     IPC_CHANNELS.tasks.liveControl.connect,
-    async (_, { chromePath, headless, storageState, platform, account, traceId }) => {
+    async (_, { browserPath, headless, storageState, platform, account, traceId }) => {
       const logPrefix = traceId ? `[conn][${account.id}][${traceId}]` : `[conn][${account.id}]`
       const logger = createLogger(`@${account.name}`).scope(TASK_NAME)
 
       console.log(`[BrowserPopup] ${logPrefix} IPC received`, {
         platform,
         headless,
-        hasChromePath: !!chromePath,
+        hasBrowserPath: !!browserPath,
         hasStorageState: !!storageState,
       })
 
@@ -72,8 +78,8 @@ function setupIpcHandlers() {
           }
         }
 
-        if (chromePath) {
-          browserManager.setChromePath(chromePath)
+        if (browserPath) {
+          browserManager.setBrowserPath(browserPath)
         }
 
         logger.info(
@@ -172,11 +178,16 @@ function setupIpcHandlers() {
           }
 
           // 浏览器未启动，真正失败
-          windowManager.send(
-            IPC_CHANNELS.tasks.liveControl.disconnectedEvent,
-            account.id,
-            error instanceof Error ? error.message : '连接直播控制台失败',
-          )
+          const payload = {
+            accountId: account.id,
+            reason: error instanceof Error ? error.message : '连接直播控制台失败',
+          } as const
+          emitAccountEvent({
+            domain: 'liveControl',
+            type: 'disconnected',
+            accountId: account.id,
+            payload,
+          })
           emitConnectionState(account.id, {
             status: 'error',
             phase: 'error',

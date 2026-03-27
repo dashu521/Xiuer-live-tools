@@ -2,6 +2,7 @@
  * 自动回复任务实现
  */
 
+import type { AccountEventPayload } from 'shared/accountEvents'
 import type { IpcInvoke } from 'shared/electron-api'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { useAutoReplyStore } from '@/hooks/useAutoReply'
@@ -61,22 +62,22 @@ export class AutoReplyTask extends BaseTask {
 
       // 注册 IPC 事件监听器（用于后端主动停止时同步状态）
       // 【P2方案】使用账号隔离的事件通道，避免全局广播干扰
-      const handleListenerStopped = (accountId: string) => {
-        // 由于使用账号隔离的事件，这里不需要再检查 accountId
-        if (this.status === 'running') {
-          console.log(`[AutoReplyTask] Listener stopped by backend for account ${accountId}`)
-          this.stop('error')
+      const handleListenerStopped = (event: AccountEventPayload) => {
+        if (
+          event.domain !== 'task' ||
+          event.type !== 'commentListenerStopped' ||
+          event.accountId !== ctx.accountId ||
+          this.status !== 'running'
+        ) {
+          return
         }
+        console.log(`[AutoReplyTask] Listener stopped by backend for account ${event.accountId}`)
+        this.stop('error')
       }
 
       // 监听后端停止事件
       if (window.ipcRenderer) {
-        // 【P2方案】监听账号隔离的事件通道
-        const eventChannel = IPC_CHANNELS.tasks.commentListener.stoppedFor(ctx.accountId)
-        const unsubscribe = window.ipcRenderer.on(
-          eventChannel as `tasks:commentListener:stopped:${string}`,
-          handleListenerStopped as (accountId: string) => void,
-        )
+        const unsubscribe = window.ipcRenderer.on(IPC_CHANNELS.account.event, handleListenerStopped)
         this.registerDisposable(() => unsubscribe())
       }
 
@@ -113,7 +114,7 @@ export class AutoReplyTask extends BaseTask {
 
     // 执行清理器（移除 IPC 监听器等）
     // 这会清理所有注册的清理函数，包括：
-    // - IPC 事件监听器（listenerStopped）
+    // - IPC 事件监听器（account:event）
     // - 任何其他定时器、websocket 等资源
     this.executeDisposers()
 

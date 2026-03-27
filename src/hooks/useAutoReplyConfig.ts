@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { useAuthStore } from '@/stores/authStore'
+import { flushAllPersists, flushPersist, schedulePersist } from '@/utils/debouncedPersist'
 import { EVENTS, eventEmitter } from '@/utils/events'
 import type { StringFilterConfig } from '@/utils/filter'
 import { mergeWithoutArray } from '@/utils/misc'
@@ -168,15 +169,32 @@ export const useAutoReplyConfigStore = create<AutoReplyConfigStore>()(
       return state.contexts[accountId]
     }
 
-    const saveToStorage = (accountId: string, context: AutoReplyContext) => {
+    const saveToStorage = (
+      accountId: string,
+      context: AutoReplyContext,
+      options?: { immediate?: boolean },
+    ) => {
       const { currentUserId } = get()
       if (currentUserId) {
         try {
-          storageManager.set('auto-reply', context, {
-            level: 'account',
-            userId: currentUserId,
-            accountId,
-          })
+          const persistKey = `auto-reply:${currentUserId}:${accountId}`
+          const snapshot = {
+            ...context,
+            config: { ...context.config },
+          }
+          const write = () => {
+            storageManager.set('auto-reply', snapshot, {
+              level: 'account',
+              userId: currentUserId,
+              accountId,
+            })
+          }
+          if (options?.immediate) {
+            flushPersist(persistKey)
+            write()
+            return
+          }
+          schedulePersist(persistKey, write, 250)
         } catch (e) {
           console.error('[AutoReplyConfig] 保存到存储失败:', e)
         }
@@ -197,6 +215,7 @@ export const useAutoReplyConfigStore = create<AutoReplyConfigStore>()(
 
       loadUserContexts: (userId: string) => {
         const loadContexts = () => {
+          flushAllPersists()
           const { accounts } = useAccounts.getState()
           if (accounts.length === 0) {
             return
@@ -234,16 +253,13 @@ export const useAutoReplyConfigStore = create<AutoReplyConfigStore>()(
 
       resetAllContexts: () => {
         set(state => {
+          flushAllPersists()
           // 保存当前数据到存储
           const { currentUserId } = state
           if (currentUserId) {
             Object.entries(state.contexts).forEach(([accountId, context]) => {
               try {
-                storageManager.set('auto-reply', context, {
-                  level: 'account',
-                  userId: currentUserId,
-                  accountId,
-                })
+                saveToStorage(accountId, context, { immediate: true })
               } catch (e) {
                 console.error('[AutoReplyConfig] 保存配置失败:', e)
               }
@@ -329,7 +345,6 @@ export function useLoadAutoReplyConfigOnLogin() {
     if (isAuthenticated && user?.id) {
       // 延迟加载，确保存储系统已初始化
       setTimeout(() => {
-        console.log('[AutoReplyConfig] 加载用户配置:', user.id)
         loadUserContexts(user.id)
       }, 0)
     }

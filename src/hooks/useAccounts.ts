@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { buildAccessContext, checkAccess, PLAN_TEXT_MAP } from '@/domain/access'
 import { useAuthStore } from '@/stores/authStore'
+import { flushAllPersists, flushPersist, schedulePersist } from '@/utils/debouncedPersist'
 import { EVENTS, eventEmitter } from '@/utils/events'
 import { storageManager } from '@/utils/storage/StorageManager'
 
@@ -67,7 +68,6 @@ const loadFromStorage = (
     defaultAccountId: string | null
   }>('accounts', { level: 'user', userId })
 
-  console.log('[useAccounts] 从存储加载:', userId, '数据存在:', !!data)
   return data
 }
 
@@ -77,17 +77,32 @@ const loadFromStorage = (
 const saveToStorage = (
   userId: string | null,
   data: { accounts: Account[]; currentAccountId: string; defaultAccountId: string | null },
+  options?: { immediate?: boolean },
 ) => {
   if (!userId) {
-    console.warn('[useAccounts] saveToStorage: userId 为空，跳过保存')
     return
   }
 
-  storageManager.set('accounts', data, {
-    level: 'user',
-    userId,
-  })
-  console.log('[useAccounts] 数据已保存到存储:', userId, '账号数:', data.accounts.length)
+  const persistKey = `accounts:${userId}`
+  const snapshot = {
+    accounts: [...data.accounts],
+    currentAccountId: data.currentAccountId,
+    defaultAccountId: data.defaultAccountId,
+  }
+  const write = () => {
+    storageManager.set('accounts', snapshot, {
+      level: 'user',
+      userId,
+    })
+  }
+
+  if (options?.immediate) {
+    flushPersist(persistKey)
+    write()
+    return
+  }
+
+  schedulePersist(persistKey, write, 200)
 }
 
 export const useAccounts = create<AccountsStore>()(
@@ -155,12 +170,6 @@ export const useAccounts = create<AccountsStore>()(
 
       // 在 set 外部调用 saveToStorage，确保使用最新的状态
       const currentState = get()
-      console.log(
-        '[useAccounts] addAccount 后保存数据，userId:',
-        currentState.currentUserId,
-        '账号数:',
-        currentState.accounts.length,
-      )
       saveToStorage(currentState.currentUserId, {
         accounts: currentState.accounts,
         currentAccountId: currentState.currentAccountId,
@@ -206,11 +215,15 @@ export const useAccounts = create<AccountsStore>()(
       })
 
       const currentState = get()
-      saveToStorage(currentState.currentUserId, {
-        accounts: currentState.accounts,
-        currentAccountId: currentState.currentAccountId,
-        defaultAccountId: currentState.defaultAccountId,
-      })
+      saveToStorage(
+        currentState.currentUserId,
+        {
+          accounts: currentState.accounts,
+          currentAccountId: currentState.currentAccountId,
+          defaultAccountId: currentState.defaultAccountId,
+        },
+        { immediate: true },
+      )
 
       eventEmitter.emit(EVENTS.ACCOUNT_REMOVED, id)
     },
@@ -221,11 +234,16 @@ export const useAccounts = create<AccountsStore>()(
       })
 
       const currentState = get()
-      saveToStorage(currentState.currentUserId, {
-        accounts: currentState.accounts,
-        currentAccountId: currentState.currentAccountId,
-        defaultAccountId: currentState.defaultAccountId,
-      })
+      flushAllPersists()
+      saveToStorage(
+        currentState.currentUserId,
+        {
+          accounts: currentState.accounts,
+          currentAccountId: currentState.currentAccountId,
+          defaultAccountId: currentState.defaultAccountId,
+        },
+        { immediate: true },
+      )
 
       eventEmitter.emit(EVENTS.ACCOUNT_SWITCHED, id)
     },
@@ -291,7 +309,7 @@ export const useAccounts = create<AccountsStore>()(
     },
 
     loadUserAccounts: (userId: string) => {
-      console.log('[useAccounts] loadUserAccounts 被调用，userId:', userId)
+      flushAllPersists()
 
       const loadedData = loadFromStorage(userId)
 
@@ -307,12 +325,10 @@ export const useAccounts = create<AccountsStore>()(
           )
           state.currentAccountId = normalized.currentAccountId
           state.defaultAccountId = normalized.defaultAccountId
-          console.log('[useAccounts] 加载完成，账号数:', state.accounts.length)
         } else {
           state.accounts = []
           state.currentAccountId = ''
           state.defaultAccountId = null
-          console.log('[useAccounts] 无历史数据，初始化为空')
         }
       })
     },
@@ -321,12 +337,15 @@ export const useAccounts = create<AccountsStore>()(
       const currentState = get()
 
       if (currentState.currentUserId) {
-        saveToStorage(currentState.currentUserId, {
-          accounts: currentState.accounts,
-          currentAccountId: currentState.currentAccountId,
-          defaultAccountId: currentState.defaultAccountId,
-        })
-        console.log('[useAccounts] 登出时保存数据:', currentState.currentUserId)
+        saveToStorage(
+          currentState.currentUserId,
+          {
+            accounts: currentState.accounts,
+            currentAccountId: currentState.currentAccountId,
+            defaultAccountId: currentState.defaultAccountId,
+          },
+          { immediate: true },
+        )
       }
 
       set(state => {
@@ -349,13 +368,11 @@ const unsubscribe =
 
         // 用户登录
         if (currentUserId && currentUserId !== prevUserId) {
-          console.log('[useAccounts] 检测到用户变化:', prevUserId, '->', currentUserId)
           useAccounts.getState().loadUserAccounts(currentUserId)
         }
 
         // 用户登出
         if (!currentUserId && prevUserId) {
-          console.log('[useAccounts] 检测到用户登出:', prevUserId)
           useAccounts.getState().reset()
         }
       })

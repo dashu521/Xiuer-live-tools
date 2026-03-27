@@ -13,11 +13,7 @@ import { join } from 'node:path'
 
 // 动态通道前缀（手动定义，因为正则难以准确匹配）
 const DYNAMIC_PREFIXES = [
-  'tasks:autoMessage:stopped:',    // tasks:autoMessage:stopped:accountId
-  'tasks:autoPopUp:stopped:',      // tasks:autoPopUp:stopped:accountId
-  'tasks:commentListener:stopped:', // tasks:commentListener:stopped:accountId
-  'tasks:autoReply:listenerStopped:', // tasks:autoReply:listenerStopped:accountId
-  'tasks:subAccount:stopped:',     // tasks:subAccount:stopped:accountId
+  'tasks:subAccount:stopped:', // tasks:subAccount:stopped:accountId
 ]
 
 // 需要包含的前缀（所有这些前缀下的通道都允许）

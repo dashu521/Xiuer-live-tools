@@ -1,5 +1,6 @@
 import path from 'node:path'
 import type playwright from 'playwright'
+import type { BrowserTestResult } from 'shared/browser'
 import { createLogger } from '#/logger'
 import { findChromium } from '#/utils/checkChrome'
 
@@ -57,20 +58,20 @@ export interface BrowserConfig {
 export type StorageState = playwright.BrowserContextOptions['storageState']
 
 class BrowserSessionManager {
-  private chromePath: string | null = null
+  private browserPath: string | null = null
 
-  public setChromePath(path: string) {
-    this.chromePath = path
+  public setBrowserPath(path: string) {
+    this.browserPath = path
   }
 
-  private async getChromePathOrDefault() {
-    if (!this.chromePath) {
-      this.chromePath = await findChromium()
+  private async getBrowserPathOrDefault() {
+    if (!this.browserPath) {
+      this.browserPath = await findChromium()
     }
-    return this.chromePath
+    return this.browserPath
   }
 
-  private async createBrowser(headless = true) {
+  private async createBrowser(headless = true, executablePath?: string) {
     console.log(
       `[BrowserPopup] [BrowserSessionManager] createBrowser() called with headless=${headless}`,
     )
@@ -89,28 +90,31 @@ class BrowserSessionManager {
       throw new Error(errorMsg)
     }
 
-    const execPath = await this.getChromePathOrDefault()
-    console.log(`[BrowserPopup] [BrowserSessionManager] Chrome path: ${execPath}`)
+    const execPath = executablePath || (await this.getBrowserPathOrDefault())
+    console.log(`[BrowserPopup] [BrowserSessionManager] Browser path: ${execPath}`)
     logger.info(`Launching browser: headless=${headless}, execPath=${execPath}`)
 
-    // 无头模式下使用减内存启动参数，降低多账号并存时的内存占用
-    const args = headless
-      ? [
-          '--disable-gpu',
-          '--disable-dev-shm-usage',
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-extensions',
-          '--disable-background-networking',
-          '--disable-default-apps',
-          '--disable-sync',
-          '--disable-translate',
-          '--metrics-recording-only',
-          '--no-first-run',
-          '--mute-audio',
-          '--hide-scrollbars',
-        ]
-      : []
+    const commonArgs = [
+      '--disable-extensions',
+      '--disable-background-networking',
+      '--disable-default-apps',
+      '--disable-sync',
+      '--disable-translate',
+      '--metrics-recording-only',
+      '--no-first-run',
+    ]
+
+    // Windows 打包环境里，有头浏览器也需要带上基础稳定性参数，减少浏览器一闪而退。
+    const headlessOnlyArgs = [
+      '--disable-gpu',
+      '--disable-dev-shm-usage',
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--mute-audio',
+      '--hide-scrollbars',
+    ]
+
+    const args = headless ? [...commonArgs, ...headlessOnlyArgs] : commonArgs
 
     try {
       console.log('[BrowserPopup] [BrowserSessionManager] Calling chromium.launch()')
@@ -160,6 +164,30 @@ class BrowserSessionManager {
     const page = await context.newPage()
     console.log('[BrowserPopup] [BrowserSessionManager] Page created, session ready')
     return { browser, context, page }
+  }
+
+  public async testBrowserLaunch(browserPath: string): Promise<BrowserTestResult> {
+    try {
+      const browser = await this.createBrowser(true, browserPath)
+      const context = await browser.newContext()
+      const page = await context.newPage()
+      await page.goto('about:blank', { waitUntil: 'domcontentloaded' })
+      await browser.close()
+
+      return { success: true }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : typeof error === 'string'
+            ? error
+            : '浏览器启动失败'
+      logger.warn(`[Browser] test launch failed: ${errorMessage}`)
+      return {
+        success: false,
+        error: errorMessage,
+      }
+    }
   }
 }
 

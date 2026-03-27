@@ -1,8 +1,6 @@
 const COMMENT_LISTENER_CHANNELS = {
   start: 'tasks:commentListener:start',
   stop: 'tasks:commentListener:stop',
-  stopped: 'tasks:commentListener:stopped',
-  stoppedFor: (accountId: string) => `tasks:commentListener:stopped:${accountId}`,
   showComment: 'tasks:commentListener:showComment',
 } as const
 
@@ -36,12 +34,9 @@ export const IPC_CHANNELS = {
   tasks: {
     liveControl: {
       connect: 'tasks:liveControl:connect',
-      stateChanged: 'tasks:liveControl:stateChanged',
       waitingForLogin: 'tasks:liveControl:waitingForLogin',
       notifyAccountName: 'tasks:liveControl:notifyAccountName',
       disconnect: 'tasks:liveControl:disconnect',
-      disconnectedEvent: 'tasks:liveControl:disconnectedEvent',
-      streamStateChanged: 'tasks:liveControl:streamStateChanged',
       getLiveRoomUrl: 'tasks:liveControl:getLiveRoomUrl',
       /** 【P0-2 断线自动重连】重连成功事件 */
       reconnectedEvent: 'tasks:liveControl:reconnectedEvent',
@@ -51,10 +46,6 @@ export const IPC_CHANNELS = {
     autoMessage: {
       start: 'tasks:autoMessage:start',
       stop: 'tasks:autoMessage:stop',
-      /** @deprecated 使用 stoppedFor(accountId) 替代 */
-      stoppedEvent: 'tasks:autoMessage:stoppedEvent',
-      /** 账号隔离的停止事件 */
-      stoppedFor: (accountId: string) => `tasks:autoMessage:stopped:${accountId}`,
       updateConfig: 'tasks:autoMessage:updateConfig',
       sendBatchMessages: 'tasks:autoMessage:sendBatchMessages',
     },
@@ -62,10 +53,6 @@ export const IPC_CHANNELS = {
       start: 'tasks:autoPopUp:start',
       stop: 'tasks:autoPopUp:stop',
       updateConfig: 'tasks:autoPopUp:updateConfig',
-      /** @deprecated 使用 stoppedFor(accountId) 替代 */
-      stoppedEvent: 'tasks:autoPopUp:stoppedEvent',
-      /** 账号隔离的停止事件 */
-      stoppedFor: (accountId: string) => `tasks:autoPopUp:stopped:${accountId}`,
       registerShortcuts: 'tasks:autoPopup:registerShortcut',
       unregisterShortcuts: 'tasks:autoPopup:unregisterShortcut',
     },
@@ -82,10 +69,6 @@ export const IPC_CHANNELS = {
     commentListener: {
       start: COMMENT_LISTENER_CHANNELS.start,
       stop: COMMENT_LISTENER_CHANNELS.stop,
-      /** @deprecated 使用 stoppedFor(accountId) 替代 */
-      stopped: COMMENT_LISTENER_CHANNELS.stopped,
-      /** 账号隔离的监听器停止事件 */
-      stoppedFor: COMMENT_LISTENER_CHANNELS.stoppedFor,
       showComment: COMMENT_LISTENER_CHANNELS.showComment,
     },
     autoReply: {
@@ -93,10 +76,6 @@ export const IPC_CHANNELS = {
       startCommentListener: COMMENT_LISTENER_CHANNELS.start,
       /** @deprecated 使用 tasks.commentListener.stop 替代 */
       stopCommentListener: COMMENT_LISTENER_CHANNELS.stop,
-      /** @deprecated 使用 tasks.commentListener.stopped 替代 */
-      listenerStopped: COMMENT_LISTENER_CHANNELS.stopped,
-      /** @deprecated 使用 tasks.commentListener.stoppedFor(accountId) 替代 */
-      listenerStoppedFor: COMMENT_LISTENER_CHANNELS.stoppedFor,
       /** @deprecated 使用 tasks.commentListener.showComment 替代 */
       showComment: COMMENT_LISTENER_CHANNELS.showComment,
       startAutoReply: 'tasks:autoReply:startAutoReply',
@@ -138,9 +117,11 @@ export const IPC_CHANNELS = {
     load: 'config:load',
   },
   chrome: {
+    listBrowsers: 'chrome:listBrowsers',
     getPath: 'chrome:getPath',
     setPath: 'chrome:setPath',
     selectPath: 'chrome:selectPath',
+    testBrowser: 'chrome:testBrowser',
     toggleDevTools: 'chrome:toggleDevTools',
     saveState: 'chrome:saveState',
   },
@@ -157,6 +138,7 @@ export const IPC_CHANNELS = {
     quitAndInstall: 'updater:quitAndInstall',
   },
   account: {
+    event: 'account:event',
     switch: 'account:switch',
   },
   log: 'log',
