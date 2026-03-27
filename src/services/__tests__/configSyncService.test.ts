@@ -46,6 +46,8 @@ describe('configSyncService account selection', () => {
 
     const { LocalStorageAdapter, storageManager } = await import('@/utils/storage')
     storageManager.registerAdapter(new LocalStorageAdapter())
+    const { configSyncService } = await import('@/services/configSyncService')
+    configSyncService.resetForTests()
   })
 
   it('collects currentAccountId and defaultAccountId for cloud sync', async () => {
@@ -410,7 +412,7 @@ describe('configSyncService account selection', () => {
       extraSpaces: false,
     })
 
-    await vi.advanceTimersByTimeAsync(2500)
+    await vi.advanceTimersByTimeAsync(4500)
 
     expect(syncUserConfigMock).toHaveBeenCalledTimes(1)
     expect(syncUserConfigMock.mock.calls[0][0]).toMatchObject({
@@ -421,6 +423,69 @@ describe('configSyncService account selection', () => {
             messages: [{ id: 'm-2', content: '记得点关注', pinTop: false }],
             random: true,
             extraSpaces: false,
+          },
+        },
+      },
+    })
+
+    cleanup()
+  })
+
+  it('auto sync retries after rate-limit window instead of dropping pending changes', async () => {
+    vi.useFakeTimers()
+    syncUserConfigMock.mockResolvedValue({
+      ok: true,
+      data: {
+        success: true,
+        message: '配置同步成功',
+        synced_at: '2026-03-20T00:00:00.000Z',
+      },
+    })
+
+    const { useAccounts } = await import('@/hooks/useAccounts')
+    const { useAutoMessageStore } = await import('@/hooks/useAutoMessage')
+    const { configSyncService } = await import('@/services/configSyncService')
+
+    useAccounts.setState({
+      accounts: [{ id: 'acc-1', name: '账号1' }],
+      currentAccountId: 'acc-1',
+      defaultAccountId: null,
+      currentUserId: 'user-1',
+    })
+    useAutoMessageStore.setState({
+      contexts: {},
+      currentUserId: 'user-1',
+    })
+
+    const cleanup = configSyncService.setupAutoSync()
+
+    useAutoMessageStore.getState().setConfig('acc-1', {
+      scheduler: { interval: [15000, 30000] },
+      messages: [{ id: 'm-1', content: '第一条消息', pinTop: false }],
+      random: true,
+      extraSpaces: false,
+    })
+
+    await vi.advanceTimersByTimeAsync(4500)
+    expect(syncUserConfigMock).toHaveBeenCalledTimes(1)
+
+    useAutoMessageStore.getState().setConfig('acc-1', {
+      scheduler: { interval: [15000, 30000] },
+      messages: [{ id: 'm-2', content: '第二条消息', pinTop: false }],
+      random: true,
+      extraSpaces: false,
+    })
+
+    await vi.advanceTimersByTimeAsync(4500)
+    expect(syncUserConfigMock).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(11000)
+    expect(syncUserConfigMock).toHaveBeenCalledTimes(2)
+    expect(syncUserConfigMock.mock.calls[1][0]).toMatchObject({
+      autoMessageConfigs: {
+        'acc-1': {
+          config: {
+            messages: [{ id: 'm-2', content: '第二条消息', pinTop: false }],
           },
         },
       },

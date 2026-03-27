@@ -83,6 +83,19 @@ class ConfigSyncService {
   private readonly SYNC_DEBOUNCE_MS = 4000
   private readonly MIN_SYNC_INTERVAL_MS = 15000
 
+  private enqueueSync(delayMs: number): void {
+    if (this.syncTimeout) {
+      clearTimeout(this.syncTimeout)
+    }
+
+    this.syncTimeout = setTimeout(() => {
+      this.syncTimeout = null
+      this.syncToCloud().catch(err => {
+        console.error('[ConfigSync] Scheduled sync failed:', err)
+      })
+    }, delayMs)
+  }
+
   private getConfigSignature(config: UserConfigData): string {
     return JSON.stringify(config)
   }
@@ -114,13 +127,21 @@ class ConfigSyncService {
   async syncToCloud(): Promise<{ success: boolean; error?: string }> {
     if (this.isSyncing) {
       if (DEBUG) console.log('[ConfigSync] Sync already in progress, skipping')
+      this.enqueueSync(this.SYNC_DEBOUNCE_MS)
       return { success: true }
     }
 
     const now = Date.now()
     if (now - this.lastSyncTime < this.MIN_SYNC_INTERVAL_MS) {
-      if (DEBUG) console.log('[ConfigSync] Sync too frequent, skipping')
+      const retryDelay = this.MIN_SYNC_INTERVAL_MS - (now - this.lastSyncTime)
+      if (DEBUG) console.log('[ConfigSync] Sync too frequent, rescheduling', { retryDelay })
+      this.enqueueSync(retryDelay)
       return { success: true }
+    }
+
+    if (this.syncTimeout) {
+      clearTimeout(this.syncTimeout)
+      this.syncTimeout = null
     }
 
     this.isSyncing = true
@@ -295,16 +316,18 @@ class ConfigSyncService {
     }
 
     this.lastQueuedSignature = signature
+    this.enqueueSync(this.SYNC_DEBOUNCE_MS)
+  }
 
+  resetForTests(): void {
     if (this.syncTimeout) {
       clearTimeout(this.syncTimeout)
+      this.syncTimeout = null
     }
-
-    this.syncTimeout = setTimeout(() => {
-      this.syncToCloud().catch(err => {
-        console.error('[ConfigSync] Scheduled sync failed:', err)
-      })
-    }, this.SYNC_DEBOUNCE_MS)
+    this.isSyncing = false
+    this.lastSyncTime = 0
+    this.lastQueuedSignature = null
+    this.lastSyncedSignature = null
   }
 
   setupAutoSync(): () => void {
