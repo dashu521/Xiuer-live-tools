@@ -6,6 +6,41 @@ import { taskRuntimeMonitor } from './services/TaskRuntimeMonitor'
 class WindowManager {
   private mainWindow?: BrowserWindow
 
+  private summarizeArgs(args: unknown[]): string {
+    if (args.length === 0) return '0 args'
+    if (args.length > 1) return `${args.length} args`
+
+    const [firstArg] = args
+    if (typeof firstArg === 'string') {
+      return `string(${Math.min(firstArg.length, 64)})`
+    }
+    if (typeof firstArg === 'number' || typeof firstArg === 'boolean') {
+      return String(firstArg)
+    }
+    if (firstArg && typeof firstArg === 'object') {
+      return `object(${Object.keys(firstArg as Record<string, unknown>)
+        .slice(0, 5)
+        .join(',')})`
+    }
+    return typeof firstArg
+  }
+
+  private resolveAccountId(args: unknown[]): string {
+    const [firstArg] = args
+    if (typeof firstArg === 'string' && firstArg.trim()) {
+      return firstArg
+    }
+    if (
+      firstArg &&
+      typeof firstArg === 'object' &&
+      'accountId' in (firstArg as Record<string, unknown>) &&
+      typeof (firstArg as { accountId?: unknown }).accountId === 'string'
+    ) {
+      return (firstArg as { accountId: string }).accountId
+    }
+    return 'unknown'
+  }
+
   setMainWindow(win: BrowserWindow) {
     this.mainWindow = win
 
@@ -17,13 +52,14 @@ class WindowManager {
 
   send(channel: string, ...args: any[]): boolean {
     const sendTime = Date.now()
+    const summarizedArgs = this.summarizeArgs(args)
 
     // 记录发送到监控
-    const accountId = args[0] || 'unknown'
+    const accountId = this.resolveAccountId(args)
     taskRuntimeMonitor.logEventCustom('IPC_SEND', accountId, {
       channel: String(channel),
       sendTime,
-      args: args.length > 1 ? `${args.length} args` : args[0],
+      args: summarizedArgs,
     })
 
     // 应用退出时不发送任何消息，避免 "Object has been destroyed" 错误
@@ -41,7 +77,9 @@ class WindowManager {
       !this.mainWindow.webContents.isDestroyed()
     ) {
       try {
-        console.log(`[windowManager][send] >>> Sending to renderer: ${String(channel)}`, ...args)
+        console.log(
+          `[windowManager][send] >>> Sending to renderer: ${String(channel)} (${summarizedArgs})`,
+        )
         this.mainWindow.webContents.send(channel, ...args)
         console.log(`[windowManager][send] >>> Success: ${String(channel)}`)
         taskRuntimeMonitor.logEventCustom('IPC_SEND_SUCCESS', accountId, {
