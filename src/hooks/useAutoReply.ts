@@ -1,5 +1,5 @@
 import { useMemoizedFn } from 'ahooks'
-import { useMemo } from 'react'
+import { useRef } from 'react'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { providers } from 'shared/providers'
 import { create } from 'zustand'
@@ -413,16 +413,23 @@ const handleAIReply = async (
 }
 
 export function useAutoReply() {
-  const store = useAutoReplyStore()
-  const { currentAccountId } = useAccounts()
+  const currentAccountId = useAccounts(state => state.currentAccountId)
   const accountName = useCurrentLiveControl(ctx => ctx.accountName)
-  const aiStore = useAIChatStore()
+  const defaultContextRef = useRef(createDefaultContext())
+  const context = useAutoReplyStore(
+    state => state.contexts[currentAccountId] ?? defaultContextRef.current,
+  )
+  const addComment = useAutoReplyStore(state => state.addComment)
+  const addReply = useAutoReplyStore(state => state.addReply)
+  const setIsRunning = useAutoReplyStore(state => state.setIsRunning)
+  const setIsListening = useAutoReplyStore(state => state.setIsListening)
+  const removeReply = useAutoReplyStore(state => state.removeReply)
+  const provider = useAIChatStore(state => state.config.provider)
+  const model = useAIChatStore(state => state.config.model)
+  const apiKeys = useAIChatStore(state => state.apiKeys)
+  const customBaseURL = useAIChatStore(state => state.customBaseURL)
   const { config } = useAutoReplyConfig()
   const { handleError } = useErrorHandler()
-
-  const context = useMemo(() => {
-    return store.contexts[currentAccountId] || createDefaultContext()
-  }, [store.contexts, currentAccountId])
 
   const { isListening, comments, replies } = context
 
@@ -439,7 +446,7 @@ export function useAutoReply() {
 
     // 只在监听状态时添加评论到列表
     if (autoReplyListening === 'listening') {
-      store.addComment(accountId, comment)
+      addComment(accountId, comment)
     }
 
     // 同步到 LiveStats 统计模块（仅在监听时）
@@ -490,9 +497,7 @@ export function useAutoReply() {
           const keywordReplied = handleKeywordReply(comment, config, accountId, handleError)
           // 如果关键字未回复，且 AI 回复已启用，则尝试 AI 回复
           if (!keywordReplied && config.comment.aiReply.enable) {
-            const { provider, model } = aiStore.config
-            const apiKey = aiStore.apiKeys[provider]
-            const customBaseURL = aiStore.customBaseURL
+            const apiKey = apiKeys[provider]
             handleAIReply(
               accountId,
               comment,
@@ -506,7 +511,7 @@ export function useAutoReply() {
                 customBaseURL,
               },
               (replyContent: string) => {
-                store.addReply(accountId, comment.msg_id, comment.nick_name, replyContent)
+                addReply(accountId, comment.msg_id, comment.nick_name, replyContent)
               },
               handleError,
             )
@@ -558,9 +563,8 @@ export function useAutoReply() {
     // Actions (绑定到当前账户)
     handleComment,
     // 【Phase 2A】内部状态设置保持原样，供任务内部使用
-    setIsRunning: (running: boolean) => store.setIsRunning(currentAccountId, running),
-    setIsListening: (listening: ListeningStatus) =>
-      store.setIsListening(currentAccountId, listening),
-    removeReply: (commentId: string) => store.removeReply(currentAccountId, commentId),
+    setIsRunning: (running: boolean) => setIsRunning(currentAccountId, running),
+    setIsListening: (listening: ListeningStatus) => setIsListening(currentAccountId, listening),
+    removeReply: (commentId: string) => removeReply(currentAccountId, commentId),
   }
 }

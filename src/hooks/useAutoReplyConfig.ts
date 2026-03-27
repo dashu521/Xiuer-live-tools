@@ -258,46 +258,44 @@ export const useAutoReplyConfigStore = create<AutoReplyConfigStore>()(
 )
 
 export const useAutoReplyConfig = () => {
-  const store = useAutoReplyConfigStore()
   const currentAccountId = useAccounts(ctx => ctx.currentAccountId)
-  const config = mergeWithoutArray(
-    createDefaultConfig(),
-    store.contexts[currentAccountId]?.config ?? {},
-  )
+  const accountConfig = useAutoReplyConfigStore(state => state.contexts[currentAccountId]?.config)
+  const updateConfig = useAutoReplyConfigStore(state => state.updateConfig)
+  const config = mergeWithoutArray(createDefaultConfig(), accountConfig ?? {})
 
   return {
     config,
     updateKeywordRules: (rules: AutoReplyConfig['comment']['keywordReply']['rules']) => {
-      store.updateConfig(currentAccountId, {
+      updateConfig(currentAccountId, {
         comment: { keywordReply: { rules } },
       })
     },
     updateAIReplySettings: (settings: DeepPartial<AutoReplyConfig['comment']['aiReply']>) => {
-      store.updateConfig(currentAccountId, { comment: { aiReply: settings } })
+      updateConfig(currentAccountId, { comment: { aiReply: settings } })
     },
     updateGeneralSettings: (
       settings: DeepPartial<Pick<AutoReplyConfig, 'entry' | 'hideUsername'>>,
     ) => {
-      store.updateConfig(currentAccountId, settings)
+      updateConfig(currentAccountId, settings)
     },
     updateEventReplyContents: (
       replyType: EventMessageType,
       contents: SimpleEventReplyMessage[],
     ) => {
-      store.updateConfig(currentAccountId, {
+      updateConfig(currentAccountId, {
         [replyType]: { messages: contents },
       })
     },
     updateBlockList: (blockList: string[]) => {
-      store.updateConfig(currentAccountId, { blockList })
+      updateConfig(currentAccountId, { blockList })
     },
     updateKeywordReplyEnabled: (enable: boolean) => {
-      store.updateConfig(currentAccountId, {
+      updateConfig(currentAccountId, {
         comment: { keywordReply: { enable } },
       })
     },
     updateEventReplyEnabled: (replyType: EventMessageType, enable: boolean) => {
-      store.updateConfig(currentAccountId, {
+      updateConfig(currentAccountId, {
         [replyType]: { enable },
       })
     },
@@ -305,15 +303,15 @@ export const useAutoReplyConfig = () => {
       replyType: T,
       options: AutoReplyConfig[T]['options'],
     ) => {
-      store.updateConfig(currentAccountId, {
+      updateConfig(currentAccountId, {
         [replyType]: { options },
       })
     },
     updateWSConfig: (wsConfig: DeepPartial<AutoReplyConfig['ws']>) => {
-      store.updateConfig(currentAccountId, { ws: wsConfig })
+      updateConfig(currentAccountId, { ws: wsConfig })
     },
     updatePinCommentConfig: (pinCommentConfig: DeepPartial<AutoReplyConfig['pinComment']>) => {
-      store.updateConfig(currentAccountId, {
+      updateConfig(currentAccountId, {
         pinComment: pinCommentConfig,
       })
     },
@@ -322,16 +320,17 @@ export const useAutoReplyConfig = () => {
 
 // Hook: 自动加载配置
 export function useLoadAutoReplyConfigOnLogin() {
-  const { loadUserContexts } = useAutoReplyConfigStore()
-  const { isAuthenticated, user } = useAuthStore()
+  const loadUserContexts = useAutoReplyConfigStore(state => state.loadUserContexts)
+  const isAuthenticated = useAuthStore(state => state.isAuthenticated)
+  const userId = useAuthStore(state => state.user?.id ?? null)
 
   useEffect(() => {
-    if (isAuthenticated && user?.id) {
+    if (isAuthenticated && userId) {
       // 延迟加载，确保存储系统已初始化
       setTimeout(() => {
-        console.log('[AutoReplyConfig] 加载用户配置:', user.id)
-        loadUserContexts(user.id)
+        console.log('[AutoReplyConfig] 加载用户配置:', userId)
+        loadUserContexts(userId)
       }, 0)
     }
-  }, [isAuthenticated, user?.id, loadUserContexts])
+  }, [isAuthenticated, userId, loadUserContexts])
 }

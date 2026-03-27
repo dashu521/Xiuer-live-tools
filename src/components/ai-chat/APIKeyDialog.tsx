@@ -235,8 +235,12 @@ const ApiKeyInput = memo(
 )
 
 export function APIKeyDialog() {
-  const { apiKeys, config, saveApiKeys, setConfig, customBaseURL, setCustomBaseURL } =
-    useAIChatStore()
+  const apiKeys = useAIChatStore(state => state.apiKeys)
+  const config = useAIChatStore(state => state.config)
+  const saveApiKeys = useAIChatStore(state => state.saveApiKeys)
+  const setConfig = useAIChatStore(state => state.setConfig)
+  const customBaseURL = useAIChatStore(state => state.customBaseURL)
+  const setCustomBaseURL = useAIChatStore(state => state.setCustomBaseURL)
   const { toast } = useToast()
   const { showError } = useFriendlyError()
 
@@ -246,6 +250,14 @@ export function APIKeyDialog() {
   const [tempCustomBaseURL, setTempCustomBaseURL] = useState(customBaseURL || '')
   const [testLoading, setTestLoading] = useState(false)
   const [testSuccess, setTestSuccess] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setTempKeys(apiKeys)
+      setTempConfig(config)
+      setTempCustomBaseURL(customBaseURL || '')
+    }
+  }, [apiKeys, config, customBaseURL, open])
 
   // 保存配置
   const handleSave = useCallback(async () => {

@@ -30,6 +30,11 @@ const MAX_LOG_MESSAGES = 200 // 仅展示最近的 200 条日志
 // [SECURITY] 敏感信息脱敏配置
 const SENSITIVE_PATTERNS = [
   { pattern: /token[=:]\s*["']?[a-zA-Z0-9_\-.]+["']?/gi, replacement: 'token=***' },
+  {
+    pattern:
+      /"(access_token|refresh_token|token|password|old_password|new_password|code|secret|key)"\s*:\s*"[^"]+"/gi,
+    replacement: '"$1":"***"',
+  },
   { pattern: /password[=:]\s*["']?[^"'\s]+["']?/gi, replacement: 'password=***' },
   { pattern: /code[=:]\s*["']?\d{4,8}["']?/gi, replacement: 'code=***' },
   { pattern: /secret[=:]\s*["']?[^"'\s]+["']?/gi, replacement: 'secret=***' },
@@ -38,7 +43,10 @@ const SENSITIVE_PATTERNS = [
     pattern: /authorization[:\s]+["']?bearer\s+[a-zA-Z0-9_\-.]+["']?/gi,
     replacement: 'authorization: Bearer ***',
   },
-  { pattern: /([?&])(token|password|code|secret|key)=[^&]*/gi, replacement: '$1$2=***' },
+  {
+    pattern: /([?&])(token|password|old_password|new_password|code|secret|key)=[^&]*/gi,
+    replacement: '$1$2=***',
+  },
 ]
 
 /**
