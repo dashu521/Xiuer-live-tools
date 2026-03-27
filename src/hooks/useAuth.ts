@@ -3,7 +3,11 @@ import { normalizePlan, PLAN_TEXT_MAP } from '@/domain/access'
 import { useAuthStore } from '@/stores/authStore'
 
 export function useAuthInit() {
-  const { checkAuth, refreshUserStatus, isAuthenticated, authCheckDone, isOffline } = useAuthStore()
+  const checkAuth = useAuthStore(state => state.checkAuth)
+  const refreshUserStatus = useAuthStore(state => state.refreshUserStatus)
+  const isAuthenticated = useAuthStore(state => state.isAuthenticated)
+  const authCheckDone = useAuthStore(state => state.authCheckDone)
+  const isOffline = useAuthStore(state => state.isOffline)
   const syncInFlightRef = useRef(false)
   const lastSyncedAtRef = useRef(0)
 
@@ -76,13 +80,13 @@ export function useAuthInit() {
 
 // Hook to handle login requirement for features
 export function useRequireAuth(feature: string) {
-  const { isAuthenticated, token } = useAuthStore()
+  const isAuthenticated = useAuthStore(state => state.isAuthenticated)
 
   const checkAndPromptAuth = async (): Promise<boolean> => {
     if (!feature) return true
 
     try {
-      const response = await window.authAPI.checkFeatureAccess(token || '', feature)
+      const response = await window.authAPI.checkFeatureAccess(feature)
       const { featureAccess } = response
 
       if (!featureAccess.can_access) {
@@ -134,7 +138,7 @@ export function useRequireAuth(feature: string) {
  * })
  */
 export function useRequireAuthForAction(feature: string) {
-  const { isAuthenticated } = useAuthStore()
+  const isAuthenticated = useAuthStore(state => state.isAuthenticated)
   const pendingActionRef = useRef<(() => Promise<void>) | null>(null)
   const authSuccessListenerRef = useRef<((event: CustomEvent) => void) | null>(null)
 

@@ -68,7 +68,9 @@ export function getCurrentUserId(): string {
  * @param userId 用户ID（可选，默认当前登录用户）
  */
 export function verifyAccountAccess(accountId: string, userId?: string): boolean {
-  const _currentUserId = userId || getCurrentUserId()
+  if (!userId) {
+    getCurrentUserId()
+  }
   const { accounts } = useAccounts.getState()
 
   // 检查该账号是否属于当前用户

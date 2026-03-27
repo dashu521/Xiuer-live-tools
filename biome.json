@@ -19,6 +19,7 @@
       "!**/.agents",
       "!**/.venv",
       "!**/logs",
+      "!tmp",
       "!**/docs/archive",
       "!**/*.html",
       "!changelog.config.js",

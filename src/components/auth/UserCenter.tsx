@@ -21,7 +21,9 @@ const PRIMARY_STYLES = {
 } as const
 
 export function UserCenter({ isOpen, onClose }: UserCenterProps) {
-  const { user, logout, refreshUserStatus } = useAuthStore()
+  const user = useAuthStore(state => state.user)
+  const logout = useAuthStore(state => state.logout)
+  const refreshUserStatus = useAuthStore(state => state.refreshUserStatus)
   const { toast } = useToast()
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)

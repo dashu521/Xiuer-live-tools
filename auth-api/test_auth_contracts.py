@@ -87,7 +87,7 @@ class AuthContractTests(unittest.TestCase):
         phone = "13800000009"
         self._insert_sms_code(phone, "123456")
 
-        response = self.client.post(f"/auth/sms/login?phone={phone}&code=123456")
+        response = self.client.post("/auth/sms/login", json={"phone": phone, "code": "123456"})
         self.assertEqual(response.status_code, 200, response.text)
         data = response.json()
 
@@ -95,7 +95,7 @@ class AuthContractTests(unittest.TestCase):
         self.assertTrue(data["refresh_token"])
 
     def test_sms_errors_are_structured_and_do_not_expose_vendor_details(self):
-        invalid_phone = self.client.post("/auth/sms/send?phone=123")
+        invalid_phone = self.client.post("/auth/sms/send", json={"phone": "123"})
         self.assertEqual(invalid_phone.status_code, 422, invalid_phone.text)
         self.assertEqual(
             invalid_phone.json()["detail"],
@@ -103,7 +103,7 @@ class AuthContractTests(unittest.TestCase):
         )
 
         with patch("routers.sms.get_sms_service", return_value=_FailingSmsService()):
-            failed_send = self.client.post("/auth/sms/send?phone=13800000010")
+            failed_send = self.client.post("/auth/sms/send", json={"phone": "13800000010"})
 
         self.assertEqual(failed_send.status_code, 500, failed_send.text)
         self.assertEqual(
@@ -112,12 +112,31 @@ class AuthContractTests(unittest.TestCase):
         )
         self.assertNotIn("vendor detail", failed_send.text)
 
-        invalid_code = self.client.post("/auth/sms/login?phone=13800000010&code=999999")
+        invalid_code = self.client.post(
+            "/auth/sms/login",
+            json={"phone": "13800000010", "code": "999999"},
+        )
         self.assertEqual(invalid_code.status_code, 400, invalid_code.text)
         self.assertEqual(
             invalid_code.json()["detail"],
             {"code": "sms_code_invalid", "message": "验证码错误或已过期"},
         )
+
+    def test_trial_start_supports_sqlite_upsert(self):
+        register_data = self._register("trial-user@example.com", "secret123")
+        access_token = register_data["access_token"]
+
+        response = self.client.post(
+            "/trial/start",
+            json={"username": "trial-user@example.com"},
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        data = response.json()
+
+        self.assertTrue(data["success"])
+        self.assertIn("start_ts", data)
+        self.assertIn("end_ts", data)
 
 
 if __name__ == "__main__":

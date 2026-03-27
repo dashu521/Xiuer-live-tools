@@ -4,7 +4,6 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 import { AUTH_ZUSTAND_PERSIST_KEY } from '@/constants/authStorageKeys'
 import { normalizePlan } from '@/domain/access/planRules'
 import { useAccounts } from '../hooks/useAccounts'
-import type { LoginResponseBackend } from '../services/apiClient'
 import { getMe, getTrialStatus, getUserStatus, startTrial } from '../services/apiClient'
 import { configSyncService } from '../services/configSyncService'
 import type {
@@ -186,47 +185,6 @@ function applyUserStatusSnapshot(
   return true
 }
 
-/** 将后端 /login 返回的 user 转为 SafeUser */
-function _backendUserToSafeUser(
-  backendUser: LoginResponseBackend['user'] | undefined,
-  fallbackUsername: string,
-): SafeUser {
-  if (!backendUser) return safeUserFromUsername(fallbackUsername)
-  const username =
-    (backendUser.phone ?? backendUser.email ?? backendUser.id ?? fallbackUsername) ||
-    fallbackUsername
-
-  // 从后端获取 plan，兼容处理
-  const plan = normalizePlan(backendUser.plan)
-
-  return {
-    id: String(backendUser.id),
-    username,
-    email: backendUser.email ?? '',
-    createdAt:
-      typeof backendUser.created_at === 'string'
-        ? backendUser.created_at
-        : backendUser.created_at != null
-          ? new Date(backendUser.created_at).toISOString()
-          : new Date().toISOString(),
-    lastLogin:
-      backendUser.last_login_at == null
-        ? null
-        : typeof backendUser.last_login_at === 'string'
-          ? backendUser.last_login_at
-          : new Date(backendUser.last_login_at).toISOString(),
-    status: (backendUser.status as SafeUser['status']) ?? 'active',
-    // @deprecated 使用 plan
-    // 统一使用 plan 字段
-    plan,
-    // @deprecated 使用 expire_at
-    expire_at: backendUser.expire_at ?? null,
-    deviceId: '',
-    machineFingerprint: '',
-    balance: 0,
-  }
-}
-
 interface AuthStore extends AuthState {
   /** 仅用于 refresh 流程，与 token（access）一起持久化 */
   refreshToken: string | null
@@ -294,25 +252,25 @@ export const useAuthStore = create<AuthStore>()(
 
           console.log(`[AuthStore] Login response [${requestId}]:`, {
             success: response.success,
-            hasToken: !!response.token,
+            hasUser: !!response.user,
             status: (response as { status?: number }).status,
             detail:
               (response as { detail?: string }).detail ??
-              (response as { error?: string }).error ??
+              (typeof (response as { error?: unknown }).error === 'string'
+                ? (response as { error?: string }).error
+                : (response as { error?: { message?: string } }).error?.message) ??
               null,
           })
 
-          const refreshToken = response.refresh_token ?? null
-          // 成功条件与后端一致：status==200 且 res.data.token 存在；不依赖 hasUser
-          if (response.success && response.token) {
+          if (response.success) {
             const user = response.user ?? safeUserFromUsername(credentials.username)
 
             set({
               isAuthenticated: true,
               user,
               userStatus: null,
-              token: response.token,
-              refreshToken: refreshToken ?? get().refreshToken,
+              token: null,
+              refreshToken: null,
               isLoading: false,
               error: null,
             })
@@ -321,6 +279,7 @@ export const useAuthStore = create<AuthStore>()(
             const userId = user.id || credentials.username
             console.log('[AuthStore] 登录成功，加载用户数据:', userId)
             loadUserBaseSessionData(userId)
+            loadUserScopedRuntimeContexts(userId)
 
             // 【跨设备同步】从云端加载用户配置
             configSyncService
@@ -450,22 +409,22 @@ export const useAuthStore = create<AuthStore>()(
             responseData: {
               success: response.success,
               user: !!response.user,
-              token: !!response.token,
             },
           })
 
-          const refreshToken = response.refresh_token ?? null
           // 成功条件与后端一致：res.status==200 且 res.data.success===true；不依赖 user/token
           if (response.success) {
-            if (response.token && response.user) {
+            if (response.user) {
               set({
                 isAuthenticated: true,
                 user: response.user,
-                token: response.token,
-                refreshToken: refreshToken ?? get().refreshToken,
+                token: null,
+                refreshToken: null,
                 isLoading: false,
                 error: null,
               })
+              loadUserBaseSessionData(response.user.id)
+              loadUserScopedRuntimeContexts(response.user.id)
             } else {
               set({ isLoading: false, error: null })
             }
@@ -560,10 +519,7 @@ export const useAuthStore = create<AuthStore>()(
 
           // [SECURITY] 调用主进程登出，清理安全存储中的 token
           try {
-            const token = get().token
-            if (token) {
-              await window.authAPI.logout(token)
-            }
+            await window.authAPI.logout()
           } catch (error) {
             console.error('[AuthStore] Logout API error:', error)
           }
@@ -605,56 +561,13 @@ export const useAuthStore = create<AuthStore>()(
         set({ isLoading: true, authCheckDone: false })
 
         try {
-          // [SECURITY] 优先从主进程安全存储获取 token
-          let mainToken: string | null = null
-          let mainRefreshToken: string | null = null
-          if (
-            typeof window !== 'undefined' &&
-            (
-              window as unknown as {
-                authAPI?: {
-                  getTokenInternal?: () => Promise<{
-                    token: string | null
-                    refreshToken: string | null
-                  }>
-                }
-              }
-            ).authAPI?.getTokenInternal
-          ) {
-            try {
-              const tokens = await (
-                window as unknown as {
-                  authAPI: {
-                    getTokenInternal: () => Promise<{
-                      token: string | null
-                      refreshToken: string | null
-                    }>
-                  }
-                }
-              ).authAPI.getTokenInternal()
-              mainToken = tokens.token
-              mainRefreshToken = tokens.refreshToken
-              // 同步到内存
-              if (mainToken) {
-                set({ token: mainToken, refreshToken: mainRefreshToken })
-              }
-              console.log(
-                '[AuthStore] checkAuth: got token from main process:',
-                mainToken ? 'exists' : 'null',
-              )
-            } catch (err) {
-              console.error('[AuthStore] Failed to get tokens from main process:', err)
-            }
-          }
-
-          const { token, refreshToken } = get()
-          const effectiveToken = mainToken ?? token
-          const effectiveRefreshToken = mainRefreshToken ?? refreshToken
-
-          if (!effectiveToken && !effectiveRefreshToken) {
+          const summary = await window.authAPI.getAuthSummary()
+          if (!summary.hasToken) {
             set({
               isAuthenticated: false,
               user: null,
+              token: null,
+              refreshToken: null,
               isLoading: false,
               authCheckDone: true,
               isOffline: false,
@@ -662,6 +575,10 @@ export const useAuthStore = create<AuthStore>()(
             return
           }
 
+          const currentUser = await window.authAPI.getCurrentUser().catch(error => {
+            console.warn('[AuthStore] Failed to get current user from main process:', error)
+            return null
+          })
           const result = await getMe()
 
           // 【修复】旧 token（无 jti）清理，强制重新登录
@@ -679,11 +596,14 @@ export const useAuthStore = create<AuthStore>()(
           }
 
           if (result.ok && result.data?.username != null) {
-            const userId = result.data.username
+            const user = currentUser ?? get().user ?? safeUserFromUsername(result.data.username)
+            const userId = user.id || result.data.username
             set({
               isAuthenticated: true,
-              user: get().user ?? safeUserFromUsername(userId),
+              user,
               userStatus: null,
+              token: null,
+              refreshToken: null,
               isLoading: false,
               authCheckDone: true,
               isOffline: false,
@@ -721,6 +641,24 @@ export const useAuthStore = create<AuthStore>()(
               .catch(error => {
                 console.error('[AuthStore] Failed to fetch user status:', error)
               })
+            return
+          }
+
+          if (currentUser) {
+            const userId = currentUser.id || currentUser.username
+            set({
+              isAuthenticated: true,
+              user: currentUser,
+              userStatus: null,
+              token: null,
+              refreshToken: null,
+              isLoading: false,
+              authCheckDone: true,
+              isOffline: true,
+              error: null,
+            })
+            loadUserBaseSessionData(userId)
+            loadUserScopedRuntimeContexts(userId)
             return
           }
 
@@ -808,8 +746,8 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       startTrialAndRefresh: async () => {
-        const token = get().token
-        if (!token) {
+        const currentUser = get().user
+        if (!get().isAuthenticated || !currentUser) {
           return { success: false as const, message: '请先登录' }
         }
         const result = await startTrial()
@@ -891,7 +829,6 @@ export const useAuthStore = create<AuthStore>()(
 )
 
 // Selectors for easier access
-export const useAuth = () => useAuthStore()
 export const useUser = () => useAuthStore(state => state.user)
 export const useIsAuthenticated = () => useAuthStore(state => state.isAuthenticated)
 export const useAuthLoading = () => useAuthStore(state => state.isLoading)

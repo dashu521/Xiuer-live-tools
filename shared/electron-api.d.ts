@@ -15,9 +15,7 @@ export interface IpcChannels {
   }) => {
     success: boolean
     user?: { id: string; username: string; email?: string; phone?: string; status?: string }
-    token?: string
-    refresh_token?: string
-    error?: string
+    error?: string | { code?: string; message?: string }
     status?: number
     detail?: string
   }
@@ -28,9 +26,7 @@ export interface IpcChannels {
   }) => {
     success: boolean
     user?: { id: string; username: string; email?: string; phone?: string; status?: string }
-    token?: string
-    refresh_token?: string
-    error?: string
+    error?: string | { code?: string; message?: string }
     errorType?: string
     status?: number
     detail?: string
@@ -41,43 +37,66 @@ export interface IpcChannels {
   ) => {
     success: boolean
     user?: { id: string; username: string; email?: string; phone?: string; status?: string }
-    token?: string
-    refresh_token?: string
     needs_password?: boolean
-    error?: string
+    error?: string | { code?: string; message?: string }
     status?: number
     responseDetail?: string
   }
-  [IPC_CHANNELS.auth.logout]: (token: string) => boolean
-  [IPC_CHANNELS.auth.validateToken]: (
-    token: string,
-  ) => { id: string; username: string; email?: string; phone?: string; status?: string } | null
-  [IPC_CHANNELS.auth.getCurrentUser]: (
-    token: string,
-  ) => { id: string; username: string; email?: string; phone?: string; status?: string } | null
+  [IPC_CHANNELS.auth.logout]: () => boolean
+  [IPC_CHANNELS.auth.validateToken]: () => {
+    id: string
+    username: string
+    email?: string
+    phone?: string
+    status?: string
+  } | null
+  [IPC_CHANNELS.auth.getCurrentUser]: () => {
+    id: string
+    username: string
+    email?: string
+    phone?: string
+    status?: string
+  } | null
   [IPC_CHANNELS.auth.restoreSession]: () => {
     success: boolean
     user?: { id: string; username: string; email?: string; phone?: string; status?: string }
-    token?: string
   }
   [IPC_CHANNELS.auth.refreshSession]: () => {
     success: boolean
-    token?: string
-    refreshToken?: string | null
     error?: string | { code?: string; message?: string }
   }
   [IPC_CHANNELS.auth.getAuthSummary]: () => { isAuthenticated: boolean; hasToken: boolean }
   [IPC_CHANNELS.auth.proxyRequest]: (requestConfig: {
     endpoint: string
     method?: string
-    body?: object
-  }) => { success: boolean; status?: number; data?: unknown; error?: string }
-  [IPC_CHANNELS.auth.getTokenInternal]: () => { token: string | null; refreshToken: string | null }
+    body?: object | null
+  }) => {
+    success: boolean
+    status?: number
+    data?: unknown
+    error?: string | { code?: string; message?: string }
+  }
+  [IPC_CHANNELS.auth.startMessageStream]: () => { success: boolean; error?: string }
+  [IPC_CHANNELS.auth.stopMessageStream]: () => { success: boolean }
+  [IPC_CHANNELS.auth.messageStreamSnapshot]: (payload: {
+    success: boolean
+    items: Array<{
+      id: string
+      title: string
+      content: string
+      type: 'notice' | 'update' | 'warning' | 'marketing'
+      is_pinned: boolean
+      is_read: boolean
+      created_at: string | null
+      published_at: string | null
+      expires_at: string | null
+    }>
+    unread_count: number
+    fetched_at: string | null
+  }) => void
+  [IPC_CHANNELS.auth.messageStreamState]: (payload: { connected: boolean; reason?: string }) => void
   [IPC_CHANNELS.auth.clearTokens]: () => void
-  [IPC_CHANNELS.auth.checkFeatureAccess]: (
-    token: string,
-    feature: string,
-  ) => {
+  [IPC_CHANNELS.auth.checkFeatureAccess]: (feature: string) => {
     featureAccess: {
       can_access: boolean
       requires_auth: boolean
@@ -85,14 +104,14 @@ export interface IpcChannels {
     }
     user: { id: string; username: string; email?: string; phone?: string; status?: string } | null
   }
-  [IPC_CHANNELS.auth.updateUserProfile]: (
-    token: string,
-    data: { username?: string; email?: string },
-  ) => { success: boolean; error?: string }
-  [IPC_CHANNELS.auth.changePassword]: (
-    token: string,
-    data: { currentPassword: string; newPassword: string },
-  ) => { success: boolean; error?: string }
+  [IPC_CHANNELS.auth.updateUserProfile]: (data: { username?: string; email?: string }) => {
+    success: boolean
+    error?: string
+  }
+  [IPC_CHANNELS.auth.changePassword]: (data: { currentPassword: string; newPassword: string }) => {
+    success: boolean
+    error?: string
+  }
   [IPC_CHANNELS.auth.stateChanged]: (
     user: { id: string; username: string; email?: string; phone?: string; status?: string } | null,
   ) => void
@@ -163,7 +182,7 @@ export interface IpcChannels {
   ) => boolean
   [IPC_CHANNELS.tasks.autoMessage.updateConfig]: (
     accountId: string,
-    config: Parital<AutoCommentConfig>,
+    config: Partial<AutoCommentConfig>,
   ) => void
 
   // AutoPopup
@@ -174,7 +193,7 @@ export interface IpcChannels {
   [key: `tasks:autoPopUp:stopped:${string}`]: (id: string) => void
   [IPC_CHANNELS.tasks.autoPopUp.updateConfig]: (
     accountId: string,
-    config: Parital<AutoPopupConfig>,
+    config: Partial<AutoPopupConfig>,
   ) => void
   [IPC_CHANNELS.tasks.autoPopUp.registerShortcuts]: (
     accountId: string,

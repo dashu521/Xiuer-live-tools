@@ -17,6 +17,7 @@ import {
   cloudSmsLogin,
 } from '../services/cloudAuthClient'
 import { cloudUserToSafeUser } from '../services/cloudAuthMappers'
+import windowManager from '../windowManager'
 
 // 启动时修复已有 token 文件权限
 fixTokenFilePermissions()
@@ -35,32 +36,318 @@ function logAuthAuditConfig(): void {
   })
 }
 
+type SafeUser = Omit<User, 'passwordHash'>
+
+type ProxyRequestConfig = {
+  endpoint: string
+  method?: string
+  body?: object | null
+}
+
+type ProxyRequestResult = {
+  success: boolean
+  status?: number
+  data?: unknown
+  error?: { code?: string; message?: string }
+}
+
+const AUTH_PROXY_ALLOWLIST: Array<{ method: string; pattern: RegExp }> = [
+  { method: 'GET', pattern: /^\/me$/ },
+  { method: 'GET', pattern: /^\/auth\/session-check$/ },
+  { method: 'GET', pattern: /^\/status$/ },
+  { method: 'POST', pattern: /^\/trial\/start$/ },
+  { method: 'GET', pattern: /^\/trial\/status\?username=[^&]+$/ },
+  { method: 'GET', pattern: /^\/server-time$/ },
+  { method: 'POST', pattern: /^\/set-password$/ },
+  { method: 'POST', pattern: /^\/change-password$/ },
+  { method: 'POST', pattern: /^\/gift-card\/redeem$/ },
+  { method: 'GET', pattern: /^\/gift-card\/history\?limit=\d+$/ },
+  { method: 'GET', pattern: /^\/config$/ },
+  { method: 'POST', pattern: /^\/config\/sync$/ },
+  { method: 'GET', pattern: /^\/messages\?limit=\d+$/ },
+  { method: 'POST', pattern: /^\/messages\/[^/]+\/read$/ },
+  { method: 'POST', pattern: /^\/messages\/read-all$/ },
+  { method: 'POST', pattern: /^\/feedback\/submit$/ },
+]
+
+let messageStreamAbortController: AbortController | null = null
+
+function normalizeErrorDetail(
+  error: unknown,
+  fallbackMessage: string,
+): { code?: string; message?: string } {
+  if (typeof error === 'string') {
+    return { message: error }
+  }
+  if (error && typeof error === 'object') {
+    const detail = error as { code?: string; message?: string; status?: number }
+    if (detail.code || detail.message) {
+      return { code: detail.code, message: detail.message ?? fallbackMessage }
+    }
+  }
+  return { message: fallbackMessage }
+}
+
+function extractErrorDetail(
+  text: string,
+  statusText: string,
+  payload: unknown,
+): { code?: string; message?: string } {
+  const rawDetail =
+    payload && typeof payload === 'object' && 'detail' in payload
+      ? (payload as { detail?: unknown }).detail
+      : undefined
+
+  let message = text || statusText
+  if (typeof rawDetail === 'string') {
+    message = rawDetail
+  } else if (rawDetail && typeof rawDetail === 'object' && 'message' in rawDetail) {
+    message = (rawDetail as { message?: string }).message ?? message
+  } else if (Array.isArray(rawDetail) && rawDetail.length > 0) {
+    message = rawDetail
+      .map(
+        (item: { msg?: string; message?: string }) =>
+          item?.msg ?? item?.message ?? JSON.stringify(item),
+      )
+      .join('; ')
+  }
+
+  const code =
+    rawDetail && typeof rawDetail === 'object' && 'code' in rawDetail
+      ? (rawDetail as { code?: string }).code
+      : undefined
+
+  return { code, message }
+}
+
+async function readJsonResponse(response: Response): Promise<ProxyRequestResult> {
+  const text = await response.text()
+  let json: unknown = null
+  try {
+    json = text ? JSON.parse(text) : null
+  } catch {
+    json = null
+  }
+
+  if (!response.ok) {
+    return {
+      success: false,
+      status: response.status,
+      error: extractErrorDetail(text, response.statusText, json),
+    }
+  }
+
+  return {
+    success: true,
+    status: response.status,
+    data: json,
+  }
+}
+
+function isAllowedProxyRequest(config: ProxyRequestConfig): boolean {
+  const method = (config.method || 'GET').toUpperCase()
+  if (!config.endpoint.startsWith('/')) {
+    return false
+  }
+  return AUTH_PROXY_ALLOWLIST.some(
+    rule => rule.method === method && rule.pattern.test(config.endpoint),
+  )
+}
+
+async function storeCloudTokens(
+  accessToken: string,
+  refreshToken: string | null | undefined,
+): Promise<void> {
+  await setStoredTokens({
+    access_token: accessToken,
+    refresh_token: refreshToken ?? accessToken,
+  })
+}
+
+async function refreshStoredCloudSession(): Promise<{
+  success: boolean
+  accessToken?: string
+  error?: { code?: string; message?: string }
+}> {
+  const { refresh_token } = getStoredTokens()
+  if (!refresh_token) {
+    clearStoredTokens()
+    return { success: false, error: { code: 'token_invalid', message: '缺少 refresh token' } }
+  }
+
+  const refreshRes = await cloudRefresh(refresh_token)
+  if (!refreshRes.success || !refreshRes.access_token) {
+    clearStoredTokens()
+    return {
+      success: false,
+      error: normalizeErrorDetail(refreshRes.error, '刷新会话失败'),
+    }
+  }
+
+  await storeCloudTokens(refreshRes.access_token, refresh_token)
+  return { success: true, accessToken: refreshRes.access_token }
+}
+
+async function getSafeCloudUserFromStoredSession(): Promise<SafeUser | null> {
+  const { access_token } = getStoredTokens()
+  if (!access_token) return null
+
+  let meRes = await cloudMe(access_token)
+  if (meRes.success && meRes.user) {
+    return cloudUserToSafeUser(meRes.user)
+  }
+
+  const refreshed = await refreshStoredCloudSession()
+  if (!refreshed.success || !refreshed.accessToken) {
+    return null
+  }
+
+  meRes = await cloudMe(refreshed.accessToken)
+  if (!meRes.success || !meRes.user) {
+    return null
+  }
+
+  return cloudUserToSafeUser(meRes.user)
+}
+
+async function getStoredSafeUser(): Promise<SafeUser | null> {
+  if (USE_CLOUD_AUTH) {
+    return getSafeCloudUserFromStoredSession()
+  }
+
+  const { access_token } = getStoredTokens()
+  if (!access_token) {
+    return null
+  }
+
+  const user = AuthService.getCurrentUser(access_token)
+  return user ? AuthService.sanitizeUser(user) : null
+}
+
+async function executeAuthenticatedProxyRequest(
+  requestConfig: ProxyRequestConfig,
+): Promise<ProxyRequestResult> {
+  if (!USE_CLOUD_AUTH) {
+    return {
+      success: false,
+      status: 503,
+      error: { code: 'auth_proxy_unavailable', message: '云鉴权未启用' },
+    }
+  }
+
+  if (!isAllowedProxyRequest(requestConfig)) {
+    return {
+      success: false,
+      status: 403,
+      error: { code: 'forbidden', message: '不允许的鉴权请求' },
+    }
+  }
+
+  const { access_token, refresh_token } = getStoredTokens()
+  if (!access_token) {
+    return {
+      success: false,
+      status: 401,
+      error: { code: 'token_invalid', message: '未登录或会话已失效' },
+    }
+  }
+
+  const base = getEffectiveBase()
+  const url = `${base}${requestConfig.endpoint}`
+  const method = (requestConfig.method || 'GET').toUpperCase()
+
+  const performRequest = async (token: string) => {
+    const response = await fetch(url, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: requestConfig.body ? JSON.stringify(requestConfig.body) : undefined,
+    })
+    return readJsonResponse(response)
+  }
+
+  let result = await performRequest(access_token)
+  if (result.success || result.status !== 401 || !refresh_token) {
+    if (!result.success && result.status === 401) {
+      clearStoredTokens()
+    }
+    return result
+  }
+
+  const refreshed = await refreshStoredCloudSession()
+  if (!refreshed.success || !refreshed.accessToken) {
+    return {
+      success: false,
+      status: 401,
+      error: refreshed.error ?? { code: 'token_invalid', message: '会话已失效' },
+    }
+  }
+
+  result = await performRequest(refreshed.accessToken)
+  if (!result.success && result.status === 401) {
+    clearStoredTokens()
+  }
+  return result
+}
+
+async function ensureCloudUser(
+  accessToken: string | undefined,
+  user?: Parameters<typeof cloudUserToSafeUser>[0],
+): Promise<SafeUser | undefined> {
+  if (user) {
+    return cloudUserToSafeUser(user)
+  }
+  if (!accessToken) {
+    return undefined
+  }
+  const meRes = await cloudMe(accessToken)
+  if (!meRes.success || !meRes.user) {
+    return undefined
+  }
+  return cloudUserToSafeUser(meRes.user)
+}
+
+function parseMessageStreamEvent(block: string): { type: 'snapshot'; payload: unknown } | null {
+  const lines = block.split('\n')
+  let eventName = 'message'
+  const dataLines: string[] = []
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd()
+    if (!line || line.startsWith(':')) continue
+    if (line.startsWith('event:')) {
+      eventName = line.slice(6).trim()
+      continue
+    }
+    if (line.startsWith('data:')) {
+      dataLines.push(line.slice(5).trimStart())
+    }
+  }
+
+  if (eventName !== 'snapshot' || dataLines.length === 0) {
+    return null
+  }
+
+  try {
+    return {
+      type: 'snapshot',
+      payload: JSON.parse(dataLines.join('\n')),
+    }
+  } catch {
+    return null
+  }
+}
+
 export function setupAuthHandlers() {
   logAuthAuditConfig()
   // ----- 云鉴权：恢复会话（启动时 refresh -> me） -----
   ipcMain.handle(IPC_CHANNELS.auth.restoreSession, async () => {
-    if (!USE_CLOUD_AUTH) {
-      return { success: false, user: null, token: null }
-    }
-    const { refresh_token } = await getStoredTokens()
-    if (!refresh_token) return { success: false, user: null, token: null }
-    const refreshRes = await cloudRefresh(refresh_token)
-    if (!refreshRes.success || !refreshRes.access_token) {
-      clearStoredTokens()
-      return { success: false, user: null, token: null }
-    }
-    const meRes = await cloudMe(refreshRes.access_token)
-    if (!meRes.success || !meRes.user) {
-      return { success: false, user: null, token: null }
-    }
-    await setStoredTokens({
-      access_token: refreshRes.access_token,
-      refresh_token,
-    })
+    const user = await getStoredSafeUser()
     return {
-      success: true,
-      user: cloudUserToSafeUser(meRes.user),
-      token: refreshRes.access_token,
+      success: !!user,
+      user: user ?? undefined,
     }
   })
 
@@ -69,36 +356,10 @@ export function setupAuthHandlers() {
       return { success: false, error: '云鉴权未启用' }
     }
 
-    const { refresh_token } = await getStoredTokens()
-    if (!refresh_token) {
-      await clearStoredTokens()
-      return { success: false, error: '缺少 refresh token' }
-    }
-
-    const refreshRes = await cloudRefresh(refresh_token)
-    if (!refreshRes.success || !refreshRes.access_token) {
-      await clearStoredTokens()
-      // [FIX] 将 error 对象转为字符串
-      const errorMessage =
-        typeof refreshRes.error === 'string'
-          ? refreshRes.error
-          : refreshRes.error?.message || refreshRes.error?.code || '刷新会话失败'
-      return {
-        success: false,
-        error: errorMessage,
-      }
-    }
-
-    await setStoredTokens({
-      access_token: refreshRes.access_token,
-      refresh_token,
-    })
-
-    return {
-      success: true,
-      token: refreshRes.access_token,
-      refreshToken: refresh_token,
-    }
+    const refreshed = await refreshStoredCloudSession()
+    return refreshed.success
+      ? { success: true }
+      : { success: false, error: refreshed.error ?? { message: '刷新会话失败' } }
   })
 
   // Register
@@ -117,27 +378,33 @@ export function setupAuthHandlers() {
             : res.error?.message || res.error?.code || '注册失败'
         return {
           success: false,
-          error: errorMessage,
+          error: normalizeErrorDetail(res.error, errorMessage),
           requestUrl: res.requestUrl,
           status: res.status,
           detail: res.responseDetail,
         }
       }
-      // 成功条件与后端一致：res.status==200 且 res.data.success===true；不要求 user/access_token/refresh_token 全有
-      if (res.access_token && res.refresh_token) {
-        await setStoredTokens({
-          access_token: res.access_token,
-          refresh_token: res.refresh_token,
-        })
+      if (res.access_token) {
+        await storeCloudTokens(res.access_token, res.refresh_token)
       }
+      const user = await ensureCloudUser(res.access_token, res.user)
       return {
         success: true,
-        user: res.user ? cloudUserToSafeUser(res.user) : undefined,
-        token: res.access_token,
-        refresh_token: res.refresh_token,
+        user,
       }
     }
-    return await AuthService.register(data)
+    const result = await AuthService.register(data)
+    if (result.success && result.token) {
+      await setStoredTokens({
+        access_token: result.token,
+        refresh_token: result.token,
+      })
+    }
+    return {
+      success: result.success,
+      user: result.user,
+      error: result.error ? { message: result.error } : undefined,
+    }
   })
 
   // Login
@@ -176,172 +443,118 @@ export function setupAuthHandlers() {
 
         console.error('[AUTH-DEBUG] Determined errorType:', errorType)
 
-        // [FIX] 将 error 对象转为字符串
-        const errorMessage =
-          typeof res.error === 'string'
-            ? res.error
-            : res.error?.message || res.error?.code || '登录失败'
+        const errorMessage = res.error?.message || res.error?.code || '登录失败'
         return {
           success: false,
-          error: errorMessage,
+          error: normalizeErrorDetail(res.error, errorMessage),
           errorType,
           requestUrl: res.requestUrl,
           status: res.status,
           detail: res.responseDetail,
         }
       }
-      // 成功条件与后端一致：res.status==200 且 res.data.token 存在；不要求 refresh_token/user 全有
       if (res.access_token) {
-        await setStoredTokens({
-          access_token: res.access_token,
-          refresh_token: res.refresh_token ?? res.access_token,
-        })
+        await storeCloudTokens(res.access_token, res.refresh_token)
       }
+      const user = await ensureCloudUser(res.access_token, res.user)
       return {
         success: true,
-        user: res.user ? cloudUserToSafeUser(res.user) : undefined,
-        token: res.access_token,
-        refresh_token: res.refresh_token ?? res.access_token,
+        user,
       }
     }
-    return await AuthService.login(credentials)
+    const result = await AuthService.login(credentials)
+    if (result.success && result.token) {
+      await setStoredTokens({
+        access_token: result.token,
+        refresh_token: result.token,
+      })
+    }
+    return {
+      success: result.success,
+      user: result.user,
+      error: result.error ? { message: result.error } : undefined,
+      errorType: result.errorType,
+    }
   })
 
   // SMS Login - 手机验证码登录（内部处理 token 存储）
   ipcMain.handle(IPC_CHANNELS.auth.loginWithSms, async (_, phone: string, code: string) => {
-    console.log('[auth:loginWithSms] 收到登录请求, phone末4位:', phone.slice(-4))
     if (!USE_CLOUD_AUTH) {
-      console.error('[auth:loginWithSms] 云鉴权未启用')
       return { success: false, error: '云鉴权未启用' }
     }
     const res = await cloudSmsLogin(phone, code)
-    console.log('[auth:loginWithSms] cloudSmsLogin 结果:', {
-      success: res.success,
-      hasToken: !!res.access_token,
-      hasUser: !!res.user,
-    })
     if (!res.success) {
-      // [FIX] 将 error 对象转为字符串，避免 React Error #31
       const errorMessage =
         typeof res.error === 'string'
           ? res.error
           : res.error?.message || res.error?.code || '验证码登录失败'
       return {
         success: false,
-        error: errorMessage,
+        error: normalizeErrorDetail(res.error, errorMessage),
         status: res.status,
         responseDetail: res.responseDetail,
       }
     }
-    // [CRITICAL] 登录成功，将 token 写入主进程安全存储
     if (res.access_token) {
-      console.log('[auth:loginWithSms] 开始写入主进程存储...')
       try {
-        await setStoredTokens({
-          access_token: res.access_token,
-          refresh_token: res.refresh_token ?? res.access_token,
-        })
-        // [VERIFY] 写入后立即读取验证
-        const verify = getStoredTokens()
-        console.log('[auth:loginWithSms] 存储写入完成, 验证读取:', {
-          hasAccessToken: !!verify.access_token,
-          hasRefreshToken: !!verify.refresh_token,
-        })
-      } catch (err) {
-        console.error('[auth:loginWithSms] 存储写入失败:', err)
+        await storeCloudTokens(res.access_token, res.refresh_token)
+      } catch (_err) {
         return { success: false, error: 'Token存储失败' }
       }
     } else {
-      console.error('[auth:loginWithSms] 登录成功但无 access_token')
       return { success: false, error: '登录响应缺少token' }
     }
+    const user = await ensureCloudUser(res.access_token, res.user)
     return {
       success: true,
-      user: res.user ? cloudUserToSafeUser(res.user) : undefined,
-      token: res.access_token,
-      refresh_token: res.refresh_token,
+      user,
       needs_password: res.needs_password,
     }
   })
 
   // Logout
-  ipcMain.handle(IPC_CHANNELS.auth.logout, async (_, token: string) => {
+  ipcMain.handle(IPC_CHANNELS.auth.logout, async () => {
+    const { access_token } = getStoredTokens()
     if (USE_CLOUD_AUTH) {
       clearStoredTokens()
       return true
     }
-    return await AuthService.logout(token)
+    const result = access_token ? AuthService.logout(access_token) : true
+    clearStoredTokens()
+    return result
   })
 
-  // Get current user（401 时自动 refresh 并重试一次）
-  ipcMain.handle(IPC_CHANNELS.auth.getCurrentUser, async (_, token: string) => {
-    if (USE_CLOUD_AUTH) {
-      if (!token) return null
-      let meRes = await cloudMe(token)
-      if (meRes.success && meRes.user) {
-        return cloudUserToSafeUser(meRes.user)
-      }
-      const { refresh_token } = await getStoredTokens()
-      if (!refresh_token) return null
-      const refreshRes = await cloudRefresh(refresh_token)
-      if (!refreshRes.success || !refreshRes.access_token) return null
-      meRes = await cloudMe(refreshRes.access_token)
-      if (!meRes.success || !meRes.user) return null
-      await setStoredTokens({
-        access_token: refreshRes.access_token,
-        refresh_token,
-      })
-      return cloudUserToSafeUser(meRes.user)
-    }
-    return AuthService.getCurrentUser(token)
+  // Get current user（优先使用主进程安全存储中的会话）
+  ipcMain.handle(IPC_CHANNELS.auth.getCurrentUser, async () => {
+    return getStoredSafeUser()
   })
 
   // Validate token
-  ipcMain.handle(IPC_CHANNELS.auth.validateToken, async (_, token: string) => {
-    if (USE_CLOUD_AUTH) {
-      const meRes = await cloudMe(token)
-      return meRes.success && meRes.user ? cloudUserToSafeUser(meRes.user) : null
-    }
-    return AuthService.validateToken(token)
+  ipcMain.handle(IPC_CHANNELS.auth.validateToken, async () => {
+    return getStoredSafeUser()
   })
 
-  // Check feature access（IPC 只暴露 SafeUser；本地 AuthService 返回 User 时在此映射为 SafeUser）
-  ipcMain.handle(
-    IPC_CHANNELS.auth.checkFeatureAccess,
-    async (_, token: string, feature: string) => {
-      const rawUser = await (async () => {
-        if (USE_CLOUD_AUTH && token) {
-          const meRes = await cloudMe(token)
-          if (meRes.success && meRes.user) return cloudUserToSafeUser(meRes.user)
-        }
-        if (USE_CLOUD_AUTH) return null
-        return AuthService.getCurrentUser(token)
-      })()
-      const user: Omit<User, 'passwordHash'> | null =
-        rawUser == null
-          ? null
-          : 'passwordHash' in rawUser
-            ? AuthService.sanitizeUser(rawUser as User)
-            : (rawUser as Omit<User, 'passwordHash'>)
-      const requiresAuth = AuthService.requiresAuthentication(feature)
-      const requiredPlan = AuthService.getRequiredPlan(feature)
-      const featureAccess = {
-        can_access: !requiresAuth || AuthService.hasPlanLevel(user, requiredPlan),
-        requires_auth: requiresAuth,
-        required_plan: requiredPlan,
-      }
-      return {
-        featureAccess,
-        user,
-      }
-    },
-  )
+  // Check feature access（IPC 只暴露 SafeUser）
+  ipcMain.handle(IPC_CHANNELS.auth.checkFeatureAccess, async (_, feature: string) => {
+    const user = await getStoredSafeUser()
+    const requiresAuth = AuthService.requiresAuthentication(feature)
+    const requiredPlan = AuthService.getRequiredPlan(feature)
+    const featureAccess = {
+      can_access: !requiresAuth || AuthService.hasPlanLevel(user, requiredPlan),
+      requires_auth: requiresAuth,
+      required_plan: requiredPlan,
+    }
+    return {
+      featureAccess,
+      user,
+    }
+  })
 
-  ipcMain.handle(IPC_CHANNELS.auth.updateUserProfile, async (_, _token: string, _data: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.auth.updateUserProfile, async (_, _data: unknown) => {
     return { success: false, error: '功能开发中' }
   })
 
-  ipcMain.handle(IPC_CHANNELS.auth.changePassword, async (_, _token: string, _data: unknown) => {
+  ipcMain.handle(IPC_CHANNELS.auth.changePassword, async (_, _data: unknown) => {
     return { success: false, error: '功能开发中' }
   })
 
@@ -366,64 +579,125 @@ export function setupAuthHandlers() {
    * renderer 提供请求配置，main 负责附加 token 并执行
    * 这是替代直接暴露 token 的安全方案
    */
-  ipcMain.handle(
-    IPC_CHANNELS.auth.proxyRequest,
-    async (_, requestConfig: { endpoint: string; method?: string; body?: object }) => {
-      const tokens = await getStoredTokens()
-      if (!tokens.access_token) {
-        return { success: false, error: 'Not authenticated' }
-      }
+  ipcMain.handle(IPC_CHANNELS.auth.proxyRequest, async (_, requestConfig: ProxyRequestConfig) => {
+    return executeAuthenticatedProxyRequest(requestConfig)
+  })
 
-      const base = getEffectiveBase()
-      const url = `${base}${requestConfig.endpoint}`
+  ipcMain.handle(IPC_CHANNELS.auth.startMessageStream, async () => {
+    if (!USE_CLOUD_AUTH) {
+      return { success: false, error: '云鉴权未启用' }
+    }
 
-      try {
-        const res = await fetch(url, {
-          method: requestConfig.method || 'GET',
+    if (messageStreamAbortController) {
+      messageStreamAbortController.abort()
+      messageStreamAbortController = null
+    }
+
+    const { access_token } = getStoredTokens()
+    if (!access_token) {
+      return { success: false, error: '未登录或会话已失效' }
+    }
+
+    const controller = new AbortController()
+    messageStreamAbortController = controller
+    windowManager.send(IPC_CHANNELS.auth.messageStreamState, { connected: true })
+
+    try {
+      const openStream = async (token: string) =>
+        fetch(`${getEffectiveBase()}/messages/stream`, {
+          method: 'GET',
           headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${tokens.access_token}`,
+            Authorization: `Bearer ${token}`,
+            Accept: 'text/event-stream',
+            'Cache-Control': 'no-cache',
           },
-          body: requestConfig.body ? JSON.stringify(requestConfig.body) : undefined,
+          signal: controller.signal,
         })
 
-        const text = await res.text()
-        let json = null
-        try {
-          json = text ? JSON.parse(text) : null
-        } catch {
-          // ignore
-        }
-
-        return {
-          success: res.ok,
-          status: res.status,
-          data: json,
-          error: res.ok ? undefined : text || res.statusText,
-        }
-      } catch (err) {
-        return {
-          success: false,
-          error: err instanceof Error ? err.message : String(err),
+      let response = await openStream(access_token)
+      if (response.status === 401) {
+        const refreshed = await refreshStoredCloudSession()
+        if (refreshed.success && refreshed.accessToken) {
+          response = await openStream(refreshed.accessToken)
         }
       }
-    },
-  )
 
-  /**
-   * [INTERNAL-SECURITY] 获取 token 用于 apiClient 请求
-   * 仅限内部使用，不直接暴露给业务代码
-   */
-  ipcMain.handle(IPC_CHANNELS.auth.getTokenInternal, async () => {
-    const tokens = await getStoredTokens()
-    console.log('[auth:getTokenInternal] 读取存储:', {
-      hasAccessToken: !!tokens.access_token,
-      hasRefreshToken: !!tokens.refresh_token,
-    })
-    return {
-      token: tokens.access_token,
-      refreshToken: tokens.refresh_token,
+      if (!response.ok || !response.body) {
+        const failure = await readJsonResponse(response)
+        const reason = failure.error?.message || `message_stream_http_${response.status}`
+        windowManager.send(IPC_CHANNELS.auth.messageStreamState, {
+          connected: false,
+          reason,
+        })
+        return { success: false, error: reason }
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) {
+            break
+          }
+
+          buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n')
+          let separatorIndex = buffer.indexOf('\n\n')
+          while (separatorIndex >= 0) {
+            const block = buffer.slice(0, separatorIndex)
+            buffer = buffer.slice(separatorIndex + 2)
+            const event = parseMessageStreamEvent(block)
+            if (event?.type === 'snapshot') {
+              windowManager.send(IPC_CHANNELS.auth.messageStreamSnapshot, event.payload)
+            }
+            separatorIndex = buffer.indexOf('\n\n')
+          }
+        }
+
+        buffer += decoder.decode().replace(/\r\n/g, '\n')
+        const finalEvent = parseMessageStreamEvent(buffer)
+        if (finalEvent?.type === 'snapshot') {
+          windowManager.send(IPC_CHANNELS.auth.messageStreamSnapshot, finalEvent.payload)
+        }
+      } finally {
+        reader.releaseLock()
+      }
+
+      const reason = controller.signal.aborted ? 'aborted' : 'disconnected'
+      windowManager.send(IPC_CHANNELS.auth.messageStreamState, {
+        connected: false,
+        reason,
+      })
+      return {
+        success: !controller.signal.aborted,
+        error: controller.signal.aborted ? 'aborted' : undefined,
+      }
+    } catch (error) {
+      const reason = controller.signal.aborted
+        ? 'aborted'
+        : error instanceof Error
+          ? error.message
+          : String(error)
+      windowManager.send(IPC_CHANNELS.auth.messageStreamState, {
+        connected: false,
+        reason,
+      })
+      return { success: false, error: reason }
+    } finally {
+      if (messageStreamAbortController === controller) {
+        messageStreamAbortController = null
+      }
     }
+  })
+
+  ipcMain.handle(IPC_CHANNELS.auth.stopMessageStream, async () => {
+    if (messageStreamAbortController) {
+      messageStreamAbortController.abort()
+      messageStreamAbortController = null
+    }
+    return { success: true }
   })
 
   /**

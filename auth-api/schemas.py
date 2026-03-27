@@ -152,7 +152,7 @@ def err_user_not_found() -> dict:
 
 # ----- 手机验证码相关 -----
 class SendCodeBody(BaseModel):
-    phone: str = Field(..., pattern=r"^1[3-9]\d{9}$", description="手机号")
+    phone: str = Field(..., description="手机号")
     purpose: str = Field(default="login", description="用途: login | register | reset_password")
 
 
@@ -163,14 +163,20 @@ class SendCodeResponse(BaseModel):
 
 
 class PhoneLoginBody(BaseModel):
-    phone: str = Field(..., pattern=r"^1[3-9]\d{9}$", description="手机号")
-    code: str = Field(..., min_length=6, max_length=6, description="验证码")
+    phone: str = Field(..., description="手机号")
+    code: str = Field(..., description="验证码")
 
 
 class PhoneRegisterBody(BaseModel):
-    phone: str = Field(..., pattern=r"^1[3-9]\d{9}$", description="手机号")
-    code: str = Field(..., min_length=6, max_length=6, description="验证码")
+    phone: str = Field(..., description="手机号")
+    code: str = Field(..., description="验证码")
     password: str = Field(..., min_length=6, description="密码")
+
+
+class ResetPasswordSmsBody(BaseModel):
+    phone: str = Field(..., description="手机号")
+    code: str = Field(..., description="验证码")
+    new_password: str = Field(..., min_length=6, description="新密码")
 
 
 class PhoneLoginResponse(BaseModel):

@@ -15,8 +15,8 @@ import { useAccounts } from './useAccounts'
  * @param prefix 存储类型前缀
  */
 export function useUserIsolatedStorage<T>(prefix: StorageType) {
-  const { isAuthenticated, user } = useAuthStore()
-  const userId = user?.id
+  const isAuthenticated = useAuthStore(state => state.isAuthenticated)
+  const userId = useAuthStore(state => state.user?.id ?? null)
   const prefixValue = STORAGE_PREFIXES[prefix]
 
   const getItem = useCallback(
@@ -73,9 +73,9 @@ export function useUserIsolatedStorage<T>(prefix: StorageType) {
  * @param accountId 账号ID
  */
 export function useAccountIsolatedStorage<T>(prefix: StorageType, accountId: string) {
-  const { isAuthenticated, user } = useAuthStore()
-  const { accounts } = useAccounts()
-  const userId = user?.id
+  const isAuthenticated = useAuthStore(state => state.isAuthenticated)
+  const userId = useAuthStore(state => state.user?.id ?? null)
+  const accounts = useAccounts(state => state.accounts)
   const prefixValue = STORAGE_PREFIXES[prefix]
 
   // 验证当前用户是否有权限访问该账号
@@ -139,7 +139,7 @@ export function useAccountIsolatedStorage<T>(prefix: StorageType, accountId: str
  * @param prefix 存储类型前缀
  */
 export function useCurrentAccountIsolatedStorage<T>(prefix: StorageType) {
-  const { currentAccountId } = useAccounts()
+  const currentAccountId = useAccounts(state => state.currentAccountId)
 
   return useAccountIsolatedStorage<T>(prefix, currentAccountId || 'default')
 }
@@ -148,11 +148,13 @@ export function useCurrentAccountIsolatedStorage<T>(prefix: StorageType) {
  * 获取数据隔离状态信息（用于调试）
  */
 export function useIsolationDebugInfo() {
-  const { isAuthenticated, user } = useAuthStore()
-  const { accounts, currentAccountId } = useAccounts()
+  const isAuthenticated = useAuthStore(state => state.isAuthenticated)
+  const userId = useAuthStore(state => state.user?.id ?? null)
+  const accounts = useAccounts(state => state.accounts)
+  const currentAccountId = useAccounts(state => state.currentAccountId)
 
   const debugInfo = useMemo(() => {
-    if (!isAuthenticated || !user?.id) {
+    if (!isAuthenticated || !userId) {
       return {
         isAuthenticated: false,
         userId: null,
@@ -164,12 +166,12 @@ export function useIsolationDebugInfo() {
 
     return {
       isAuthenticated: true,
-      userId: user.id,
+      userId,
       accountCount: accounts.length,
       currentAccountId,
-      storageKeys: isolatedStorage.getUserStorageKeys(user.id),
+      storageKeys: isolatedStorage.getUserStorageKeys(userId),
     }
-  }, [isAuthenticated, user, accounts, currentAccountId])
+  }, [isAuthenticated, userId, accounts, currentAccountId])
 
   return debugInfo
 }

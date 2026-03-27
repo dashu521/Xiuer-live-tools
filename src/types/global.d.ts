@@ -10,16 +10,15 @@ export interface AuthAPI {
   }) => Promise<{
     success: boolean
     user?: Omit<User, 'passwordHash'>
-    token?: string
-    error?: string
+    error?: string | { code?: string; message?: string }
+    status?: number
+    detail?: string
   }>
 
   login: (credentials: { username: string; password: string; rememberMe?: boolean }) => Promise<{
     success: boolean
     user?: Omit<User, 'passwordHash'>
-    token?: string
-    refresh_token?: string
-    error?: string
+    error?: string | { code?: string; message?: string }
     errorType?: string
     status?: number
     detail?: string
@@ -31,32 +30,27 @@ export interface AuthAPI {
   ) => Promise<{
     success: boolean
     user?: Omit<User, 'passwordHash'>
-    token?: string
-    refresh_token?: string
     needs_password?: boolean
-    error?: string
+    error?: string | { code?: string; message?: string }
     status?: number
     responseDetail?: string
   }>
 
-  logout: (token: string) => Promise<boolean>
+  logout: () => Promise<boolean>
 
-  validateToken: (token: string) => Promise<Omit<User, 'passwordHash'> | null>
+  validateToken: () => Promise<Omit<User, 'passwordHash'> | null>
 
-  getCurrentUser: (token: string) => Promise<Omit<User, 'passwordHash'> | null>
+  getCurrentUser: () => Promise<Omit<User, 'passwordHash'> | null>
 
   /** 云鉴权：用主进程存储的 refresh_token 恢复会话（启动时调用） */
   restoreSession: () => Promise<{
     success: boolean
     user?: Omit<User, 'passwordHash'>
-    token?: string
   }>
 
   refreshSession: () => Promise<{
     success: boolean
-    token?: string
-    refreshToken?: string | null
-    error?: string
+    error?: string | { code?: string; message?: string }
   }>
 
   getAuthSummary: () => Promise<{ isAuthenticated: boolean; hasToken: boolean }>
@@ -64,15 +58,42 @@ export interface AuthAPI {
   proxyRequest: (requestConfig: {
     endpoint: string
     method?: string
-    body?: object
-  }) => Promise<{ success: boolean; status?: number; data?: unknown; error?: string }>
+    body?: object | null
+  }) => Promise<{
+    success: boolean
+    status?: number
+    data?: unknown
+    error?: string | { code?: string; message?: string }
+  }>
 
-  getTokenInternal: () => Promise<{ token: string | null; refreshToken: string | null }>
+  startMessageStream: () => Promise<{ success: boolean; error?: string }>
 
-  checkFeatureAccess: (
-    token: string,
-    feature: string,
-  ) => Promise<{
+  stopMessageStream: () => Promise<{ success: boolean }>
+
+  onMessageStreamSnapshot: (
+    callback: (payload: {
+      success: boolean
+      items: Array<{
+        id: string
+        title: string
+        content: string
+        type: 'notice' | 'update' | 'warning' | 'marketing'
+        is_pinned: boolean
+        is_read: boolean
+        created_at: string | null
+        published_at: string | null
+        expires_at: string | null
+      }>
+      unread_count: number
+      fetched_at: string | null
+    }) => void,
+  ) => () => void
+
+  onMessageStreamState: (
+    callback: (payload: { connected: boolean; reason?: string }) => void,
+  ) => () => void
+
+  checkFeatureAccess: (feature: string) => Promise<{
     featureAccess: {
       can_access: boolean
       requires_auth: boolean
@@ -81,24 +102,12 @@ export interface AuthAPI {
     user: Omit<User, 'passwordHash'> | null
   }>
 
-  updateUserProfile: (
-    token: string,
-    data: {
-      username?: string
-      email?: string
-    },
-  ) => Promise<{
+  updateUserProfile: (data: { username?: string; email?: string }) => Promise<{
     success: boolean
     error?: string
   }>
 
-  changePassword: (
-    token: string,
-    data: {
-      currentPassword: string
-      newPassword: string
-    },
-  ) => Promise<{
+  changePassword: (data: { currentPassword: string; newPassword: string }) => Promise<{
     success: boolean
     error?: string
   }>

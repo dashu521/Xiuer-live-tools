@@ -712,11 +712,12 @@ async function createWindow() {
       // [SECURITY] 过滤敏感信息
       const SENSITIVE_PATTERNS = [
         /token[=:]\s*["']?[a-zA-Z0-9_\-.]+["']?/gi,
+        /"(access_token|refresh_token|token|password|old_password|new_password|code|secret|key)"\s*:\s*"[^"]+"/gi,
         /password[=:]\s*["']?[^"'\s]+["']?/gi,
         /code[=:]\s*["']?\d{4,8}["']?/gi,
         /secret[=:]\s*["']?[^"'\s]+["']?/gi,
         /authorization[:\s]+["']?bearer\s+[a-zA-Z0-9_\-.]+["']?/gi,
-        /([?&])(token|password|code|secret)=[^&]*/gi,
+        /([?&])(token|password|old_password|new_password|code|secret|key)=[^&]*/gi,
       ]
 
       let sanitizedMessage = message

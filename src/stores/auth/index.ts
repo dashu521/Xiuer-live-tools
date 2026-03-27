@@ -1,6 +1,5 @@
 // Auth store module - re-export from main store for backward compatibility
 export {
-  useAuth,
   useAuthCheckDone,
   useAuthError,
   useAuthLoading,

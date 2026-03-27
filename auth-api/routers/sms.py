@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
@@ -17,7 +17,10 @@ from deps import (
 )
 from models import SMSCode, Subscription, User
 from schemas import (
+    PhoneLoginBody,
+    ResetPasswordSmsBody,
     LoginResponse,
+    SendCodeBody,
     UserOut,
     err_phone_format_error,
     err_phone_not_registered,
@@ -156,8 +159,10 @@ def create_user_for_phone(phone: str, db: Session) -> User:
 def send_sms(
     request: Request,
     db: Session = Depends(get_db),
-    phone: str = Query(..., description="11 位手机号"),
+    body: Optional[SendCodeBody] = Body(default=None),
+    phone: Optional[str] = Query(default=None, description="11 位手机号"),
 ):
+    phone = (body.phone if body else phone) or ""
     request_id = getattr(request.state, "request_id", "unknown")
     client_ip = get_client_ip(request)
 
@@ -231,9 +236,12 @@ def send_sms(
 @router.post("/login")
 def login_with_sms(
     db: Session = Depends(get_db),
-    phone: str = Query(..., description="11 位手机号"),
-    code: str = Query(..., description="6 位验证码"),
+    body: Optional[PhoneLoginBody] = Body(default=None),
+    phone: Optional[str] = Query(default=None, description="11 位手机号"),
+    code: Optional[str] = Query(default=None, description="6 位验证码"),
 ):
+    phone = (body.phone if body else phone) or ""
+    code = (body.code if body else code) or ""
     allowed, error = check_brute_force(db, phone)
     if not allowed:
         logger.warning(f"[SMS] brute force check failed: phone={mask_phone(phone)}")
@@ -320,11 +328,15 @@ def login_with_sms(
 @router.post("/reset-password")
 def reset_password_sms(
     db: Session = Depends(get_db),
-    phone: str = Query(..., description="11 位手机号"),
-    code: str = Query(..., description="6 位验证码"),
-    new_password: str = Query(..., description="新密码（至少 6 位）"),
+    body: Optional[ResetPasswordSmsBody] = Body(default=None),
+    phone: Optional[str] = Query(default=None, description="11 位手机号"),
+    code: Optional[str] = Query(default=None, description="6 位验证码"),
+    new_password: Optional[str] = Query(default=None, description="新密码（至少 6 位）"),
 ):
     """POST /auth/sms/reset-password：通过手机验证码重置密码（忘记密码）"""
+    phone = (body.phone if body else phone) or ""
+    code = (body.code if body else code) or ""
+    new_password = (body.new_password if body else new_password) or ""
     if not is_valid_phone(phone):
         raise HTTPException(status_code=422, detail=err_phone_format_error())
 

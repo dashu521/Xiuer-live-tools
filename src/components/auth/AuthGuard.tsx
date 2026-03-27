@@ -11,26 +11,27 @@ interface AuthGuardProps {
 }
 
 export function AuthGuard({ children, feature, fallback }: AuthGuardProps) {
-  const { token, checkAuth } = useAuthStore()
+  const authCheckDone = useAuthStore(state => state.authCheckDone)
+  const checkAuth = useAuthStore(state => state.checkAuth)
   const [showAuthDialog, setShowAuthDialog] = useState(false)
   const [isChecking, setIsChecking] = useState(true)
 
   useEffect(() => {
     const checkAuthentication = async () => {
-      if (token) {
+      if (!authCheckDone) {
         await checkAuth()
       }
       setIsChecking(false)
     }
 
     checkAuthentication()
-  }, [token, checkAuth])
+  }, [authCheckDone, checkAuth])
 
   const handleFeatureAccess = async (): Promise<boolean> => {
     if (!feature) return true
 
     try {
-      const response = await window.authAPI.checkFeatureAccess(token || '', feature)
+      const response = await window.authAPI.checkFeatureAccess(feature)
       const { featureAccess } = response
 
       if (!featureAccess.can_access) {
@@ -104,7 +105,8 @@ export function AuthGuard({ children, feature, fallback }: AuthGuardProps) {
 
 // Hook for feature access checking
 export function useFeatureAccess() {
-  const { isAuthenticated, token, user } = useAuthStore()
+  const isAuthenticated = useAuthStore(state => state.isAuthenticated)
+  const user = useAuthStore(state => state.user)
 
   const checkFeatureAccess = async (
     feature: string,
@@ -117,7 +119,7 @@ export function useFeatureAccess() {
     user: SafeUser | null
   }> => {
     try {
-      const response = await window.authAPI.checkFeatureAccess(token || '', feature)
+      const response = await window.authAPI.checkFeatureAccess(feature)
       return response as {
         featureAccess: {
           can_access: boolean
