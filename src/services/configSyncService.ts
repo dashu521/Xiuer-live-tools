@@ -78,8 +78,27 @@ class ConfigSyncService {
   private syncTimeout: ReturnType<typeof setTimeout> | null = null
   private isSyncing = false
   private lastSyncTime = 0
-  private readonly SYNC_DEBOUNCE_MS = 2000
-  private readonly MIN_SYNC_INTERVAL_MS = 5000
+  private lastQueuedSignature: string | null = null
+  private lastSyncedSignature: string | null = null
+  private readonly SYNC_DEBOUNCE_MS = 4000
+  private readonly MIN_SYNC_INTERVAL_MS = 15000
+
+  private enqueueSync(delayMs: number): void {
+    if (this.syncTimeout) {
+      clearTimeout(this.syncTimeout)
+    }
+
+    this.syncTimeout = setTimeout(() => {
+      this.syncTimeout = null
+      this.syncToCloud().catch(err => {
+        console.error('[ConfigSync] Scheduled sync failed:', err)
+      })
+    }, delayMs)
+  }
+
+  private getConfigSignature(config: UserConfigData): string {
+    return JSON.stringify(config)
+  }
 
   collectConfigData(): UserConfigData {
     const accountsState = useAccounts.getState()
@@ -108,13 +127,21 @@ class ConfigSyncService {
   async syncToCloud(): Promise<{ success: boolean; error?: string }> {
     if (this.isSyncing) {
       if (DEBUG) console.log('[ConfigSync] Sync already in progress, skipping')
+      this.enqueueSync(this.SYNC_DEBOUNCE_MS)
       return { success: true }
     }
 
     const now = Date.now()
     if (now - this.lastSyncTime < this.MIN_SYNC_INTERVAL_MS) {
-      if (DEBUG) console.log('[ConfigSync] Sync too frequent, skipping')
+      const retryDelay = this.MIN_SYNC_INTERVAL_MS - (now - this.lastSyncTime)
+      if (DEBUG) console.log('[ConfigSync] Sync too frequent, rescheduling', { retryDelay })
+      this.enqueueSync(retryDelay)
       return { success: true }
+    }
+
+    if (this.syncTimeout) {
+      clearTimeout(this.syncTimeout)
+      this.syncTimeout = null
     }
 
     this.isSyncing = true
@@ -122,19 +149,24 @@ class ConfigSyncService {
 
     try {
       const config = this.collectConfigData()
+      const signature = this.getConfigSignature(config)
 
       const result = await syncUserConfig(config)
 
       if (result.ok && result.data?.success) {
+        this.lastSyncedSignature = signature
+        this.lastQueuedSignature = null
         if (DEBUG) console.log('[ConfigSync] Sync to cloud successful')
         return { success: true }
       }
 
       const errorMsg = result.ok ? result.data?.message : result.error?.message
+      this.lastQueuedSignature = null
       console.error('[ConfigSync] Sync failed:', errorMsg)
       return { success: false, error: errorMsg }
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+      this.lastQueuedSignature = null
       console.error('[ConfigSync] Sync error:', errorMsg)
       return { success: false, error: errorMsg }
     } finally {
@@ -160,6 +192,8 @@ class ConfigSyncService {
       }
 
       this.applyConfig(config)
+      this.lastSyncedSignature = this.getConfigSignature(config)
+      this.lastQueuedSignature = null
 
       if (DEBUG) {
         console.log('[ConfigSync] Load from cloud successful:', {
@@ -276,15 +310,24 @@ class ConfigSyncService {
   }
 
   scheduleSync(): void {
-    if (this.syncTimeout) {
-      clearTimeout(this.syncTimeout)
+    const signature = this.getConfigSignature(this.collectConfigData())
+    if (signature === this.lastQueuedSignature || signature === this.lastSyncedSignature) {
+      return
     }
 
-    this.syncTimeout = setTimeout(() => {
-      this.syncToCloud().catch(err => {
-        console.error('[ConfigSync] Scheduled sync failed:', err)
-      })
-    }, this.SYNC_DEBOUNCE_MS)
+    this.lastQueuedSignature = signature
+    this.enqueueSync(this.SYNC_DEBOUNCE_MS)
+  }
+
+  resetForTests(): void {
+    if (this.syncTimeout) {
+      clearTimeout(this.syncTimeout)
+      this.syncTimeout = null
+    }
+    this.isSyncing = false
+    this.lastSyncTime = 0
+    this.lastQueuedSignature = null
+    this.lastSyncedSignature = null
   }
 
   setupAutoSync(): () => void {
