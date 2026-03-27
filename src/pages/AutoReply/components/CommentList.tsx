@@ -1,4 +1,3 @@
-import { motion } from 'framer-motion'
 import { memo, useId, useMemo, useState } from 'react'
 import { Badge, type BadgeProps } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -144,18 +143,12 @@ const _EnterRoomMessage = ({ message }: { message: Message }) => {
   const displayName = message.nick_name
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.3 }}
-      className="flex items-center gap-2 p-2 rounded-md border border-primary/30 bg-primary/5"
-    >
+    <div className="flex items-center gap-2 p-2 rounded-md border border-primary/30 bg-primary/5">
       <span className="font-medium">{displayName}</span>
       <Badge variant="info" className="text-xs">
         进入直播间
       </Badge>
-    </motion.div>
+    </div>
   )
 }
 
