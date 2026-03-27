@@ -6,4 +6,4 @@
  */
 export const AUTH_API_BASE =
   import.meta.env.VITE_AUTH_API_BASE_URL ||
-  (import.meta.env.PROD ? 'https://auth.xiuer.work' : 'http://localhost:8000')
+  (import.meta.env.PROD ? 'http://121.41.179.197:8000' : 'http://localhost:8000')

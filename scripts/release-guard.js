@@ -314,26 +314,23 @@ function checkConfig() {
 function checkEnv() {
   console.log(`\n${colors.blue}${colors.bold}🔍 环境变量检查${colors.reset}\n`);
 
-  const PRODUCTION_API = 'https://auth.xiuer.work';
+  const PRODUCTION_API = 'http://121.41.179.197:8000';
   const apiBaseUrl = process.env.VITE_AUTH_API_BASE_URL;
   const authStorageSecret = process.env.AUTH_STORAGE_SECRET?.trim();
 
   if (!apiBaseUrl) {
-    log('VITE_AUTH_API_BASE_URL 未设置', 'BLOCKER', `发布时必须设置为 ${EMERGENCY_PRODUCTION_API} 或 HTTPS 生产地址`);
+    log('VITE_AUTH_API_BASE_URL 未设置', 'BLOCKER', `发布时必须设置为 ${PRODUCTION_API}`);
     addBlocker('环境变量', 'VITE_AUTH_API_BASE_URL 未设置');
   } else if (
     apiBaseUrl.includes('localhost') ||
     apiBaseUrl.includes('127.0.0.1') ||
-    (apiBaseUrl !== EMERGENCY_PRODUCTION_API && !apiBaseUrl.startsWith('https://'))
+    apiBaseUrl !== PRODUCTION_API
   ) {
-    log(`VITE_AUTH_API_BASE_URL 值不正确: ${apiBaseUrl}`, 'BLOCKER', `必须为 ${EMERGENCY_PRODUCTION_API} 或 HTTPS 生产地址`);
+    log(`VITE_AUTH_API_BASE_URL 值不正确: ${apiBaseUrl}`, 'BLOCKER', `必须为 ${PRODUCTION_API}`);
     addBlocker('环境变量', `VITE_AUTH_API_BASE_URL 值不正确，当前值: ${apiBaseUrl}`);
   } else {
     log(`VITE_AUTH_API_BASE_URL: ${apiBaseUrl}`, 'PASS');
     addInfo('环境变量', `API 地址: ${apiBaseUrl}`);
-    if (apiBaseUrl === EMERGENCY_PRODUCTION_API) {
-      addWarning('环境变量', '使用旧直连 HTTP 认证地址', '这是短期应急回退方案，需后续恢复 HTTPS 域名');
-    }
   }
 
   if (!authStorageSecret) {
