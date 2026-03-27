@@ -249,7 +249,7 @@ export function PhoneAuthDialog({
         token?: string
         refresh_token?: string
         needs_password?: boolean
-        error?: string
+        error?: string | { message?: string; code?: string }
       }
 
       console.log('[PhoneAuthDialog] 短信登录返回结果:', JSON.stringify(result, null, 2))
