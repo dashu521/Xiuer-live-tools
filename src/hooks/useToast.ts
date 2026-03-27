@@ -13,6 +13,7 @@ type ToasterToast = Omit<ToastProps, 'title'> & {
   dedupeKey?: string
   priority?: number
   createdAt?: number
+  dismissedAt?: number | null
 }
 
 type ToastLevel = 'success' | 'error' | 'info' | 'warning'
@@ -68,6 +69,11 @@ interface State {
 }
 
 const toastTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
+const REOPEN_COOLDOWN_MS = 5_000
+
+function dismissToast(toastId?: string) {
+  dispatch({ type: 'DISMISS_TOAST', toastId })
+}
 
 function addToRemoveQueue(toastId: string) {
   if (toastTimeouts.has(toastId)) {
@@ -97,6 +103,13 @@ function upsertToast(state: State, nextToast: ToasterToast): State {
     : undefined
 
   if (duplicate) {
+    const dismissedRecently =
+      duplicate.dismissedAt != null && Date.now() - duplicate.dismissedAt < REOPEN_COOLDOWN_MS
+
+    if (dismissedRecently) {
+      return state
+    }
+
     if ((duplicate.priority ?? 0) > (nextToast.priority ?? 0)) {
       return state
     }
@@ -111,6 +124,7 @@ function upsertToast(state: State, nextToast: ToasterToast): State {
                 ...nextToast,
                 id: duplicate.id,
                 createdAt: toast.createdAt,
+                dismissedAt: null,
                 open: true,
               }
             : toast,
@@ -155,6 +169,7 @@ export function reducer(state: State, action: Action): State {
           t.id === toastId || toastId === undefined
             ? {
                 ...t,
+                dismissedAt: Date.now(),
                 open: false,
               }
             : t,
@@ -189,30 +204,39 @@ function dispatch(action: Action) {
 type Toast = Omit<ToasterToast, 'id'>
 
 function toast({ ...props }: Toast) {
-  const id = genId()
+  let resolvedId = genId()
+  const getResolvedId = () => resolvedId
 
   const update = (props: ToasterToast) =>
     dispatch({
       type: 'UPDATE_TOAST',
-      toast: { ...props, id },
+      toast: { ...props, id: getResolvedId() },
     })
-  const dismiss = () => dispatch({ type: 'DISMISS_TOAST', toastId: id })
+  const dismiss = () => dismissToast(getResolvedId())
 
   dispatch({
     type: 'ADD_TOAST',
     toast: {
       ...props,
-      id,
+      id: resolvedId,
       open: true,
       createdAt: Date.now(),
+      dismissedAt: null,
       onOpenChange: open => {
-        if (!open) dismiss()
+        if (!open) dismissToast(getResolvedId())
       },
     },
   })
 
+  if (props.dedupeKey) {
+    const activeToast = memoryState.toasts.find(toast => toast.dedupeKey === props.dedupeKey)
+    if (activeToast) {
+      resolvedId = activeToast.id
+    }
+  }
+
   return {
-    id,
+    id: resolvedId,
     dismiss,
     update,
   }
@@ -250,6 +274,22 @@ const toasty = {
   warning: (input: ToastInput) => toast(normalizeToastInput('warning', input)),
 }
 
+function resetToastStateForTests() {
+  for (const timeout of toastTimeouts.values()) {
+    clearTimeout(timeout)
+  }
+  toastTimeouts.clear()
+  memoryState = { toasts: [] }
+  count = 0
+  for (const listener of listeners) {
+    listener(memoryState)
+  }
+}
+
+function getToastStateForTests() {
+  return memoryState
+}
+
 function useToasts() {
   const [state, setState] = React.useState<State>(memoryState)
 
@@ -275,4 +315,4 @@ function useToast() {
   }
 }
 
-export { useToast, useToasts }
+export { getToastStateForTests, resetToastStateForTests, toasty as toastApi, useToast, useToasts }

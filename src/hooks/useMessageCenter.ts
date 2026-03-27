@@ -12,6 +12,8 @@ import { useAuthCheckDone, useAuthStore } from '@/stores/authStore'
 import { useToast } from './useToast'
 
 const STREAM_RETRY_DELAY_MS = 3_000
+const STREAM_FALLBACK_POLL_INTERVAL_MS = 15_000
+const STREAM_STALE_REFRESH_INTERVAL_MS = 60_000
 
 interface RefreshResult {
   success: boolean
@@ -135,6 +137,8 @@ export function useMessageCenterPolling() {
   const applySnapshot = useMessageCenterStore(state => state.applySnapshot)
   const setStreamConnected = useMessageCenterStore(state => state.setStreamConnected)
   const toastReadyRef = useRef(false)
+  const streamConnectedRef = useRef(false)
+  const lastSnapshotAtRef = useRef(0)
 
   useEffect(() => {
     if (!authCheckDone) {
@@ -150,11 +154,20 @@ export function useMessageCenterPolling() {
 
     let disposed = false
     let abortController: AbortController | null = null
+    let fallbackTimer: number | null = null
 
-    const load = async () => {
+    const load = async (reason: 'initial' | 'fallback' | 'stale' | 'reconnect') => {
       const result = await useMessageCenterStore.getState().refresh()
       if (disposed || !result.success) {
+        if (!disposed && reason !== 'initial') {
+          console.warn('[MessageCenter] Refresh failed:', { reason })
+        }
         return
+      }
+
+      lastSnapshotAtRef.current = Date.now()
+      if (reason !== 'initial') {
+        console.info('[MessageCenter] Refresh snapshot applied:', { reason })
       }
 
       if (toastReadyRef.current && result.increased > 0) {
@@ -172,7 +185,27 @@ export function useMessageCenterPolling() {
     }
 
     const run = async () => {
-      await load()
+      await load('initial')
+
+      fallbackTimer = window.setInterval(() => {
+        if (disposed) {
+          return
+        }
+
+        const now = Date.now()
+        const isStale =
+          lastSnapshotAtRef.current > 0 &&
+          now - lastSnapshotAtRef.current >= STREAM_STALE_REFRESH_INTERVAL_MS
+
+        if (!streamConnectedRef.current) {
+          void load('fallback')
+          return
+        }
+
+        if (isStale) {
+          void load('stale')
+        }
+      }, STREAM_FALLBACK_POLL_INTERVAL_MS)
 
       while (!disposed) {
         abortController = new AbortController()
@@ -182,7 +215,12 @@ export function useMessageCenterPolling() {
               return
             }
 
+            if (!streamConnectedRef.current) {
+              console.info('[MessageCenter] Stream connected')
+            }
+            streamConnectedRef.current = true
             setStreamConnected(true)
+            lastSnapshotAtRef.current = Date.now()
             const result = applySnapshot(event.payload)
             if (toastReadyRef.current && result.increased > 0) {
               toast.info({
@@ -201,7 +239,9 @@ export function useMessageCenterPolling() {
             break
           }
           console.warn('[MessageCenter] Stream disconnected:', error)
+          await load('reconnect')
         } finally {
+          streamConnectedRef.current = false
           setStreamConnected(false)
         }
 
@@ -220,6 +260,10 @@ export function useMessageCenterPolling() {
     return () => {
       disposed = true
       abortController?.abort()
+      if (fallbackTimer) {
+        window.clearInterval(fallbackTimer)
+      }
+      streamConnectedRef.current = false
       setStreamConnected(false)
     }
   }, [applySnapshot, authCheckDone, isAuthenticated, reset, setStreamConnected, toast, userId])

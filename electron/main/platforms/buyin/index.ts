@@ -37,7 +37,9 @@ export class BuyinPlatform implements IPlatform, IPerformPopup, IPerformComment,
       const newPage = await openUrlByElement(page, URLS.LIVE_CONTROL_PAGE)
       browserSession.page = newPage
       this.mainPage = newPage
-      await page.close()
+      if (newPage !== page) {
+        await page.close()
+      }
     }
     return isConnected
   }
@@ -46,8 +48,11 @@ export class BuyinPlatform implements IPlatform, IPerformPopup, IPerformComment,
     // 进入登录页面
     // 巨量百应（2025.8）也有和抖店同样的问题
     // 解决方法：通过控件主动打开登录页面
-    const newPage = await openUrlByElement(browserSession.page, URLS.LOGIN_PAGE)
-    await browserSession.page.close()
+    const currentPage = browserSession.page
+    const newPage = await openUrlByElement(currentPage, URLS.LOGIN_PAGE)
+    if (newPage !== currentPage) {
+      await currentPage.close()
+    }
     browserSession.page = newPage
 
     await browserSession.page.waitForSelector(SELECTORS.LOGGED_IN, {

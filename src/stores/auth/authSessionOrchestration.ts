@@ -7,6 +7,7 @@ import { useChromeConfigStore } from '@/hooks/useChromeConfig'
 import { useLiveControlStore } from '@/hooks/useLiveControl'
 import { useSubAccountStore } from '@/hooks/useSubAccount'
 import { configSyncService } from '@/services/configSyncService'
+import { flushAllPersists } from '@/utils/debouncedPersist'
 import { usePlatformPreferenceStore } from '../platformPreferenceStore'
 import { useTrialStore } from '../trialStore'
 
@@ -22,11 +23,13 @@ const USER_SCOPED_STORAGE_PREFIXES = [
 ] as const
 
 export function loadUserBaseSessionData(userId: string): void {
+  flushAllPersists()
   useAccounts.getState().loadUserAccounts(userId)
   usePlatformPreferenceStore.getState().loadUserPreferences(userId)
 }
 
 export function loadUserScopedRuntimeContexts(userId: string): void {
+  flushAllPersists()
   useAutoReplyConfigStore.getState().loadUserContexts(userId)
   useAutoMessageStore.getState().loadUserContexts(userId)
   useAutoPopUpStore.getState().loadUserContexts(userId)
@@ -94,6 +97,7 @@ export function clearUserScopedBusinessStorage(userId: string | null | undefined
 }
 
 export function resetUserScopedStores(): void {
+  flushAllPersists()
   useTrialStore.getState().reset()
   useAccounts.getState().reset()
   useLiveControlStore.getState().resetAllContexts?.()

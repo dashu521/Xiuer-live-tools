@@ -5,12 +5,21 @@
 
 import { useMemoizedFn } from 'ahooks'
 import { taskManager } from '@/tasks'
-import { getGateTaskName } from '@/tasks/taskMeta'
+import { getGateTaskName, getTaskDisplayName } from '@/tasks/taskMeta'
 import type { StopReason, TaskContext, TaskId } from '@/tasks/types'
 import { getStopReasonText } from '@/utils/taskGate'
 import { useAccounts } from './useAccounts'
 import { useLiveControlStore } from './useLiveControl'
 import { useToast } from './useToast'
+
+function buildTaskToastKey(
+  taskId: TaskId,
+  accountId: string,
+  type: 'success' | 'error' | 'warning' | 'info',
+  reason?: StopReason | 'already-running',
+) {
+  return ['task', type, taskId, accountId, reason ?? 'default'].join(':')
+}
 
 /**
  * 使用 TaskManager 的 Hook
@@ -22,8 +31,9 @@ export function useTaskManager() {
   /**
    * 创建任务上下文
    */
-  const createContext = useMemoizedFn((): TaskContext => {
+  const createContext = useMemoizedFn((taskId: TaskId): TaskContext => {
     const liveControlContext = useLiveControlStore.getState().contexts[currentAccountId]
+    const displayName = getTaskDisplayName(taskId)
 
     return {
       accountId: currentAccountId,
@@ -34,8 +44,22 @@ export function useTaskManager() {
           }
         : undefined,
       toast: {
-        success: (message: string) => toast.success(message),
-        error: (message: string) => toast.error(message),
+        success: (message: string) =>
+          toast.success({
+            title: displayName,
+            description: message,
+            dedupeKey: buildTaskToastKey(taskId, currentAccountId, 'success'),
+            duration: 2500,
+            priority: 2,
+          }),
+        error: (message: string) =>
+          toast.error({
+            title: `${displayName}异常`,
+            description: message,
+            dedupeKey: buildTaskToastKey(taskId, currentAccountId, 'error'),
+            duration: 4500,
+            priority: 4,
+          }),
       },
       ipcInvoke: (channel, ...args) => {
         if (!window.ipcRenderer) {
@@ -50,7 +74,8 @@ export function useTaskManager() {
    * 启动任务
    */
   const startTask = useMemoizedFn(async (taskId: TaskId): Promise<boolean> => {
-    const ctx = createContext()
+    const ctx = createContext(taskId)
+    const displayName = getTaskDisplayName(taskId)
     // 【Phase 2B-1】taskManager.start() 已基于任务实例真实状态返回 ALREADY_RUNNING
     const result = await taskManager.start(taskId, ctx)
 
@@ -63,9 +88,21 @@ export function useTaskManager() {
         console.log(
           `[useTaskManager] Task ${taskId} is already running for account ${currentAccountId}`,
         )
-        toast.info(result.message || '任务已在运行中')
+        toast.info({
+          title: `${displayName}已在运行`,
+          description: result.message || '任务已在运行中',
+          dedupeKey: buildTaskToastKey(taskId, currentAccountId, 'info', 'already-running'),
+          duration: 2200,
+          priority: 1,
+        })
       } else {
-        toast.error(result.message || '启动任务失败')
+        toast.error({
+          title: `${displayName}启动失败`,
+          description: result.message || '启动任务失败',
+          dedupeKey: buildTaskToastKey(taskId, currentAccountId, 'error'),
+          duration: 4500,
+          priority: 4,
+        })
       }
       return false
     }
@@ -80,12 +117,27 @@ export function useTaskManager() {
     async (taskId: TaskId, reason: StopReason = 'manual'): Promise<void> => {
       // 【修复】传入 accountId 以停止指定账号的任务
       await taskManager.stop(taskId, reason, currentAccountId)
+      const displayName = getTaskDisplayName(taskId)
 
       // 显示停止提示（仅非手动停止时显示）
-      if (reason !== 'manual') {
+      if (reason === 'manual') {
+        toast.success({
+          title: `${displayName}已停止`,
+          description: '任务已手动停止',
+          dedupeKey: buildTaskToastKey(taskId, currentAccountId, 'success', reason),
+          duration: 2200,
+          priority: 2,
+        })
+      } else {
         const taskName = getGateTaskName(taskId)
         const reasonText = getStopReasonText(reason, taskName)
-        toast.error(reasonText)
+        toast.warning({
+          title: `${displayName}已停止`,
+          description: reasonText,
+          dedupeKey: buildTaskToastKey(taskId, currentAccountId, 'warning', reason),
+          duration: 3500,
+          priority: 3,
+        })
       }
     },
   )

@@ -76,7 +76,8 @@ export class TaobaoPlatform implements IPlatform, IPerformPopup, IPerformComment
 
   async getAccountName(session: BrowserSession): Promise<string> {
     // 需要前往首页获取
-    const homePage = await openUrlByElement(session.page, URLS.HOME_PAGE)
+    const currentPage = session.page
+    const homePage = await openUrlByElement(currentPage, URLS.HOME_PAGE)
     session.page.bringToFront()
 
     try {
@@ -117,8 +118,10 @@ export class TaobaoPlatform implements IPlatform, IPerformPopup, IPerformComment
       console.error('[淘宝平台] 获取用户名时发生错误:', error)
       throw new Error(`获取用户名失败：${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
-      // 延迟关闭页面，确保数据已读取
-      setTimeout(() => homePage.close().catch(() => {}), 500)
+      // 仅在确实打开了临时页时才关闭，避免回退到当前页导航后误关主会话。
+      if (homePage !== currentPage) {
+        setTimeout(() => homePage.close().catch(() => {}), 500)
+      }
     }
   }
 

@@ -170,7 +170,10 @@ function normalizeUpdateSource(source?: string): string {
 }
 
 interface Updater {
-  checkForUpdates(source: string): Promise<{
+  checkForUpdates(
+    source: string,
+    trigger?: 'interactive' | 'background',
+  ): Promise<{
     update: boolean
     version: string
     newVersion: string
@@ -183,19 +186,22 @@ interface Updater {
 class UpdateManager {
   constructor(private updater: Updater) {}
 
-  public async checkForUpdates(source = OFFICIAL_UPDATE_SOURCE) {
-    return await this.updater.checkForUpdates(normalizeUpdateSource(source))
+  public async checkForUpdates(
+    source = OFFICIAL_UPDATE_SOURCE,
+    trigger: 'interactive' | 'background' = 'interactive',
+  ) {
+    return await this.updater.checkForUpdates(normalizeUpdateSource(source), trigger)
   }
 
   public async checkUpdateVersion(source = OFFICIAL_UPDATE_SOURCE) {
     logger.info('检查更新版本...', { source: normalizeUpdateSource(source) })
-    return await this.checkForUpdates(source)
+    return await this.checkForUpdates(source, 'interactive')
   }
 
   public async silentCheckForUpdate() {
     logger.info('启动时静默检查更新...', { source: OFFICIAL_UPDATE_URL })
     try {
-      await this.checkForUpdates(OFFICIAL_UPDATE_SOURCE)
+      await this.checkForUpdates(OFFICIAL_UPDATE_SOURCE, 'background')
     } catch (error) {
       logger.warn('静默检查更新失败:', error)
     }
@@ -214,6 +220,7 @@ class UpdateManager {
 
 class WindowsUpdater implements Updater {
   private autoUpdater: AppUpdater
+  private currentTrigger: 'interactive' | 'background' = 'interactive'
   constructor() {
     const { autoUpdater }: { autoUpdater: AppUpdater } = createRequire(import.meta.url)(
       'electron-updater',
@@ -227,6 +234,11 @@ class WindowsUpdater implements Updater {
     this.autoUpdater.forceDevUpdateConfig = true
     this.autoUpdater.disableWebInstaller = false
     this.autoUpdater.allowDowngrade = false
+    this.autoUpdater.autoDownload = false
+  }
+
+  private resetTrigger() {
+    this.currentTrigger = 'interactive'
   }
 
   private registerEventListener() {
@@ -239,22 +251,34 @@ class WindowsUpdater implements Updater {
       logger.info(`有可用更新！当前版本：${app.getVersion()}，新版本：${info.version}`)
 
       const releaseNote = await fetchChangelog()
-      windowManager.send(IPC_CHANNELS.updater.updateAvailable, {
-        update: true,
-        version: app.getVersion(),
-        newVersion: info.version,
-        releaseNote,
-      })
+      if (this.currentTrigger === 'background') {
+        windowManager.send(IPC_CHANNELS.app.notifyUpdate, {
+          currentVersion: app.getVersion(),
+          latestVersion: info.version,
+          releaseNote,
+        })
+      } else {
+        windowManager.send(IPC_CHANNELS.updater.updateAvailable, {
+          update: true,
+          version: app.getVersion(),
+          newVersion: info.version,
+          releaseNote,
+        })
+      }
+      this.resetTrigger()
     })
 
     this.autoUpdater.on('update-not-available', (info: UpdateInfo) => {
       if (isAppQuitting) return
       logger.info(`无可用更新。当前版本：${app.getVersion()}，新版本：${info.version}`)
-      windowManager.send(IPC_CHANNELS.updater.updateAvailable, {
-        update: false,
-        version: app.getVersion(),
-        newVersion: info.version,
-      })
+      if (this.currentTrigger === 'interactive') {
+        windowManager.send(IPC_CHANNELS.updater.updateAvailable, {
+          update: false,
+          version: app.getVersion(),
+          newVersion: info.version,
+        })
+      }
+      this.resetTrigger()
     })
 
     this.autoUpdater.on('download-progress', (progressInfo: ProgressInfo) => {
@@ -329,13 +353,17 @@ class WindowsUpdater implements Updater {
     }
   }
 
-  public async checkForUpdates(source: string) {
+  public async checkForUpdates(
+    source: string,
+    trigger: 'interactive' | 'background' = 'interactive',
+  ) {
     // 默认情况会在请求的资源 URL 后面添加查询参数 noCache
     // 但是很多 proxy 站点并没有针对 query 优化，就会导致 404
     // 本身通过 proxy 访问的 URL 就带有版本号，所以 noCache 完全没作用
     // 通过下面的 hack 可以不附带 noCache 查询
     // https://github.com/electron-userland/electron-builder/issues/3415#issuecomment-433082387
     this.autoUpdater.requestHeaders = { authorization: '' }
+    this.currentTrigger = trigger
     try {
       if (!app.isPackaged) {
         if (!this.autoUpdater.forceDevUpdateConfig) {
@@ -356,6 +384,7 @@ class WindowsUpdater implements Updater {
 
       return await this.checkUpdateForGenericSource(normalizedSource)
     } catch (error) {
+      this.resetTrigger()
       const message = `检查更新时发生错误: ${errorMessage(error)}`
       logger.error(message)
       windowManager.send(IPC_CHANNELS.updater.updateError, { message })
@@ -380,7 +409,10 @@ class MacOSUpdater implements Updater {
    * MacOS 如果使用 autoUpdater 需要提供 zip 文件，但是下载了 zip 之后又不能安装，因为没有签名
    * 所以干脆就手动下载 dmg 文件，下载完毕后退出应用，手动安装
    */
-  public async checkForUpdates(source: string) {
+  public async checkForUpdates(
+    source: string,
+    trigger: 'interactive' | 'background' = 'interactive',
+  ) {
     try {
       const normalizedSource = normalizeUpdateSource(source)
       const assetsBaseURL =
@@ -400,7 +432,7 @@ class MacOSUpdater implements Updater {
       const hasUpdate = semver.gt(latestYml.version, app.getVersion())
       if (!hasUpdate) {
         logger.info(`${app.getVersion()} 已经是最新版本，无需更新`)
-        if (!isAppQuitting) {
+        if (!isAppQuitting && trigger === 'interactive') {
           windowManager.send(IPC_CHANNELS.updater.updateAvailable, {
             update: false,
             version: app.getVersion(),
@@ -417,12 +449,20 @@ class MacOSUpdater implements Updater {
       const releaseNote =
         normalizedSource === GITHUB_UPDATE_SOURCE ? await fetchChangelog() : undefined
       if (!isAppQuitting) {
-        windowManager.send(IPC_CHANNELS.updater.updateAvailable, {
-          update: true,
-          version: app.getVersion(),
-          newVersion: latestYml.version,
-          releaseNote,
-        })
+        if (trigger === 'background') {
+          windowManager.send(IPC_CHANNELS.app.notifyUpdate, {
+            currentVersion: app.getVersion(),
+            latestVersion: latestYml.version,
+            releaseNote,
+          })
+        } else {
+          windowManager.send(IPC_CHANNELS.updater.updateAvailable, {
+            update: true,
+            version: app.getVersion(),
+            newVersion: latestYml.version,
+            releaseNote,
+          })
+        }
       }
 
       return {

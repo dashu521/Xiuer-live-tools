@@ -41,7 +41,9 @@ export class XiaohongshuPlatform
     if (isConnected) {
       // 小红书反爬，直接用 goto 进入中控台加载不出元素
       const newPage = await openUrlByElement(page, URLS.LIVE_CONTROL_PAGE)
-      await page.close()
+      if (newPage !== page) {
+        await page.close()
+      }
       browserSession.page = newPage
       this.mainPage = newPage
     }

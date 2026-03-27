@@ -267,14 +267,32 @@ export function ensurePage(page: Page | null | undefined): Result.Result<Page, P
 /** 通过 \<a\> 的点击打开新网页，主要是防止部分反爬的行为 */
 export async function openUrlByElement(page: Page, url: string) {
   const context = page.context()
-  const [newPage] = await Promise.all([
-    context.waitForEvent('page'),
-    page.evaluate(url => {
+  const popupTimeoutMs = 5000
+
+  try {
+    const popupPromise = context.waitForEvent('page', {
+      timeout: popupTimeoutMs,
+    })
+
+    await page.evaluate(targetUrl => {
       const el = document.createElement('a')
-      el.href = url
+      el.href = targetUrl
       el.target = '_blank'
+      el.rel = 'noopener noreferrer'
+      ;(document.body ?? document.documentElement).appendChild(el)
       el.click()
-    }, url),
-  ])
-  return newPage
+      el.remove()
+    }, url)
+
+    const newPage = await popupPromise
+    await newPage.waitForLoadState('domcontentloaded').catch(() => null)
+    return newPage
+  } catch (_error) {
+    // Windows 打包环境下，target=_blank 有时不会稳定派发 page 事件；
+    // 这里降级为当前页跳转，避免调用方继续关闭唯一页面导致整个浏览器退出。
+    await page.goto(url, {
+      waitUntil: 'domcontentloaded',
+    })
+    return page
+  }
 }

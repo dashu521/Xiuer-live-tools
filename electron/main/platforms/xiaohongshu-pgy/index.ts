@@ -40,7 +40,9 @@ export class XiaohongshuPgyPlatform
     if (isConnected) {
       // 小红书反爬，直接用 goto 进入中控台加载不出元素
       const newPage = await openUrlByElement(page, URLS.LIVE_CONTROL_PAGE)
-      await page.close()
+      if (newPage !== page) {
+        await page.close()
+      }
       browserSession.page = newPage
       this.mainPage = newPage
       // 等待中控台页面加载（大概要 3~5 秒）

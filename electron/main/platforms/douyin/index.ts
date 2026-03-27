@@ -45,8 +45,11 @@ export class DouyinPlatform implements IPlatform, IPerformPopup, IPerformComment
     // 进入登录页面
     // 抖店目前 (2025.6.29) 有一个小反爬，会打乱登录页面的样式
     // 解决方法：通过控件主动打开登录页面
-    const newPage = await openUrlByElement(browserSession.page, URLS.LOGIN_PAGE)
-    await browserSession.page.close()
+    const currentPage = browserSession.page
+    const newPage = await openUrlByElement(currentPage, URLS.LOGIN_PAGE)
+    if (newPage !== currentPage) {
+      await currentPage.close()
+    }
     browserSession.page = newPage
 
     await browserSession.page.waitForSelector(SELECTORS.LOGGED_IN, {
