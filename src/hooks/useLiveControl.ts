@@ -45,6 +45,13 @@ const READONLY_DEFAULT_CONTEXT: LiveControlContext = {
   streamState: 'unknown',
 }
 
+function restoreConnectState(savedConnectState: ConnectState | undefined): ConnectState {
+  return {
+    ...DEFAULT_CONNECT_STATE,
+    platform: savedConnectState?.platform || '',
+  }
+}
+
 export const useLiveControlStore = create<LiveControlStore>()(
   immer((set, get) => {
     eventEmitter.on(EVENTS.ACCOUNT_ADDED, (accountId: string) => {
@@ -193,16 +200,10 @@ export const useLiveControlStore = create<LiveControlStore>()(
                 accountId: account.id,
               })
               if (savedContext) {
-                const safeConnectState =
-                  savedContext.connectState.status === 'connecting'
-                    ? {
-                        ...DEFAULT_CONNECT_STATE,
-                        platform: savedContext.connectState.platform || '',
-                      }
-                    : { ...savedContext.connectState }
-
                 state.contexts[account.id] = {
-                  connectState: safeConnectState,
+                  // 启动恢复时仅保留平台选择，不直接恢复旧的连接/错误态，
+                  // 避免重启后在未校验真实会话的情况下误显示“已连接”。
+                  connectState: restoreConnectState(savedContext.connectState),
                   accountName: null,
                   streamState: 'unknown',
                 }
