@@ -1751,6 +1751,7 @@ async function loadAdminMessages() {
       if (item.status === 'published') {
         actionCell.appendChild(createActionButton('撤回', 'sm danger', function() { revokeMessage(item.id); }));
       }
+      actionCell.appendChild(createActionButton('删除', 'sm danger', function() { deleteMessage(item.id); }));
       tr.appendChild(actionCell);
       tbody.appendChild(tr);
     });
@@ -1890,6 +1891,25 @@ async function revokeMessage(messageId) {
       loadAdminMessages();
     } else {
       toast((d.detail && d.detail.message) || d.message || '撤回失败', 'error');
+    }
+  } catch (e) {
+    toast('网络错误', 'error');
+  }
+}
+
+async function deleteMessage(messageId) {
+  if (!confirm('确定要删除这条消息吗？删除后不可恢复。')) return;
+  try {
+    const r = await fetch(API + '/admin/messages/' + encodeURIComponent(messageId), {
+      method: 'DELETE',
+      headers: hdrs()
+    });
+    const d = await r.json();
+    if (r.ok && d.ok) {
+      toast(d.message || '已删除');
+      loadAdminMessages();
+    } else {
+      toast((d.detail && d.detail.message) || d.message || '删除失败', 'error');
     }
   } catch (e) {
     toast('网络错误', 'error');

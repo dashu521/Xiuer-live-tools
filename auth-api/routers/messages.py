@@ -521,3 +521,35 @@ def admin_revoke_message(
         message="消息已撤回",
         item=_to_admin_item(item),
     )
+
+
+@admin_router.delete("/{announcement_id}", response_model=AdminAnnouncementActionResponse)
+def admin_delete_message(
+    announcement_id: str,
+    request: Request,
+    admin: str = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    req_id = _req_id(request)
+    item = _announcement_or_404(db, announcement_id)
+
+    db.query(AnnouncementReceipt).filter(
+        AnnouncementReceipt.announcement_id == announcement_id
+    ).delete(synchronize_session=False)
+    db.delete(item)
+    db.commit()
+
+    stream_hub.notify()
+    auth_audit_log(
+        req_id,
+        str(request.url),
+        "delete_announcement",
+        admin,
+        "success",
+        {"announcement_id": announcement_id},
+    )
+    return AdminAnnouncementActionResponse(
+        ok=True,
+        message="消息已删除",
+        item=None,
+    )
