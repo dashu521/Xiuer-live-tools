@@ -36,7 +36,10 @@ export function AuthDialog({ isOpen, onClose, feature }: AuthDialogProps) {
   const [lastLoginRawError, setLastLoginRawError] = useState<string | null>(null)
   const [devDetailsOpen, setDevDetailsOpen] = useState(false)
 
-  const { login, isLoading, error, clearError } = useAuthStore()
+  const login = useAuthStore(state => state.login)
+  const isLoading = useAuthStore(state => state.isLoading)
+  const error = useAuthStore(state => state.error)
+  const clearError = useAuthStore(state => state.clearError)
   const { toast } = useToast()
   const { showError } = useFriendlyError()
 

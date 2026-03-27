@@ -11,18 +11,14 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { useAccounts } from '@/hooks/useAccounts'
-import { useAutoMessageStore } from '@/hooks/useAutoMessage'
-import { useAutoPopUpStore } from '@/hooks/useAutoPopUp'
-import { useAutoReplyConfigStore } from '@/hooks/useAutoReplyConfig'
-import { useChromeConfigStore } from '@/hooks/useChromeConfig'
 import { useFriendlyError } from '@/hooks/useFriendlyError'
-import { useLiveControlStore } from '@/hooks/useLiveControl'
-import { useSubAccountStore } from '@/hooks/useSubAccount'
 import { useToast } from '@/hooks/useToast'
 import { resetPasswordWithSms, sendSmsCode } from '@/services/apiClient'
+import {
+  loadUserBaseSessionData,
+  loadUserScopedRuntimeContexts,
+} from '@/stores/auth/authSessionOrchestration'
 import { useAuthStore } from '@/stores/authStore'
-import { usePlatformPreferenceStore } from '@/stores/platformPreferenceStore'
 
 interface PhoneAuthDialogProps {
   isOpen: boolean
@@ -72,7 +68,7 @@ export function PhoneAuthDialog({
   const [validationError, setValidationError] = useState<string | null>(null)
   const [showSetPassword, setShowSetPassword] = useState(false)
 
-  const { setUser, setToken, setRefreshToken } = useAuthStore()
+  const setUser = useAuthStore(state => state.setUser)
   const { toast } = useToast()
   const { showError } = useFriendlyError()
 
@@ -128,25 +124,13 @@ export function PhoneAuthDialog({
     try {
       const result = await sendSmsCode(phone)
       if (result.ok && result.data?.success) {
-        const devCode = result.data?.dev_code
         const smsFailed = result.data?.sms_failed
-        // [SECURITY] 禁止自动填入验证码，只允许在控制台/toast中提示
-        if (devCode) {
-          // eslint-disable-next-line no-console
-          console.log('[DEV] SMS code (for debugging only):', devCode)
-          if (smsFailed) {
-            toast.warning({
-              title: '短信发送失败',
-              description: '短信服务暂时不可用，请稍后重试或使用其他登录方式。',
-              dedupeKey: 'sms-code-failed',
-            })
-          } else {
-            toast.success({
-              title: '验证码已发送',
-              description: '请查看手机短信并在 60 秒内完成验证。',
-              dedupeKey: 'sms-code-sent',
-            })
-          }
+        if (smsFailed) {
+          toast.warning({
+            title: '短信发送失败',
+            description: '短信服务暂时不可用，请稍后重试或使用其他登录方式。',
+            dedupeKey: 'sms-code-failed',
+          })
         } else {
           toast.success({
             title: '验证码已发送',
@@ -205,12 +189,6 @@ export function PhoneAuthDialog({
     }
 
     setIsSubmitting(true)
-    console.log(
-      '[PhoneAuthDialog] 开始短信登录流程, phone末4位:',
-      phone.slice(-4),
-      'code长度:',
-      code.length,
-    )
     try {
       // [SECURITY-FIX] 使用主进程代理登录，内部处理 token 存储
       const authAPI = (
@@ -218,12 +196,6 @@ export function PhoneAuthDialog({
           authAPI?: { loginWithSms?: (phone: string, code: string) => Promise<unknown> }
         }
       ).authAPI
-      console.log(
-        '[PhoneAuthDialog] authAPI 存在:',
-        !!authAPI,
-        'loginWithSms 存在:',
-        !!authAPI?.loginWithSms,
-      )
       if (!authAPI?.loginWithSms) {
         setValidationError('登录功能暂时不可用，请重启软件')
         showError('登录功能暂时不可用，请重启软件', {
@@ -234,7 +206,6 @@ export function PhoneAuthDialog({
         return
       }
 
-      console.log('[PhoneAuthDialog] 调用 authAPI.loginWithSms...')
       const result = (await authAPI.loginWithSms(phone, code)) as {
         success: boolean
         user?: {
@@ -246,19 +217,12 @@ export function PhoneAuthDialog({
           created_at?: string
           last_login_at?: string
         }
-        token?: string
-        refresh_token?: string
         needs_password?: boolean
-        error?: string
+        error?: string | { code?: string; message?: string }
       }
 
-      console.log('[PhoneAuthDialog] 短信登录返回结果:', JSON.stringify(result, null, 2))
-
-      if (result.success && result.token) {
-        const { user, refresh_token, needs_password } = result
-        console.log('[PhoneAuthDialog] 解析后的 user 对象:', JSON.stringify(user, null, 2))
-        console.log('[PhoneAuthDialog] user.id:', user?.id)
-        console.log('[PhoneAuthDialog] user.phone:', user?.phone)
+      if (result.success) {
+        const { user, needs_password } = result
 
         // 优先使用手机号作为显示用户名，后端返回的 id 是 UUID
         const finalUserId = user?.id || phone
@@ -280,27 +244,17 @@ export function PhoneAuthDialog({
           machineFingerprint: '',
           balance: 0,
         }
-        console.log('[PhoneAuthDialog] 构建的 safeUser:', JSON.stringify(safeUser, null, 2))
-
-        // [SECURITY] token 已由主进程内部存储，这里只更新 renderer 状态
-        console.log('[PhoneAuthDialog] Token 已由主进程存储，更新 renderer 状态...')
 
         setUser(safeUser)
-        setToken(result.token)
-        if (refresh_token) {
-          setRefreshToken(refresh_token)
-        }
-        useAuthStore.setState({ isAuthenticated: true, userStatus: null })
+        useAuthStore.setState({
+          isAuthenticated: true,
+          token: null,
+          refreshToken: null,
+          userStatus: null,
+        })
 
-        console.log('[PhoneAuthDialog] 短信登录成功，加载用户账号数据, userId:', finalUserId)
-        useAccounts.getState().loadUserAccounts(finalUserId)
-        usePlatformPreferenceStore.getState().loadUserPreferences(finalUserId)
-        useAutoReplyConfigStore.getState().loadUserContexts(finalUserId)
-        useAutoMessageStore.getState().loadUserContexts(finalUserId)
-        useAutoPopUpStore.getState().loadUserContexts(finalUserId)
-        useChromeConfigStore.getState().loadUserConfigs(finalUserId)
-        useLiveControlStore.getState().loadUserContexts(finalUserId)
-        useSubAccountStore.getState().loadUserContexts(finalUserId)
+        loadUserBaseSessionData(finalUserId)
+        loadUserScopedRuntimeContexts(finalUserId)
 
         // 统一通过 authStore 同步会员状态，避免会员等级 / 到期时间 / 账号上限割裂。
         useAuthStore
@@ -325,7 +279,11 @@ export function PhoneAuthDialog({
           window.dispatchEvent(new CustomEvent('auth:closeMainDialog'))
         }
       } else if (!result.success) {
-        const errorMsg = result.error || '验证码不对，请重新输入'
+        // [FIX] 防御性处理：error 可能是对象或字符串，统一转为字符串
+        const errorMsg =
+          typeof result.error === 'string'
+            ? result.error
+            : result.error?.message || result.error?.code || '验证码不对，请重新输入'
         setValidationError(errorMsg)
       } else {
         setValidationError('验证码不对，请重新输入')

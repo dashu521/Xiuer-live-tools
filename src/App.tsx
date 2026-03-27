@@ -50,7 +50,8 @@ const UpdateDialog = lazy(async () => {
 
 function AppContent() {
   const { enabled: devMode } = useDevMode()
-  const { accounts, currentAccountId } = useAccounts()
+  const accounts = useAccounts(state => state.accounts)
+  const currentAccountId = useAccounts(state => state.currentAccountId)
   const hydrateApiKeys = useAIChatStore(state => state.hydrateApiKeys)
   // 【修复】直接解构 setConnectState，避免 selector 返回新对象导致无限循环
   const setConnectState = useLiveControlStore(state => state.setConnectState)

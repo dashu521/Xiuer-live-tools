@@ -49,7 +49,6 @@ export function migrateAccountsData(userId: string): MigrationResult {
       currentAccountId: string
       defaultAccountId: string | null
     } | null = null
-    let _sourceKey = ''
 
     for (const oldKey of OLD_STORAGE_KEYS) {
       const oldData = localStorage.getItem(oldKey)
@@ -62,7 +61,6 @@ export function migrateAccountsData(userId: string): MigrationResult {
               currentAccountId: parsed.state.currentAccountId || '',
               defaultAccountId: parsed.state.defaultAccountId || null,
             }
-            _sourceKey = oldKey
             console.log(
               '[Migration] 从旧键迁移数据:',
               oldKey,

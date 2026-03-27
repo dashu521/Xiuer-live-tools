@@ -1,142 +1,100 @@
 /**
- * 鉴权请求统一出口：所有需要登录态的后端 API 必须经 requestWithRefresh 或 getMe 发起，禁止在业务代码中手写带 token 的 fetch。
- * 自动带 Bearer Token；401 时若有 refresh_token 则自动 POST /refresh 后重试一次（加锁防并发）。
- * API_BASE_URL 来自 src/config/authApi.ts，勿在此硬编码。
- *
- * [SECURITY] Token 获取唯一来源：主进程安全存储（通过 IPC）
- * 禁止任何 fallback 到 renderer 内存 token 的逻辑，避免跨账号状态串扰
+ * 鉴权请求统一出口：所有需要登录态的后端 API 必须经主进程代理发起，
+ * 禁止在渲染进程中直接持有或读取 access_token / refresh_token。
  */
 import { API_BASE_URL } from '@/config/authApi'
 import { useAuthStore } from '@/stores/authStore'
 import type { UserStatus } from '@/types/auth'
 
-// [SECURITY] Token 策略标记，启动时打印一次
-let tokenStrategyLogged = false
-
-/**
- * 从主进程安全存储获取 token
- * [SECURITY] 主进程是唯一可信来源，禁止 fallback 到 renderer 内存
- * 如果主进程获取失败，返回 null，由调用方处理认证失败
- */
-async function getTokenFromMainProcess(): Promise<string | null> {
-  if (typeof window === 'undefined') return null
-  const authAPI = (
-    window as {
-      authAPI?: {
-        getTokenInternal?: () => Promise<{ token: string | null; refreshToken: string | null }>
-      }
-    }
-  ).authAPI
-
-  // [CRITICAL] 强制只使用 getTokenInternal，不再 fallback 到 deprecated getTokens
-  const getTokenFn = authAPI?.getTokenInternal
-
-  if (!tokenStrategyLogged) {
-    console.log('[apiClient] token strategy = getTokenInternal-only, available:', !!getTokenFn)
-    tokenStrategyLogged = true
-  }
-
-  if (!getTokenFn) {
-    console.error('[apiClient] authAPI.getTokenInternal not available, treating as unauthenticated')
-    return null
-  }
-  try {
-    const tokens = await getTokenFn()
-    console.log('[apiClient] Got token from main process:', tokens.token ? 'exists' : 'null')
-    // [SECURITY] 主进程没有 token 时，不再 fallback，视为未认证
-    if (!tokens.token) {
-      console.warn('[apiClient] No token in main process, treating as unauthenticated')
-      return null
-    }
-    return tokens.token
-  } catch (err) {
-    console.error('[apiClient] Failed to get token from main process:', err)
-    // [SECURITY] 获取失败时，不再 fallback，视为未认证
-    return null
-  }
-}
-
-/** 从主进程安全存储获取 refresh token */
-async function getRefreshTokenFromMainProcess(): Promise<string | null> {
-  if (typeof window === 'undefined') return null
-  const authAPI = (
-    window as {
-      authAPI?: {
-        getTokenInternal?: () => Promise<{ token: string | null; refreshToken: string | null }>
-      }
-    }
-  ).authAPI
-
-  // [CRITICAL] 强制只使用 getTokenInternal
-  const getTokenFn = authAPI?.getTokenInternal
-  if (!getTokenFn) return null
-
-  try {
-    const tokens = await getTokenFn()
-    return tokens.refreshToken
-  } catch (err) {
-    console.error('[apiClient] Failed to get refresh token from main process:', err)
-    return null
-  }
-}
-
 export type ApiResult<T = unknown> =
   | { ok: true; data: T; status: number }
   | { ok: false; status: number; error?: { code?: string; message?: string } }
 
-async function request<T>(
+interface ProxyRequestError {
+  code?: string
+  message?: string
+}
+
+function normalizeApiPath(path: string): string {
+  return path.startsWith('/') ? path : `/${path}`
+}
+
+function normalizeApiUrl(path: string): string {
+  return `${API_BASE_URL.replace(/\/$/, '')}${normalizeApiPath(path)}`
+}
+
+function extractErrorDetail(
+  text: string,
+  statusText: string,
+  payload: unknown,
+): { code?: string; message?: string } {
+  const rawDetail =
+    payload && typeof payload === 'object' && 'detail' in payload
+      ? (payload as { detail?: unknown }).detail
+      : undefined
+
+  let message = text || statusText
+  if (typeof rawDetail === 'string') {
+    message = rawDetail
+  } else if (rawDetail && typeof rawDetail === 'object' && 'message' in rawDetail) {
+    message = (rawDetail as { message?: string }).message ?? message
+  } else if (Array.isArray(rawDetail) && rawDetail.length > 0) {
+    message = (rawDetail as { msg?: string }[])
+      .map(item => item?.msg ?? JSON.stringify(item))
+      .join('; ')
+  }
+
+  const code =
+    rawDetail && typeof rawDetail === 'object' && 'code' in rawDetail
+      ? (rawDetail as { code?: string }).code
+      : undefined
+
+  return { code, message }
+}
+
+function normalizeProxyError(error: unknown): ProxyRequestError {
+  if (typeof error === 'string') {
+    return { message: error }
+  }
+  if (error && typeof error === 'object') {
+    const detail = error as ProxyRequestError
+    if (detail.code || detail.message) {
+      return detail
+    }
+  }
+  return { message: '请求失败，请稍后再试' }
+}
+
+function isKickedOutError(error?: ProxyRequestError): boolean {
+  return error?.code === 'kicked_out' || !!error?.message?.includes('其他设备')
+}
+
+async function requestPublic<T>(
   method: string,
   path: string,
-  token: string | null,
   body?: object,
 ): Promise<ApiResult<T>> {
-  const url = `${API_BASE_URL.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`
-  // [AUTH-AUDIT] 临时审计日志：真正发起 fetch 前打印 process、method、full_url。可删除。
-  const processType =
-    typeof process !== 'undefined' && process && 'type' in process
-      ? (process as { type?: string }).type
-      : 'renderer'
-  console.log('[AUTH-AUDIT]', processType ?? 'renderer', method, url)
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  }
-  if (token) {
-    headers.Authorization = `Bearer ${token}`
-  }
+  const url = normalizeApiUrl(path)
   try {
     const res = await fetch(url, {
       method,
-      headers,
+      headers: {
+        'Content-Type': 'application/json',
+      },
       body: body ? JSON.stringify(body) : undefined,
     })
     const text = await res.text()
-    let json: T | { detail?: { code?: string; message?: string } } | null = null
+    let json: T | { detail?: unknown } | null = null
     try {
       json = text ? JSON.parse(text) : null
     } catch {
       // ignore
     }
     if (!res.ok) {
-      const rawDetail =
-        json && typeof json === 'object' && 'detail' in json
-          ? (json as { detail?: unknown }).detail
-          : undefined
-      let message = text || res.statusText
-      if (typeof rawDetail === 'string') {
-        message = rawDetail
-      } else if (rawDetail && typeof rawDetail === 'object' && 'message' in (rawDetail as object)) {
-        message = (rawDetail as { message?: string }).message ?? message
-      } else if (Array.isArray(rawDetail) && rawDetail.length > 0) {
-        message = (rawDetail as { msg?: string }[]).map(d => d?.msg ?? JSON.stringify(d)).join('; ')
-      }
-      const code =
-        rawDetail && typeof rawDetail === 'object' && 'code' in (rawDetail as object)
-          ? (rawDetail as { code?: string }).code
-          : undefined
       return {
         ok: false,
         status: res.status,
-        error: { code, message },
+        error: extractErrorDetail(text, res.statusText, json),
       }
     }
     return { ok: true, data: json as T, status: res.status }
@@ -146,12 +104,10 @@ async function request<T>(
   }
 }
 
-let refreshLock: Promise<string | null> | null = null
-
 export const KICKED_OUT_EVENT = 'auth:kicked-out'
 
 function dispatchKickedOutEvent(message: string): void {
-  console.warn('[apiClient] Dispatching kicked-out event:', message)
+  if (typeof window === 'undefined') return
   window.dispatchEvent(
     new CustomEvent(KICKED_OUT_EVENT, {
       detail: { message },
@@ -159,74 +115,61 @@ function dispatchKickedOutEvent(message: string): void {
   )
 }
 
-/** 通过主进程刷新会话，成功返回新 access_token 并同步 renderer 镜像状态 */
-async function doRefresh(): Promise<string | null> {
-  const { setToken, clearTokensAndUnauth } = useAuthStore.getState()
-  const authAPI = window.authAPI
-  if (!authAPI?.refreshSession) {
-    await clearTokensAndUnauth()
-    return null
+async function requestAuthenticated<T>(
+  method: string,
+  path: string,
+  body?: object,
+): Promise<ApiResult<T>> {
+  if (typeof window === 'undefined' || !window.authAPI?.proxyRequest) {
+    return {
+      ok: false,
+      status: 0,
+      error: { code: 'auth_proxy_unavailable', message: '认证通道不可用' },
+    }
   }
 
   try {
-    const result = await authAPI.refreshSession()
-    if (!result.success || !result.token) {
-      // 检查是否是被踢下线
-      const errorObj = result.error as { code?: string; message?: string } | undefined
-      const errorCode = errorObj?.code
-      const errorMessage =
-        errorObj?.message || (typeof result.error === 'string' ? result.error : '')
-      if (errorCode === 'kicked_out' || errorMessage.includes('其他设备')) {
-        dispatchKickedOutEvent(errorMessage || '您的账号已在其他设备登录')
+    const result = await window.authAPI.proxyRequest({
+      endpoint: normalizeApiPath(path),
+      method,
+      body: body ?? null,
+    })
+
+    if (!result.success) {
+      const normalizedError = normalizeProxyError(result.error)
+      if (isKickedOutError(normalizedError)) {
+        dispatchKickedOutEvent(normalizedError.message || '您的账号已在其他设备登录')
+        await useAuthStore.getState().clearTokensAndUnauth()
+      } else if (result.status === 401) {
+        await useAuthStore.getState().clearTokensAndUnauth()
       }
-      await clearTokensAndUnauth()
-      return null
+      return {
+        ok: false,
+        status: result.status ?? 0,
+        error: normalizedError,
+      }
     }
 
-    setToken(result.token)
-    return result.token
+    return {
+      ok: true,
+      data: result.data as T,
+      status: result.status ?? 200,
+    }
   } catch (err) {
-    console.error('[apiClient] Failed to refresh session via main process:', err)
-    await clearTokensAndUnauth()
-    return null
+    const message = err instanceof Error ? err.message : String(err)
+    return { ok: false, status: 0, error: { code: 'network_error', message } }
   }
 }
 
 /**
- * 带 401 自动 refresh 的请求：先带当前 token 请求；若 401 且有 refresh_token 则刷新后重试一次（加锁防并发）
+ * 历史名称保留；当前实现由主进程统一附加认证并处理 refresh。
  */
 export async function requestWithRefresh<T>(
   method: string,
   path: string,
   body?: object,
 ): Promise<ApiResult<T>> {
-  // 首发版：仅从主进程安全存储获取 token
-  const token = await getTokenFromMainProcess()
-  const result = await request<T>(method, path, token, body)
-
-  if (result.ok || result.status !== 401) return result
-
-  // 检查是否是被踢下线的错误
-  if (result.error?.code === 'kicked_out') {
-    dispatchKickedOutEvent(result.error.message || '您的账号已在其他设备登录')
-    await useAuthStore.getState().clearTokensAndUnauth()
-    return result
-  }
-
-  // 首发版：仅从主进程安全存储获取 refresh token
-  const refreshToken = await getRefreshTokenFromMainProcess()
-  if (!refreshToken) return result
-
-  // 加锁：并发 401 时只发起一次 refresh，其余等待
-  if (!refreshLock) {
-    refreshLock = doRefresh().finally(() => {
-      refreshLock = null
-    })
-  }
-  const newToken = await refreshLock
-  if (!newToken) return result
-
-  return request<T>(method, path, newToken, body)
+  return requestAuthenticated<T>(method, path, body)
 }
 
 /** GET /me 返回格式：{ ok: true, username: string }；401 时自动尝试 refresh 后重试一次 */
@@ -356,7 +299,7 @@ export async function loginWithPassword(
   username: string,
   password: string,
 ): Promise<ApiResult<LoginResponseBackend>> {
-  return request<LoginResponseBackend>('POST', '/login', null, { username, password })
+  return requestPublic<LoginResponseBackend>('POST', '/login', { username, password })
 }
 
 /** 后端 POST /register 返回（账号密码注册） */
@@ -380,7 +323,7 @@ export async function registerWithPassword(
   username: string,
   password: string,
 ): Promise<ApiResult<RegisterResponseBackend>> {
-  return request<RegisterResponseBackend>('POST', '/register', null, { username, password })
+  return requestPublic<RegisterResponseBackend>('POST', '/register', { username, password })
 }
 
 /** 后端 POST /auth/sms/send 返回（有本地验证码时会带 dev_code，构建安装后可界面兜底展示） */
@@ -393,11 +336,9 @@ export interface SmsSendResponse {
   sms_failed_message?: string
 }
 
-/**
- * POST /auth/sms/send：发送手机验证码（后端为 query 参数）
- */
+/** POST /auth/sms/send：发送手机验证码（使用 JSON body，避免敏感信息进入 URL） */
 export async function sendSmsCode(phone: string): Promise<ApiResult<SmsSendResponse>> {
-  return request<SmsSendResponse>('POST', `/auth/sms/send?phone=${encodeURIComponent(phone)}`, null)
+  return requestPublic<SmsSendResponse>('POST', '/auth/sms/send', { phone })
 }
 
 /** 后端 POST /auth/sms/login 返回 - 已与密码登录格式统一 */
@@ -415,18 +356,12 @@ export interface SmsLoginResponse {
   needs_password?: boolean
 }
 
-/**
- * POST /auth/sms/login：手机验证码登录（后端为 query 参数）
- */
+/** POST /auth/sms/login：手机验证码登录（使用 JSON body，避免敏感信息进入 URL） */
 export async function loginWithSmsCode(
   phone: string,
   code: string,
 ): Promise<ApiResult<SmsLoginResponse>> {
-  return request<SmsLoginResponse>(
-    'POST',
-    `/auth/sms/login?phone=${encodeURIComponent(phone)}&code=${encodeURIComponent(code)}`,
-    null,
-  )
+  return requestPublic<SmsLoginResponse>('POST', '/auth/sms/login', { phone, code })
 }
 
 /** POST /set-password：SMS 注册用户首次设置密码 */
@@ -453,12 +388,11 @@ export async function resetPasswordWithSms(
   code: string,
   newPassword: string,
 ): Promise<ApiResult<{ ok: boolean; message: string }>> {
-  const params = new URLSearchParams({ phone, code, new_password: newPassword })
-  return request<{ ok: boolean; message: string }>(
-    'POST',
-    `/auth/sms/reset-password?${params}`,
-    null,
-  )
+  return requestPublic<{ ok: boolean; message: string }>('POST', '/auth/sms/reset-password', {
+    phone,
+    code,
+    new_password: newPassword,
+  })
 }
 
 // ===================== 礼品卡 =====================
@@ -595,94 +529,54 @@ export async function markAllMessagesRead(): Promise<ApiResult<MessageReadRespon
   return requestWithRefresh<MessageReadResponse>('POST', '/messages/read-all')
 }
 
-function parseSseBlock(block: string): MessageStreamEvent | null {
-  const lines = block.split('\n')
-  let eventName = 'message'
-  const dataLines: string[] = []
-
-  for (const rawLine of lines) {
-    const line = rawLine.trimEnd()
-    if (!line || line.startsWith(':')) continue
-    if (line.startsWith('event:')) {
-      eventName = line.slice(6).trim()
-      continue
-    }
-    if (line.startsWith('data:')) {
-      dataLines.push(line.slice(5).trimStart())
-    }
-  }
-
-  if (eventName !== 'snapshot' || dataLines.length === 0) {
-    return null
-  }
-
-  try {
-    const payload = JSON.parse(dataLines.join('\n')) as MessageListResponse
-    return { type: 'snapshot', payload }
-  } catch {
-    return null
-  }
-}
-
 export async function connectMessageStream(
   onEvent: (event: MessageStreamEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const token = await getTokenFromMainProcess()
-  if (!token) {
-    throw new Error('missing_access_token')
+  if (
+    typeof window === 'undefined' ||
+    !window.authAPI?.startMessageStream ||
+    !window.authAPI?.stopMessageStream ||
+    !window.authAPI?.onMessageStreamSnapshot ||
+    !window.authAPI?.onMessageStreamState
+  ) {
+    throw new Error('message_stream_unavailable')
   }
 
-  const url = `${API_BASE_URL.replace(/\/$/, '')}/messages/stream`
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: 'text/event-stream',
-      'Cache-Control': 'no-cache',
-    },
-    signal,
+  let disconnectReason: string | undefined
+  let sawSnapshot = false
+  const unsubscribeSnapshot = window.authAPI.onMessageStreamSnapshot(payload => {
+    sawSnapshot = true
+    onEvent({ type: 'snapshot', payload })
+  })
+  const unsubscribeState = window.authAPI.onMessageStreamState(({ connected, reason }) => {
+    if (!connected) {
+      disconnectReason = reason
+    }
   })
 
-  if (!response.ok) {
-    throw new Error(`message_stream_http_${response.status}`)
+  const stopStream = () => {
+    void window.authAPI.stopMessageStream().catch(() => {})
   }
 
-  if (!response.body) {
-    throw new Error('message_stream_no_body')
-  }
-
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-
+  signal?.addEventListener('abort', stopStream, { once: true })
   try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) {
-        break
-      }
-
-      buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n')
-      let separatorIndex = buffer.indexOf('\n\n')
-      while (separatorIndex >= 0) {
-        const block = buffer.slice(0, separatorIndex)
-        buffer = buffer.slice(separatorIndex + 2)
-        const event = parseSseBlock(block)
-        if (event) {
-          onEvent(event)
-        }
-        separatorIndex = buffer.indexOf('\n\n')
-      }
+    const result = await window.authAPI.startMessageStream()
+    if (signal?.aborted) {
+      return
     }
 
-    buffer += decoder.decode().replace(/\r\n/g, '\n')
-    const event = parseSseBlock(buffer)
-    if (event) {
-      onEvent(event)
+    if (!result.success) {
+      throw new Error(result.error || disconnectReason || 'message_stream_start_failed')
+    }
+
+    if (!sawSnapshot && disconnectReason) {
+      throw new Error(disconnectReason)
     }
   } finally {
-    reader.releaseLock()
+    signal?.removeEventListener('abort', stopStream)
+    unsubscribeSnapshot()
+    unsubscribeState()
   }
 }
 

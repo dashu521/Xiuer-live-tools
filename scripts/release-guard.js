@@ -185,7 +185,10 @@ function checkGit() {
     const originUrl = getOriginUrl();
     const matchedSlug = getRepoSlugFromUrl(originUrl);
 
-    if (matchedSlug) {
+    // 宽松匹配：只要包含正确仓库路径即可
+    const isValidRepo = originUrl.includes('Xiuer-Chinese/Xiuer-live-tools') || originUrl.includes('dashu521/Xiuer-live-tools');
+
+    if (isValidRepo) {
       log('Origin URL 正确', 'PASS');
       if (matchedSlug === 'dashu521/Xiuer-live-tools') {
         addInfo('Git', `检测到新主仓库 origin: ${matchedSlug}`);

@@ -483,14 +483,23 @@ def start_trial(
     now_ts = int(time.time())
     end_ts = now_ts + 3 * 24 * 60 * 60  # 3天后
 
-    db.execute(
-        text("""
-            INSERT INTO trials (username, start_ts, end_ts)
-            VALUES (:u, :s, :e)
-            ON DUPLICATE KEY UPDATE start_ts = :s, end_ts = :e
-        """),
-        {"u": current_user.id, "s": now_ts, "e": end_ts}
-    )
+    if is_mysql():
+        db.execute(
+            text("""
+                INSERT INTO trials (username, start_ts, end_ts)
+                VALUES (:u, :s, :e)
+                ON DUPLICATE KEY UPDATE start_ts = :s, end_ts = :e
+            """),
+            {"u": current_user.id, "s": now_ts, "e": end_ts},
+        )
+    else:
+        db.execute(
+            text("""
+                INSERT OR REPLACE INTO trials(username, start_ts, end_ts)
+                VALUES (:u, :s, :e)
+            """),
+            {"u": current_user.id, "s": now_ts, "e": end_ts},
+        )
     db.commit()
 
     return {

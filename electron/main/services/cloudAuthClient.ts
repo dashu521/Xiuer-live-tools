@@ -23,29 +23,6 @@ function getAuthPathPrefix(): string {
   return ''
 }
 
-function _maskResponseData(data: unknown): unknown {
-  if (data === null || data === undefined) return data
-  if (typeof data === 'object' && !Array.isArray(data)) {
-    const out: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(data)) {
-      const keyLower = k.toLowerCase()
-      if (
-        keyLower.includes('password') ||
-        keyLower.includes('token') ||
-        keyLower.includes('secret') ||
-        keyLower.includes('refresh')
-      ) {
-        out[k] = '***'
-      } else {
-        out[k] = _maskResponseData(v)
-      }
-    }
-    return out
-  }
-  if (Array.isArray(data)) return data.map(_maskResponseData)
-  return data
-}
-
 async function request<T>(
   method: string,
   path: string,
@@ -281,7 +258,7 @@ export async function cloudMe(accessToken: string): Promise<{
 
 /**
  * 手机验证码登录
- * 后端端点: POST /auth/sms/login?phone=xxx&code=xxx
+ * 后端端点: POST /auth/sms/login
  * 后端返回: { user, token, refresh_token, needs_password } - 注意是 token 不是 access_token
  */
 export async function cloudSmsLogin(
@@ -298,37 +275,16 @@ export async function cloudSmsLogin(
   responseDetail?: string
 }> {
   const prefix = getAuthPathPrefix()
-  const url = `${prefix}/auth/sms/login?phone=${encodeURIComponent(phone)}&code=${encodeURIComponent(code)}`
-
-  console.log('[cloudSmsLogin] 开始请求:', {
-    action: 'cloudSmsLogin',
-    phoneSuffix: phone.slice(-4),
-    codeLength: code.length,
-    method: 'POST',
-    url: url,
-    paramType: 'query',
-  })
+  const url = `${prefix}/auth/sms/login`
 
   const { data, status, error, responseDetail } = await request<{
     user: CloudAuthResponse['user']
     token: string
     refresh_token?: string
     needs_password?: boolean
-  }>('POST', url)
-
-  console.log('[cloudSmsLogin] 后端响应:', {
-    status,
-    hasData: !!data,
-    hasToken: !!data?.token,
-    hasRefreshToken: !!data?.refresh_token,
-    hasUser: !!data?.user,
-    needsPassword: data?.needs_password,
-    error: error?.message,
-    responseDetail,
-  })
+  }>('POST', url, { body: { phone, code } })
 
   if (error) {
-    console.error('[cloudSmsLogin] 请求失败:', error?.message, responseDetail)
     return {
       success: false,
       error,
@@ -340,11 +296,6 @@ export async function cloudSmsLogin(
   // [FIX] 后端返回的是 token，不是 access_token
   const ok = status === 200 && data != null && !!data.token
   if (!ok) {
-    console.error('[cloudSmsLogin] 响应数据不完整:', {
-      status,
-      hasData: !!data,
-      hasToken: !!data?.token,
-    })
     return {
       success: false,
       error: {
@@ -355,8 +306,6 @@ export async function cloudSmsLogin(
       responseDetail,
     }
   }
-
-  console.log('[cloudSmsLogin] 登录成功, token已获取')
 
   return {
     success: true,

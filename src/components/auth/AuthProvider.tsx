@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isOffline = useIsOffline()
   const navigate = useNavigate()
   const accessContext = useAccessContext()
-  const { runPendingActionAndClear } = useGateStore()
+  const runPendingActionAndClear = useGateStore(state => state.runPendingActionAndClear)
   const refreshUserStatus = useAuthStore(s => s.refreshUserStatus)
   const clearTokensAndUnauth = useAuthStore(s => s.clearTokensAndUnauth)
   const { toast } = useToast()
