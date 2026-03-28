@@ -1,6 +1,7 @@
 """Auth API 入口：FastAPI + CORS，挂载 /auth、/me、/admin"""
 import os
 import uuid
+from datetime import datetime, timezone
 
 # 优先加载 .env，使本地开发时 SMS_MODE / ALIYUN_* 等生效（开发模式也能真实发短信）
 from pathlib import Path
@@ -14,10 +15,10 @@ from starlette.requests import Request
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from config import settings
-from database import create_tables
+from database import check_database_health, create_tables
 from routers import admin, auth, config, feedback, gift_card, me, messages, sms, subscription
 
 _STATIC_DIR = Path(__file__).parent / "static"
@@ -67,7 +68,15 @@ app.include_router(feedback.router)
 
 @app.get("/health")
 def health():
-    return {"ok": True}
+    db_health = check_database_health()
+    payload = {
+        "ok": db_health["ok"],
+        "service": "auth-api",
+        "database": db_health,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    status_code = 200 if db_health["ok"] else 503
+    return JSONResponse(status_code=status_code, content=payload)
 
 
 @app.get("/admin/app", response_class=HTMLResponse)

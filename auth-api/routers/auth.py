@@ -20,6 +20,7 @@ from deps import (
     create_access_token,
     decode_refresh_token,
     get_current_user,
+    has_real_password,
     hash_password,
     issue_user_session,
     require_active_access_session,
@@ -161,7 +162,7 @@ def build_user_status_response(user: User, db: Optional[Session] = None) -> User
     if is_paid_plan(plan):
         trial = TrialOut(is_active=False, is_expired=trial.is_expired, start_at=trial.start_at, end_at=trial.end_at)
 
-    has_password = not verify_password("!", user.password_hash)
+    has_password = has_real_password(user.password_hash)
     max_accounts = resolve_user_max_accounts(plan, getattr(user, "max_accounts", None))
     feature_access = {
         feature: FeatureAccessOut(**access)
@@ -358,7 +359,7 @@ def set_password(
 ):
     """SMS 注册用户首次设置密码（需要登录状态）"""
     # 检查用户当前是否无密码（使用默认密码 "!"）
-    if verify_password("!", current_user.password_hash):
+    if not has_real_password(current_user.password_hash):
         # 可以设置密码
         current_user.password_hash = hash_password(body.password)
         db.commit()

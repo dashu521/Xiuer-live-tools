@@ -12,6 +12,7 @@ from sqlalchemy import or_
 
 from database import get_db, is_mysql
 from deps import (
+    has_real_password,
     hash_password,
     issue_user_session,
 )
@@ -298,8 +299,7 @@ def login_with_sms(
 
     logger.info(f"[SMS] login success: phone={mask_phone(phone)}, username={user.username}")
 
-    from deps import verify_password as _vp
-    _has_real_password = not _vp("!", user.password_hash)
+    _has_real_password = has_real_password(user.password_hash)
 
     # 统一返回格式与密码登录一致
     now = datetime.utcnow()
