@@ -1,5 +1,6 @@
 import { User } from 'lucide-react'
 import { memo, useCallback } from 'react'
+import { UpdateStatusChip } from '@/components/update/UpdateStatusChip'
 import { useAuthStore } from '@/stores/authStore'
 import { AccountSwitcher } from './AccountSwitcher'
 import { MessageCenterButton } from './MessageCenterButton'
@@ -40,6 +41,7 @@ export const Header = memo(function Header() {
       </div>
 
       <div className="flex min-w-0 items-center gap-2 md:gap-3">
+        <UpdateStatusChip />
         <ThemeSelector />
         <MessageCenterButton />
 

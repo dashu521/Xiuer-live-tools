@@ -227,6 +227,8 @@ class WindowsUpdater implements Updater {
     this.autoUpdater.forceDevUpdateConfig = true
     this.autoUpdater.disableWebInstaller = false
     this.autoUpdater.allowDowngrade = false
+    // Windows 主链路需要先检查再由用户确认下载，避免启动静默检查直接触发下载。
+    this.autoUpdater.autoDownload = false
   }
 
   private registerEventListener() {
@@ -388,7 +390,8 @@ class MacOSUpdater implements Updater {
           ? getGitHubReleaseDownloadURL()
           : ensureTrailingSlash(new URL(normalizedSource).toString())
       this.assetsBaseURL = assetsBaseURL
-      const latestYmlURL = new URL('latest-mac.yml', assetsBaseURL).href
+      const cacheBuster = `_t=${Date.now()}`
+      const latestYmlURL = new URL(`latest-mac.yml?${cacheBuster}`, assetsBaseURL).href
       const ymlContent = (await net.fetch(latestYmlURL).then(res => res.text())) as string
       const latestYml = yaml.parse(ymlContent) as LatestYml
 

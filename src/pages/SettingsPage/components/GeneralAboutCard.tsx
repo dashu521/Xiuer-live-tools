@@ -20,7 +20,8 @@ import { SettingRow } from './SettingRow'
 
 export function GeneralAboutCard() {
   const [hideToTrayTipEnabled, setHideToTrayTipEnabled] = useState(true)
-  const { enableAutoCheckUpdate, setEnableAutoCheckUpdate } = useUpdateConfigStore()
+  const enableAutoCheckUpdate = useUpdateConfigStore(state => state.enableAutoCheckUpdate)
+  const setEnableAutoCheckUpdate = useUpdateConfigStore(state => state.setEnableAutoCheckUpdate)
   const updateStatus = useUpdateStore.use.status()
   const checkUpdateManually = useUpdateStore.use.checkUpdateManually()
   const [isUpToDate, setIsUpToDate] = useState(false)

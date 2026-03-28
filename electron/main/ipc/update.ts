@@ -3,7 +3,6 @@ import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { createLogger, isAppQuitting } from '#/logger'
 import { enhancedUpdateManager } from '#/managers/EnhancedUpdateManager'
 import { rollbackManager } from '#/managers/RollbackManager'
-import { updateManager } from '#/managers/UpdateManager'
 
 const logger = createLogger('update-ipc')
 const DEFAULT_UPDATE_SOURCE = 'official'
@@ -16,7 +15,7 @@ export function setupUpdateIpcHandlers() {
       return { error: '应用正在退出' }
     }
     logger.info('IPC: checkUpdate called', { source: source || DEFAULT_UPDATE_SOURCE })
-    return await updateManager.checkUpdateVersion(source || DEFAULT_UPDATE_SOURCE)
+    return await enhancedUpdateManager.checkUpdateVersion(source || DEFAULT_UPDATE_SOURCE)
   })
 
   // 开始下载更新
@@ -26,7 +25,7 @@ export function setupUpdateIpcHandlers() {
       return { error: '应用正在退出' }
     }
     logger.info('IPC: startDownload called')
-    await updateManager.startDownload()
+    await enhancedUpdateManager.startDownload()
   })
 
   ipcMain.handle(IPC_CHANNELS.updater.listBackups, async () => {
@@ -70,7 +69,7 @@ export function setupUpdateIpcHandlers() {
       return { error: '应用正在退出' }
     }
     logger.info('IPC: quitAndInstall called')
-    await updateManager.quitAndInstall()
+    await enhancedUpdateManager.quitAndInstall()
   })
 
   // 获取更新状态（供前端查询）

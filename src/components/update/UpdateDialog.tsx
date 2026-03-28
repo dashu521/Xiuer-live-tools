@@ -1,6 +1,6 @@
 import { useMemoizedFn } from 'ahooks'
 import { AlertTriangle, Download, Rocket, RotateCcw } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { HtmlRenderer } from '@/components/common/HtmlRenderer'
 import { Button } from '@/components/ui/button'
@@ -50,15 +50,15 @@ function formatEta(seconds: number): string {
 
 export function UpdateDialog() {
   const status = useUpdateStore.use.status()
-  const _setStatus = useUpdateStore.use.setStatus()
   const progress = useUpdateStore.use.progress()
-  const _setProgress = useUpdateStore.use.setProgress()
+  const detailsOpen = useUpdateStore.use.detailsOpen()
+  const setDetailsOpen = useUpdateStore.use.setDetailsOpen()
   const updateInfo = useUpdateStore.use.versionInfo()
   const startDownload = useUpdateStore.use.startDownload()
+  const installUpdate = useUpdateStore.use.installUpdate()
   const refreshRuntimeStatus = useUpdateStore.use.refreshRuntimeStatus()
   const listBackups = useUpdateStore.use.listBackups()
   const rollback = useUpdateStore.use.rollback()
-  const reset = useUpdateStore.use.reset()
   const error = useUpdateStore.use.error()
   const handleError = useUpdateStore.use.handleError()
   const handleDownloadProgress = useUpdateStore.use.handleDownloadProgress()
@@ -66,41 +66,27 @@ export function UpdateDialog() {
   const runtime = useUpdateStore.use.runtime()
   const backups = useUpdateStore.use.backups()
   const { toast } = useToast()
-  const [dialogOpen, setDialogOpen] = useState(false)
   const updateSource = useUpdateConfigStore(s => s.source)
   const setUpdateSource = useUpdateConfigStore(s => s.setSource)
   const customUpdateSource = useUpdateConfigStore(s => s.customSource)
   const setCustomUpdateSource = useUpdateConfigStore(s => s.setCustomSource)
 
   useEffect(() => {
-    if (status !== 'idle' && status !== 'checking') {
-      setDialogOpen(true)
-    }
-  }, [status])
-
-  useEffect(() => {
     void refreshRuntimeStatus()
   }, [refreshRuntimeStatus])
 
   useEffect(() => {
-    if (dialogOpen && status === 'error' && runtime.capabilities.listBackups) {
+    if (detailsOpen && status === 'error' && runtime.capabilities.listBackups) {
       void listBackups().catch(() => {})
     }
-  }, [dialogOpen, status, runtime.capabilities.listBackups, listBackups])
+  }, [detailsOpen, status, runtime.capabilities.listBackups, listBackups])
 
   const handleOpenChange = (open: boolean) => {
-    if (!open) {
-      setDialogOpen(false)
-      setTimeout(() => reset(), 300)
-    }
-  }
-
-  const quitAndInstall = async () => {
-    await window.ipcRenderer.invoke(IPC_CHANNELS.updater.quitAndInstall)
+    setDetailsOpen(open)
   }
 
   const handleStartDownload = useMemoizedFn(() => {
-    startDownload()
+    void startDownload()
   })
 
   const handleRollbackLatest = useMemoizedFn(async () => {
@@ -165,7 +151,7 @@ export function UpdateDialog() {
     if (status === 'ready') {
       return (
         <Button
-          onClick={quitAndInstall}
+          onClick={() => void installUpdate()}
           variant="default"
           disabled={!runtime.capabilities.quitAndInstall}
         >
@@ -197,6 +183,7 @@ export function UpdateDialog() {
   })
 
   const isCustom = updateSource === 'custom'
+  const canShowDetails = status === 'available' || status === 'ready' || status === 'error'
 
   const renderProgressInfo = () => {
     if (!isDownloading) return null
@@ -293,7 +280,7 @@ export function UpdateDialog() {
   }
 
   return (
-    <Dialog open={dialogOpen} onOpenChange={handleOpenChange}>
+    <Dialog open={detailsOpen && canShowDetails} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-md">
         <DialogTitle>
           {status === 'error' ? '更新失败' : status === 'ready' ? '更新就绪' : '发现新版本'}

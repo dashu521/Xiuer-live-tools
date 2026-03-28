@@ -87,6 +87,7 @@ interface UpdateState {
   versionInfo: VersionState | null
   progress: ProgressState
   error: ErrorType | null
+  detailsOpen: boolean
   source: string
   backups: BackupInfo[]
   runtime: UpdateRuntimeStatus
@@ -95,6 +96,7 @@ interface UpdateState {
 interface UpdateAction {
   refreshRuntimeStatus: () => Promise<UpdateRuntimeStatus>
   checkUpdateManually: () => Promise<{ upToDate: boolean } | undefined>
+  checkUpdateInBackground: () => Promise<void>
   startDownload: () => Promise<void>
   pauseDownload: () => Promise<void>
   resumeDownload: () => Promise<void>
@@ -104,6 +106,7 @@ interface UpdateAction {
   listBackups: () => Promise<BackupInfo[]>
   setProgress: (progress: Partial<ProgressState>) => void
   setStatus: (status: UpdateStatus) => void
+  setDetailsOpen: (open: boolean) => void
   reset: () => void
   handleError: (error: ErrorType) => void
   handleUpdate: (info: VersionState) => void
@@ -128,6 +131,7 @@ const useUpdateStoreBase = create<UpdateStore>()((set, get) => ({
   versionInfo: null,
   progress: initialProgress,
   error: null,
+  detailsOpen: false,
   source: 'official',
   backups: [],
   runtime: defaultRuntimeStatus,
@@ -154,6 +158,7 @@ const useUpdateStoreBase = create<UpdateStore>()((set, get) => ({
       set({
         status: 'error',
         error: { message: '请输入有效的自定义更新源' },
+        detailsOpen: true,
       })
       return
     }
@@ -163,6 +168,7 @@ const useUpdateStoreBase = create<UpdateStore>()((set, get) => ({
       set({
         status: 'error',
         error: { message: '当前平台或环境不支持检查更新' },
+        detailsOpen: true,
       })
       return
     }
@@ -180,10 +186,11 @@ const useUpdateStoreBase = create<UpdateStore>()((set, get) => ({
             latestVersion: result.newVersion,
             releaseNote: result.releaseNote,
           },
+          detailsOpen: true,
         })
       } else {
         if (result) {
-          set({ status: 'idle' })
+          set({ status: 'idle', detailsOpen: false })
           return { upToDate: true }
         }
 
@@ -193,11 +200,39 @@ const useUpdateStoreBase = create<UpdateStore>()((set, get) => ({
           set({
             status: 'error',
             error: { message: '检查更新失败，请稍后重试。' },
+            detailsOpen: true,
           })
         }
       }
     } catch (e) {
-      set({ status: 'error', error: { message: (e as Error).message || '检查更新失败' } })
+      set({
+        status: 'error',
+        error: { message: (e as Error).message || '检查更新失败' },
+        detailsOpen: true,
+      })
+    }
+  },
+
+  checkUpdateInBackground: async () => {
+    if (get().status !== 'idle') {
+      return
+    }
+
+    const { source, customSource } = useUpdateConfigStore.getState()
+    const actualSource = source === 'custom' ? customSource.trim() : source
+    if (!actualSource) {
+      return
+    }
+
+    const runtime = await get().refreshRuntimeStatus()
+    if (!runtime.capabilities.checkUpdate) {
+      return
+    }
+
+    try {
+      await window.ipcRenderer.invoke(IPC_CHANNELS.updater.checkUpdate, actualSource)
+    } catch {
+      // 后台自动检查不打断用户工作流；错误会由主进程日志记录。
     }
   },
 
@@ -207,14 +242,19 @@ const useUpdateStoreBase = create<UpdateStore>()((set, get) => ({
       set({
         status: 'error',
         error: { message: '当前平台或环境不支持下载更新' },
+        detailsOpen: true,
       })
       return
     }
-    set({ status: 'preparing', progress: initialProgress, error: null })
+    set({ status: 'preparing', progress: initialProgress, error: null, detailsOpen: false })
     try {
       await window.ipcRenderer.invoke(IPC_CHANNELS.updater.startDownload)
     } catch (e) {
-      set({ status: 'error', error: { message: (e as Error).message || '开始下载失败' } })
+      set({
+        status: 'error',
+        error: { message: (e as Error).message || '开始下载失败' },
+        detailsOpen: true,
+      })
     }
   },
 
@@ -239,6 +279,7 @@ const useUpdateStoreBase = create<UpdateStore>()((set, get) => ({
       set({
         status: 'error',
         error: { message: '当前平台或环境不支持安装更新' },
+        detailsOpen: true,
       })
       return
     }
@@ -246,7 +287,11 @@ const useUpdateStoreBase = create<UpdateStore>()((set, get) => ({
     try {
       await window.ipcRenderer.invoke(IPC_CHANNELS.updater.quitAndInstall)
     } catch (e) {
-      set({ status: 'error', error: { message: (e as Error).message || '安装更新失败' } })
+      set({
+        status: 'error',
+        error: { message: (e as Error).message || '安装更新失败' },
+        detailsOpen: true,
+      })
     }
   },
 
@@ -278,6 +323,7 @@ const useUpdateStoreBase = create<UpdateStore>()((set, get) => ({
       set({
         status: 'error',
         error: { message: (e as Error).message || '回滚失败' },
+        detailsOpen: true,
       })
       return false
     }
@@ -304,7 +350,16 @@ const useUpdateStoreBase = create<UpdateStore>()((set, get) => ({
 
   setStatus: (status: UpdateStatus) => set({ status }),
 
-  reset: () => set({ status: 'idle', progress: initialProgress, versionInfo: null, error: null }),
+  setDetailsOpen: (open: boolean) => set({ detailsOpen: open }),
+
+  reset: () =>
+    set({
+      status: 'idle',
+      progress: initialProgress,
+      versionInfo: null,
+      error: null,
+      detailsOpen: false,
+    }),
 
   handleError: (error: ErrorType) => {
     const currentStatus = get().status
@@ -314,14 +369,14 @@ const useUpdateStoreBase = create<UpdateStore>()((set, get) => ({
       currentStatus === 'downloading' ||
       currentStatus === 'verifying'
     ) {
-      set({ status: 'error', error })
+      set({ status: 'error', error, detailsOpen: true })
     }
   },
 
   handleUpdate: (info: VersionState) => {
     const currentStatus = get().status
     if (currentStatus === 'idle') {
-      set({ status: 'available', versionInfo: info })
+      set({ status: 'available', versionInfo: info, detailsOpen: true })
     }
   },
 
@@ -334,6 +389,7 @@ const useUpdateStoreBase = create<UpdateStore>()((set, get) => ({
           latestVersion: result.newVersion,
           releaseNote: result.releaseNote,
         },
+        detailsOpen: true,
       })
       return
     }
@@ -342,6 +398,7 @@ const useUpdateStoreBase = create<UpdateStore>()((set, get) => ({
       status: 'idle',
       versionInfo: null,
       error: null,
+      detailsOpen: false,
     })
   },
 
@@ -350,7 +407,11 @@ const useUpdateStoreBase = create<UpdateStore>()((set, get) => ({
   },
 
   handleDownloadReady: () => {
-    set({ status: 'ready', progress: { ...get().progress, percent: 100 } })
+    set({
+      status: 'ready',
+      progress: { ...get().progress, percent: 100 },
+      detailsOpen: true,
+    })
   },
 
   setSource: (source: string) => set({ source }),

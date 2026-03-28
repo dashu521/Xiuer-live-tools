@@ -16,7 +16,6 @@ import {
   Tray,
 } from 'electron'
 import { accountManager } from './managers/AccountManager'
-import { updateManager } from './managers/UpdateManager'
 import windowManager from './windowManager'
 import './ipc'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -629,10 +628,6 @@ async function createWindow() {
       writeStartupLog('事件: did-finish-load 触发（页面加载完成）')
       writeMainLog('INFO', 'Page finished loading')
 
-      // 启动时静默检查更新
-      if (!isQuitting) {
-        await updateManager.silentCheckForUpdate()
-      }
     })
 
     win.webContents.on(

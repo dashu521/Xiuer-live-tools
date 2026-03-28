@@ -13,10 +13,8 @@ import windowManager from '#/windowManager'
 import { getUpdateUrl } from '../../config/download'
 import { createLogger, isAppQuitting } from '../logger'
 import { errorMessage, sleep } from '../utils'
-import { cdnManager } from './CDNManager'
 import { type BackupInfo, rollbackManager } from './RollbackManager'
 import { UpdateErrorCode, updateErrorHandler } from './UpdateErrorHandler'
-import { type VersionInfo, versionManager } from './VersionManager'
 
 const logger = createLogger('enhanced-update')
 const OFFICIAL_UPDATE_SOURCE = 'official'
@@ -99,8 +97,6 @@ async function timeoutFetch(url: string | URL, timeout = 5000) {
   }
 }
 
-let _latestVersion: string | null = null
-
 async function fetchChangelog(): Promise<string | undefined> {
   try {
     const response = await net.fetch(
@@ -118,10 +114,6 @@ async function fetchChangelog(): Promise<string | undefined> {
   } catch {
     return undefined
   }
-}
-
-function _getAssetsURL() {
-  return 'https://github.com/Xiuer-Chinese/Xiuer-live-tools/releases/latest'
 }
 
 function getGitHubReleaseDownloadURL() {
@@ -142,15 +134,26 @@ function normalizeUpdateSource(source?: string) {
   return trimmed
 }
 
+type UpdateCheckResult = {
+  update: boolean
+  version: string
+  newVersion: string
+  releaseNote?: string
+}
+
 interface Updater {
-  checkForUpdates(source: string): Promise<void>
+  checkForUpdates(source: string): Promise<UpdateCheckResult | null>
   downloadUpdate(): void
   quitAndInstall(): void
 }
 
 export interface UpdateState {
   status: 'idle' | 'checking' | 'available' | 'downloading' | 'paused' | 'ready' | 'error'
-  versionInfo: VersionInfo | null
+  versionInfo: {
+    currentVersion: string
+    latestVersion: string
+    releaseNotes?: string
+  } | null
   progress: number
   error: string | null
 }
@@ -165,8 +168,11 @@ class EnhancedUpdateManager {
 
   private autoCheckInterval: NodeJS.Timeout | null = null
   private isDownloading = false
+  private readonly platformUpdater: Updater
 
   constructor() {
+    this.platformUpdater =
+      platform() === 'darwin' ? new EnhancedMacOSUpdater(this) : new EnhancedWindowsUpdater(this)
     logger.info('EnhancedUpdateManager initialized')
   }
 
@@ -174,14 +180,9 @@ class EnhancedUpdateManager {
     return { ...this.currentState }
   }
 
-  async checkUpdateVersion(source?: string): Promise<{
-    update: boolean
-    version: string
-    newVersion: string
-    releaseNote?: string
-  } | null> {
+  async checkUpdateVersion(source = OFFICIAL_UPDATE_SOURCE): Promise<UpdateCheckResult | null> {
     try {
-      this.updateState({ status: 'checking', error: null })
+      this.handleCheckingStart()
       logger.info(`Checking for updates, source: ${source || 'default'}`)
 
       if (!app.isPackaged) {
@@ -189,64 +190,24 @@ class EnhancedUpdateManager {
         return null
       }
 
-      const versionInfo = await versionManager.checkForUpdates(source)
-
-      if (versionInfo) {
-        this.updateState({
-          status: 'available',
-          versionInfo,
-        })
-
-        const result = {
-          update: true,
-          version: versionInfo.currentVersion,
-          newVersion: versionInfo.latestVersion,
-          releaseNote: versionInfo.releaseNotes,
-        }
-
-        this.sendToRenderer(IPC_CHANNELS.updater.updateAvailable, result)
-
-        logger.info(
-          `Update available: ${versionInfo.currentVersion} -> ${versionInfo.latestVersion}`,
-        )
-        return result
-      }
-
-      this.updateState({ status: 'idle' })
-      const result = {
-        update: false,
-        version: app.getVersion(),
-        newVersion: app.getVersion(),
-      }
-      this.sendToRenderer(IPC_CHANNELS.updater.updateAvailable, result)
-
-      return result
+      return await this.platformUpdater.checkForUpdates(source)
     } catch (error) {
       const errorMsg = errorMessage(error)
       logger.error('Failed to check for updates:', errorMsg)
-
-      this.updateState({
-        status: 'error',
-        error: errorMsg,
-      })
-
-      const updateError = updateErrorHandler.createError(UpdateErrorCode.NETWORK_ERROR, errorMsg, {
-        recoverable: true,
-      })
-      await updateErrorHandler.handleError(updateError)
-
+      await this.handleUpdaterError(errorMsg, { recoverable: true, canRollback: false })
       return null
     }
   }
 
-  async checkForUpdates(source = OFFICIAL_UPDATE_SOURCE): Promise<void> {
-    const platformUpdater =
-      platform() === 'darwin' ? new EnhancedMacOSUpdater() : new EnhancedWindowsUpdater()
-
-    await platformUpdater.checkForUpdates(normalizeUpdateSource(source))
+  async silentCheckForUpdate(source = OFFICIAL_UPDATE_SOURCE): Promise<void> {
+    try {
+      await this.checkUpdateVersion(source)
+    } catch (error) {
+      logger.warn('Silent update check failed:', errorMessage(error))
+    }
   }
 
-  async startDownload(source?: string): Promise<void> {
+  async startDownload(): Promise<void> {
     if (this.isDownloading) {
       logger.warn('Download already in progress')
       return
@@ -255,28 +216,12 @@ class EnhancedUpdateManager {
     try {
       this.isDownloading = true
       this.updateState({ status: 'downloading', progress: 0, error: null })
-
-      if (source) {
-        cdnManager.setCDN(source)
-      }
-
-      cdnManager.forceHealthCheck()
-      await new Promise(resolve => setTimeout(resolve, 500))
-
-      logger.info(`Starting download, using CDN: ${cdnManager.getCurrentCDN()}`)
-
-      const platformUpdater =
-        platform() === 'darwin' ? new EnhancedMacOSUpdater() : new EnhancedWindowsUpdater()
-
-      await platformUpdater.downloadUpdate()
+      logger.info('Starting download using unified platform updater')
+      await this.platformUpdater.downloadUpdate()
     } catch (error) {
       const errorMsg = errorMessage(error)
       logger.error('Download failed:', errorMsg)
-
-      this.updateState({
-        status: 'error',
-        error: errorMsg,
-      })
+      await this.handleUpdaterError(errorMsg, { recoverable: true, canRollback: true })
     } finally {
       this.isDownloading = false
     }
@@ -296,10 +241,7 @@ class EnhancedUpdateManager {
 
   async quitAndInstall(): Promise<void> {
     logger.info('Preparing to quit and install update')
-    const platformUpdater =
-      platform() === 'darwin' ? new EnhancedMacOSUpdater() : new EnhancedWindowsUpdater()
-
-    await platformUpdater.quitAndInstall()
+    await this.platformUpdater.quitAndInstall()
   }
 
   async rollback(targetVersion?: string): Promise<boolean> {
@@ -356,6 +298,77 @@ class EnhancedUpdateManager {
     this.currentState = { ...this.currentState, ...partial }
   }
 
+  handleCheckingStart(): void {
+    this.updateState({ status: 'checking', error: null })
+  }
+
+  handleUpdateAvailable(result: UpdateCheckResult): void {
+    this.updateState({
+      status: 'available',
+      versionInfo: {
+        currentVersion: result.version,
+        latestVersion: result.newVersion,
+        releaseNotes: result.releaseNote,
+      },
+      error: null,
+    })
+    this.sendToRenderer(IPC_CHANNELS.updater.updateAvailable, result)
+  }
+
+  handleNoUpdate(result?: Pick<UpdateCheckResult, 'version' | 'newVersion'>): void {
+    this.updateState({
+      status: 'idle',
+      versionInfo: null,
+      progress: 0,
+      error: null,
+    })
+    this.sendToRenderer(IPC_CHANNELS.updater.updateAvailable, {
+      update: false,
+      version: result?.version || app.getVersion(),
+      newVersion: result?.newVersion || app.getVersion(),
+    })
+  }
+
+  handleDownloadProgress(progressInfo: ProgressInfo): void {
+    this.updateState({
+      status: 'downloading',
+      progress: progressInfo.percent,
+      error: null,
+    })
+    this.sendToRenderer(IPC_CHANNELS.updater.downloadProgress, progressInfo)
+  }
+
+  handleDownloadReady(event?: UpdateDownloadedEvent): void {
+    this.updateState({
+      status: 'ready',
+      progress: 100,
+      error: null,
+    })
+    this.sendToRenderer(IPC_CHANNELS.updater.updateDownloaded, event)
+  }
+
+  async handleUpdaterError(
+    message: string,
+    options: { downloadURL?: string; recoverable?: boolean; canRollback?: boolean } = {},
+  ): Promise<void> {
+    this.updateState({
+      status: 'error',
+      error: message,
+    })
+
+    const updateError = updateErrorHandler.createError(UpdateErrorCode.UNKNOWN_ERROR, message, {
+      recoverable: options.recoverable ?? true,
+      canRollback: options.canRollback ?? rollbackManager.isOperational(),
+      details: { downloadURL: options.downloadURL },
+    })
+    await updateErrorHandler.handleError(updateError)
+
+    this.sendToRenderer(IPC_CHANNELS.updater.updateError, {
+      message,
+      ...(options.downloadURL ? { downloadURL: options.downloadURL } : {}),
+    })
+  }
+
   private sendToRenderer(channel: string, data?: any): void {
     // 应用退出时不发送任何消息到渲染进程
     if (isAppQuitting) {
@@ -368,7 +381,7 @@ class EnhancedUpdateManager {
 class EnhancedWindowsUpdater implements Updater {
   private autoUpdater: AppUpdater
 
-  constructor() {
+  constructor(private readonly manager: EnhancedUpdateManager) {
     const { autoUpdater }: { autoUpdater: AppUpdater } = createRequire(import.meta.url)(
       'electron-updater',
     )
@@ -387,6 +400,7 @@ class EnhancedWindowsUpdater implements Updater {
   private registerEventListener() {
     this.autoUpdater.on('checking-for-update', () => {
       logger.debug('Checking for update...')
+      this.manager.handleCheckingStart()
     })
 
     this.autoUpdater.on('update-available', async (info: UpdateInfo) => {
@@ -405,7 +419,7 @@ class EnhancedWindowsUpdater implements Updater {
       }
 
       const releaseNote = await fetchChangelog()
-      windowManager.send(IPC_CHANNELS.updater.updateAvailable, {
+      this.manager.handleUpdateAvailable({
         update: true,
         version: app.getVersion(),
         newVersion: info.version,
@@ -416,8 +430,7 @@ class EnhancedWindowsUpdater implements Updater {
     this.autoUpdater.on('update-not-available', (info: UpdateInfo) => {
       if (isAppQuitting) return
       logger.info(`No update available: ${info.version}`)
-      windowManager.send(IPC_CHANNELS.updater.updateAvailable, {
-        update: false,
+      this.manager.handleNoUpdate({
         version: app.getVersion(),
         newVersion: info.version,
       })
@@ -425,7 +438,7 @@ class EnhancedWindowsUpdater implements Updater {
 
     this.autoUpdater.on('download-progress', (progressInfo: ProgressInfo) => {
       if (isAppQuitting) return
-      windowManager.send(IPC_CHANNELS.updater.downloadProgress, progressInfo)
+      this.manager.handleDownloadProgress(progressInfo)
     })
 
     this.autoUpdater.on('update-downloaded', async (event: UpdateDownloadedEvent) => {
@@ -434,7 +447,7 @@ class EnhancedWindowsUpdater implements Updater {
 
       try {
         // electron-updater itself already verifies downloaded package integrity.
-        windowManager.send(IPC_CHANNELS.updater.updateDownloaded, event)
+        this.manager.handleDownloadReady(event)
       } catch (error) {
         logger.error('Verification error:', error)
       }
@@ -443,30 +456,24 @@ class EnhancedWindowsUpdater implements Updater {
     this.autoUpdater.on('error', async (error: Error) => {
       if (isAppQuitting) return
       logger.error('Update error:', error.message)
-
-      const updateError = updateErrorHandler.createError(
-        UpdateErrorCode.UNKNOWN_ERROR,
-        error.message,
-        { details: error, recoverable: true, canRollback: true },
-      )
-      await updateErrorHandler.handleError(updateError)
-
-      windowManager.send(IPC_CHANNELS.updater.updateError, {
-        message: error.message,
+      await this.manager.handleUpdaterError(error.message, {
+        recoverable: true,
+        canRollback: true,
       })
     })
   }
 
-  async checkForUpdates(source: string) {
+  async checkForUpdates(source: string): Promise<UpdateCheckResult | null> {
     this.autoUpdater.requestHeaders = { authorization: '' }
 
     try {
       if (!app.isPackaged) {
         if (!this.autoUpdater.forceDevUpdateConfig) {
-          windowManager.send(IPC_CHANNELS.updater.updateError, {
-            message: '更新功能仅在应用打包后可用。',
+          await this.manager.handleUpdaterError('更新功能仅在应用打包后可用。', {
+            recoverable: false,
+            canRollback: false,
           })
-          return
+          return null
         }
       }
 
@@ -475,8 +482,14 @@ class EnhancedWindowsUpdater implements Updater {
 
       if (normalizedSource === GITHUB_UPDATE_SOURCE) {
         // 使用默认 GitHub provider 配置（从 electron-builder.json 读取）
-        await this.autoUpdater.checkForUpdates()
-        return
+        const result = await this.autoUpdater.checkForUpdates()
+        const newVersion = result?.updateInfo?.version || app.getVersion()
+        return {
+          update: semver.gt(newVersion, app.getVersion()),
+          version: app.getVersion(),
+          newVersion,
+          releaseNote: semver.gt(newVersion, app.getVersion()) ? await fetchChangelog() : undefined,
+        }
       }
 
       let sourceURL: URL
@@ -491,12 +504,23 @@ class EnhancedWindowsUpdater implements Updater {
         url: sourceURL.toString().replace(/\/+$/, ''),
       })
 
-      await this.autoUpdater.checkForUpdates()
+      const result = await this.autoUpdater.checkForUpdates()
+      const newVersion = result?.updateInfo?.version || app.getVersion()
+      return {
+        update: semver.gt(newVersion, app.getVersion()),
+        version: app.getVersion(),
+        newVersion,
+        releaseNote: semver.gt(newVersion, app.getVersion()) ? await fetchChangelog() : undefined,
+      }
     } catch (error) {
-      if (isAppQuitting) return
+      if (isAppQuitting) return null
       const message = `检查更新时发生错误：${errorMessage(error).split('\n')[0]}`
       logger.error(message)
-      windowManager.send(IPC_CHANNELS.updater.updateError, { message })
+      await this.manager.handleUpdaterError(message, {
+        recoverable: true,
+        canRollback: false,
+      })
+      return null
     }
   }
 
@@ -514,7 +538,9 @@ class EnhancedMacOSUpdater implements Updater {
   private assetsBaseURL: string | null = null
   private savePath: string | null = null
 
-  async checkForUpdates(source: string) {
+  constructor(private readonly manager: EnhancedUpdateManager) {}
+
+  async checkForUpdates(source: string): Promise<UpdateCheckResult | null> {
     try {
       const normalizedSource = normalizeUpdateSource(source)
       const assetsBaseURL =
@@ -523,7 +549,8 @@ class EnhancedMacOSUpdater implements Updater {
           : ensureTrailingSlash(new URL(normalizedSource).toString())
       this.assetsBaseURL = assetsBaseURL
 
-      const latestYmlURL = new URL('latest-mac.yml', assetsBaseURL).href
+      const cacheBuster = `_t=${Date.now()}`
+      const latestYmlURL = new URL(`latest-mac.yml?${cacheBuster}`, assetsBaseURL).href
       const ymlContent = (await net.fetch(latestYmlURL).then(res => res.text())) as string
       const latestYml = yaml.parse(ymlContent) as LatestYml
 
@@ -532,18 +559,20 @@ class EnhancedMacOSUpdater implements Updater {
       }
 
       this.versionInfo = latestYml
-      _latestVersion = latestYml.version
 
       if (!semver.gt(latestYml.version, app.getVersion())) {
         logger.info(`${app.getVersion()} 已经是最新版本`)
         if (!isAppQuitting) {
-          windowManager.send(IPC_CHANNELS.updater.updateAvailable, {
-            update: false,
+          this.manager.handleNoUpdate({
             version: app.getVersion(),
             newVersion: latestYml.version,
           })
         }
-        return
+        return {
+          update: false,
+          version: app.getVersion(),
+          newVersion: latestYml.version,
+        }
       }
 
       logger.info(`Update available: ${app.getVersion()} -> ${latestYml.version}`)
@@ -555,20 +584,31 @@ class EnhancedMacOSUpdater implements Updater {
         logger.info('Skipping backup creation: rollback runtime is not operational')
       }
 
+      const releaseNote =
+        normalizedSource === GITHUB_UPDATE_SOURCE ? await fetchChangelog() : undefined
       if (!isAppQuitting) {
-        windowManager.send(IPC_CHANNELS.updater.updateAvailable, {
+        this.manager.handleUpdateAvailable({
           update: true,
           version: app.getVersion(),
           newVersion: latestYml.version,
-          releaseNote:
-            normalizedSource === GITHUB_UPDATE_SOURCE ? await fetchChangelog() : undefined,
+          releaseNote,
         })
       }
+      return {
+        update: true,
+        version: app.getVersion(),
+        newVersion: latestYml.version,
+        releaseNote,
+      }
     } catch (err) {
-      if (isAppQuitting) return
+      if (isAppQuitting) return null
       const message = errorMessage(err)
       logger.error(message)
-      windowManager.send(IPC_CHANNELS.updater.updateError, { message })
+      await this.manager.handleUpdaterError(message, {
+        recoverable: true,
+        canRollback: false,
+      })
+      return null
     }
   }
 
@@ -594,14 +634,14 @@ class EnhancedMacOSUpdater implements Updater {
         throw new Error(`找不到安装包文件 (${platform()}-${archName})`)
       }
 
-      this.savePath = path.join(app.getPath('downloads'), 'taisi-update-setup.dmg')
+      this.savePath = path.join(app.getPath('downloads'), '秀儿直播助手-update-setup.dmg')
 
       if (existsSync(this.savePath)) {
         const localFileSha512 = await this.calculateFileHash(this.savePath)
         if (localFileSha512 === setupFile.sha512) {
           logger.debug('Local file exists and matches, skipping download')
           if (!isAppQuitting) {
-            windowManager.send(IPC_CHANNELS.updater.updateDownloaded)
+            this.manager.handleDownloadReady()
           }
           return
         }
@@ -639,7 +679,7 @@ class EnhancedMacOSUpdater implements Updater {
         if (totalBytes > 0) {
           const progress = (downloadBytes / totalBytes) * 100
           if (!isAppQuitting) {
-            windowManager.send(IPC_CHANNELS.updater.downloadProgress, {
+            this.manager.handleDownloadProgress({
               percent: progress,
               transferred: downloadBytes,
               total: totalBytes,
@@ -652,13 +692,17 @@ class EnhancedMacOSUpdater implements Updater {
       fileWriter.end()
       logger.debug('File download complete')
       if (!isAppQuitting) {
-        windowManager.send(IPC_CHANNELS.updater.updateDownloaded)
+        this.manager.handleDownloadReady()
       }
     } catch (err) {
       if (isAppQuitting) return
       const message = `下载文件失败：${errorMessage(err)}`
       logger.error(message)
-      windowManager.send(IPC_CHANNELS.updater.updateError, { message, downloadURL: fileUrl })
+      await this.manager.handleUpdaterError(message, {
+        downloadURL: fileUrl,
+        recoverable: true,
+        canRollback: true,
+      })
     }
   }
 

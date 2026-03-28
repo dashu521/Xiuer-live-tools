@@ -126,7 +126,9 @@ function useTaskEventIpcSync() {
 }
 
 function useLiveControlIpcSync() {
-  const { setConnectState, setAccountName, setStreamState } = useLiveControlStore()
+  const setConnectState = useLiveControlStore(state => state.setConnectState)
+  const setAccountName = useLiveControlStore(state => state.setAccountName)
+  const setStreamState = useLiveControlStore(state => state.setStreamState)
   const { toast } = useToast()
 
   useIpcListener(IPC_CHANNELS.tasks.liveControl.disconnectedEvent, async (id, reason) => {
@@ -215,6 +217,7 @@ function useUpdateIpcSync() {
   const enableAutoCheckUpdate = useUpdateConfigStore(s => s.enableAutoCheckUpdate)
   const handleUpdate = useUpdateStore.use.handleUpdate()
   const handleCheckResult = useUpdateStore.use.handleCheckResult()
+  const checkUpdateInBackground = useUpdateStore.use.checkUpdateInBackground()
 
   useIpcListener(IPC_CHANNELS.updater.updateAvailable, info => {
     handleCheckResult(info)
@@ -225,4 +228,12 @@ function useUpdateIpcSync() {
       handleUpdate(info)
     }
   })
+
+  useEffect(() => {
+    if (!enableAutoCheckUpdate) {
+      return
+    }
+
+    void checkUpdateInBackground()
+  }, [enableAutoCheckUpdate, checkUpdateInBackground])
 }
