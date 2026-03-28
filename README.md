@@ -1,11 +1,11 @@
 # 秀儿直播助手
 
-> **版本**: v1.5.4
+> **版本**: v1.5.5
 > **最后更新**: 2026-03-28
 > **状态**: 当前有效
 > **负责人**: TEAM
 > **当前适用性**: 项目总入口文档
-> **版本主题**: Python 安全热修复版
+> **版本主题**: 稳定性与发布基线增强版
 
 ---
 
@@ -51,9 +51,9 @@
 
 | 平台 | 下载地址 | 适用系统 |
 |------|----------|----------|
-| Windows | [下载 Windows 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.4.2_win-x64.exe) | Windows 10/11 64位 |
-| macOS Apple 芯片 | [下载 Apple 芯片版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.4.2_macos_arm64.dmg) | M1/M2/M3/M4 Mac |
-| macOS Intel | [下载 Intel 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.4.2_macos_x64.dmg) | Intel 处理器 Mac |
+| Windows | [下载 Windows 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.5.5_win-x64.exe) | Windows 10/11 64位 |
+| macOS Apple 芯片 | [下载 Apple 芯片版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.5.5_macos_arm64.dmg) | M1/M2/M3/M4 Mac |
+| macOS Intel | [下载 Intel 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.5.5_macos_x64.dmg) | Intel 处理器 Mac |
 
 > **安装提示**：
 > - Windows：如果浏览器提示风险，请点击"保留"或"更多信息"→"仍要运行"
@@ -225,12 +225,12 @@ npm run auth:check
 
 ## 当前稳定版本
 
-**v1.4.2** - 当前稳定版本
+**v1.5.5** - 当前稳定版本
 
-- 新增功能需求提交流程与后台管理支持
-- 修复同账号多设备登录后旧设备下线闭环
-- 完善多账号切换、平台隔离和用户配置云同步
-- 收敛仓库结构，清理非产品必需内容并归档历史报告
+- 修复短信登录客户端与服务端接口契约不一致问题
+- 优化 AI 对话、账号状态与直播控制相关页面的状态订阅粒度
+- 重构应用内更新链路，补齐后台检查、状态展示和错误处理
+- 强化 Mac 发布脚本、性能审计工具与高可用部署基线
 
 ## 技术支持
 
