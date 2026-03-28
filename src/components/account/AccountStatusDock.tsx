@@ -299,7 +299,10 @@ export const AccountStatusDock = React.memo(function AccountStatusDock({
   maxCompactAccounts = 4,
 }: AccountStatusDockProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
-  const { accounts, currentAccountId, switchAccount, reorderAccounts } = useAccounts()
+  const accounts = useAccounts(state => state.accounts)
+  const currentAccountId = useAccounts(state => state.currentAccountId)
+  const switchAccount = useAccounts(state => state.switchAccount)
+  const reorderAccounts = useAccounts(state => state.reorderAccounts)
   const accountStatusMap = useAllAccountStatus()
   const { startAllTasks, stopAllTasks } = useOneClickStart()
 

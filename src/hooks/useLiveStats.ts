@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { EVENTS, eventEmitter } from '@/utils/events'
@@ -230,12 +230,14 @@ export const useLiveStatsStore = create<LiveStatsState & LiveStatsActions>()(
  * 用于获取当前账号的直播统计数据
  */
 export function useLiveStats() {
-  const store = useLiveStatsStore()
-  const { currentAccountId } = useAccounts()
-
-  const context = useMemo(() => {
-    return store.contexts[currentAccountId] || createDefaultContext()
-  }, [store.contexts, currentAccountId])
+  const currentAccountId = useAccounts(state => state.currentAccountId)
+  const defaultContextRef = useRef(createDefaultContext())
+  const context = useLiveStatsStore(
+    state => state.contexts[currentAccountId] ?? defaultContextRef.current,
+  )
+  const resetStats = useLiveStatsStore(state => state.resetStats)
+  const setListening = useLiveStatsStore(state => state.setListening)
+  const handleMessage = useLiveStatsStore(state => state.handleMessage)
 
   const { stats, danmuList, fansClubChanges, events, startTime, isListening } = context
 
@@ -262,9 +264,9 @@ export function useLiveStats() {
     startTime,
 
     // Actions
-    resetStats: () => store.resetStats(currentAccountId),
-    setListening: (listening: boolean) => store.setListening(currentAccountId, listening),
-    handleMessage: (message: LiveMessage) => store.handleMessage(currentAccountId, message),
+    resetStats: () => resetStats(currentAccountId),
+    setListening: (listening: boolean) => setListening(currentAccountId, listening),
+    handleMessage: (message: LiveMessage) => handleMessage(currentAccountId, message),
   }
 }
 

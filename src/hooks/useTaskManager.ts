@@ -16,7 +16,7 @@ import { useToast } from './useToast'
  * 使用 TaskManager 的 Hook
  */
 export function useTaskManager() {
-  const { currentAccountId } = useAccounts()
+  const currentAccountId = useAccounts(state => state.currentAccountId)
   const { toast } = useToast()
 
   /**

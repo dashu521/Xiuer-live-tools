@@ -22,7 +22,7 @@ export default function AutoReply() {
   const { isRunning, isListening } = useAutoReply()
   const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null)
   const gate = useLiveFeatureGate()
-  const { currentAccountId } = useAccounts()
+  const currentAccountId = useAccounts(state => state.currentAccountId)
   const navigate = useNavigate()
   const { startTask, stopTask } = useTaskManager()
   const { toast } = useToast()

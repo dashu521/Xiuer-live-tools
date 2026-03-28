@@ -14,7 +14,7 @@ export function useAccountPreference<T>(
   key: string,
   defaultValue: T,
 ): [T, (value: T) => void, boolean] {
-  const { currentAccountId } = useAccounts()
+  const currentAccountId = useAccounts(state => state.currentAccountId)
   const [value, setValueState] = useState<T>(defaultValue)
   const [isLoaded, setIsLoaded] = useState(false)
 

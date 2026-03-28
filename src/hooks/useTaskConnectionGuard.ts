@@ -15,7 +15,7 @@ import { useCurrentLiveControl } from './useLiveControl'
  */
 export function useTaskConnectionGuard() {
   const connectState = useCurrentLiveControl(context => context.connectState)
-  const { currentAccountId } = useAccounts()
+  const currentAccountId = useAccounts(state => state.currentAccountId)
 
   useEffect(() => {
     const shouldStop =

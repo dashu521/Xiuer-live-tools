@@ -42,7 +42,7 @@ export function useOneClickStart(): {
 } {
   const { toast } = useToast()
   const gate = useLiveFeatureGate()
-  const { currentAccountId } = useAccounts()
+  const currentAccountId = useAccounts(state => state.currentAccountId)
 
   // 自动回复
   const { isRunning: isAutoReplyRunning } = useAutoReply()

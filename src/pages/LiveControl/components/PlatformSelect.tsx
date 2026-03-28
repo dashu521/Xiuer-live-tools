@@ -31,11 +31,9 @@ const PlatformSelect = React.memo((props: { fullWidth?: boolean } = {}) => {
   const [hasInitialized, setHasInitialized] = useState(false)
 
   // 使用新的平台偏好设置 store
-  const {
-    getDefaultPlatform,
-    setDefaultPlatform: saveDefaultPlatform,
-    systemDefaultPlatform,
-  } = usePlatformPreferenceStore()
+  const getDefaultPlatform = usePlatformPreferenceStore(state => state.getDefaultPlatform)
+  const saveDefaultPlatform = usePlatformPreferenceStore(state => state.setDefaultPlatform)
+  const systemDefaultPlatform = usePlatformPreferenceStore(state => state.systemDefaultPlatform)
 
   // 账号切换时重置初始化状态
   useEffect(() => {
@@ -172,7 +170,6 @@ const PlatformSelect = React.memo((props: { fullWidth?: boolean } = {}) => {
       <SelectContent className="min-w-[12rem]">
         {Object.entries(platforms).map(([key, name]) => {
           const isDefault = defaultPlatform === key
-          const _isCurrent = selectedPlatform === key
 
           return (
             <div

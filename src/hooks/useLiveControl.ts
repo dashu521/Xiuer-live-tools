@@ -315,16 +315,17 @@ export const useStreamStatus = () => useCurrentLiveControl(context => context.st
 
 // Hook: 自动加载配置
 export function useLoadLiveControlOnLogin() {
-  const { loadUserContexts } = useLiveControlStore()
-  const { isAuthenticated, user } = useAuthStore()
+  const loadUserContexts = useLiveControlStore(state => state.loadUserContexts)
+  const isAuthenticated = useAuthStore(state => state.isAuthenticated)
+  const userId = useAuthStore(state => state.user?.id ?? null)
 
   useEffect(() => {
-    if (isAuthenticated && user?.id) {
+    if (isAuthenticated && userId) {
       // 延迟加载，确保存储系统已初始化
       setTimeout(() => {
-        console.log('[LiveControl] 加载用户配置:', user.id)
-        loadUserContexts(user.id)
+        console.log('[LiveControl] 加载用户配置:', userId)
+        loadUserContexts(userId)
       }, 0)
     }
-  }, [isAuthenticated, user?.id, loadUserContexts])
+  }, [isAuthenticated, userId, loadUserContexts])
 }

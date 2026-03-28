@@ -34,8 +34,10 @@ interface AccountSelectorProps {
 export const AccountSelector = React.memo(({ className }: AccountSelectorProps) => {
   // 状态获取
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
-  const _user = useAuthStore(s => s.user)
-  const { accounts, currentAccountId, addAccount, switchAccount } = useAccounts()
+  const accounts = useAccounts(state => state.accounts)
+  const currentAccountId = useAccounts(state => state.currentAccountId)
+  const addAccount = useAccounts(state => state.addAccount)
+  const switchAccount = useAccounts(state => state.switchAccount)
   const connectState = useCurrentLiveControl(state => state.connectState)
   const { toast } = useToast()
 
@@ -51,7 +53,7 @@ export const AccountSelector = React.memo(({ className }: AccountSelectorProps) 
   const hasAccounts = accounts.length > 0
 
   // 检查是否还可以添加账号
-  const { canAddAccount } = useAccounts()
+  const canAddAccount = useAccounts(state => state.canAddAccount)
 
   // 处理添加账号
   const handleAddAccount = useMemoizedFn(() => {

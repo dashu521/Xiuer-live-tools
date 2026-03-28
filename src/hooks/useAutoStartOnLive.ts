@@ -59,7 +59,7 @@ export function setAccountAutoStartOnLive(accountId: string, value: boolean): vo
  * 监听直播状态，当变为 'live' 时自动启动任务
  */
 export function useAutoStartOnLive() {
-  const { currentAccountId } = useAccounts()
+  const currentAccountId = useAccounts(state => state.currentAccountId)
   const streamState = useCurrentLiveControl(context => context.streamState)
   const { startAllTasks, state, isAnyTaskRunning } = useOneClickStart()
 

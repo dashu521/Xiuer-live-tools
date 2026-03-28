@@ -13,7 +13,7 @@ export default function AutoPopUp() {
   const isRunning = useCurrentAutoPopUp(context => context.isRunning)
   const { startTask, stopTask } = useTaskManager()
   const gate = useLiveFeatureGate()
-  const { currentAccountId } = useAccounts()
+  const currentAccountId = useAccounts(state => state.currentAccountId)
 
   // 自动停机：当 Gate 条件不满足时，自动停止任务
   useAutoStopOnGateLoss({

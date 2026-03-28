@@ -12,7 +12,10 @@ import { Select, SelectContent, SelectSeparator, SelectTrigger, SelectValue } fr
 import { AccountLimitDialog } from './AccountLimitDialog'
 
 export const AccountSwitcher = React.memo(() => {
-  const { accounts, currentAccountId, addAccount, switchAccount } = useAccounts()
+  const accounts = useAccounts(state => state.accounts)
+  const currentAccountId = useAccounts(state => state.currentAccountId)
+  const addAccount = useAccounts(state => state.addAccount)
+  const switchAccount = useAccounts(state => state.switchAccount)
   const connectState = useCurrentLiveControl(state => state.connectState)
   const isAuthenticated = useAuthStore(state => state.isAuthenticated)
 
@@ -39,7 +42,7 @@ export const AccountSwitcher = React.memo(() => {
   const { toast } = useToast()
 
   // 检查是否还可以添加账号
-  const { canAddAccount } = useAccounts()
+  const canAddAccount = useAccounts(state => state.canAddAccount)
 
   // 处理账号切换
   const handleAccountSwitch = useMemoizedFn(async (accountId: string) => {

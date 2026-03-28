@@ -233,20 +233,20 @@ export const useAutoMessageActions = () => {
 
 export const useCurrentAutoMessage = <T>(getter: (context: AutoMessageContext) => T): T => {
   const currentAccountId = useAccounts(state => state.currentAccountId)
-  const { loadUserContexts } = useAutoMessageStore()
-  const { user } = useAuthStore()
+  const loadUserContexts = useAutoMessageStore(state => state.loadUserContexts)
+  const userId = useAuthStore(state => state.user?.id ?? null)
 
   // 当账号切换时，确保配置已加载
   useEffect(() => {
-    if (currentAccountId && user?.id) {
+    if (currentAccountId && userId) {
       const state = useAutoMessageStore.getState()
       // 如果当前账号的配置不存在，重新加载
       if (!state.contexts[currentAccountId]) {
         console.log('[AutoMessage] 账号切换，加载配置:', currentAccountId)
-        loadUserContexts(user.id)
+        loadUserContexts(userId)
       }
     }
-  }, [currentAccountId, user?.id, loadUserContexts])
+  }, [currentAccountId, userId, loadUserContexts])
 
   const defaultContextRef = useRef(defaultContext())
   return useAutoMessageStore(
@@ -259,16 +259,17 @@ export const useCurrentAutoMessage = <T>(getter: (context: AutoMessageContext) =
 
 // Hook: 自动加载配置
 export function useLoadAutoMessageOnLogin() {
-  const { loadUserContexts } = useAutoMessageStore()
-  const { isAuthenticated, user } = useAuthStore()
+  const loadUserContexts = useAutoMessageStore(state => state.loadUserContexts)
+  const isAuthenticated = useAuthStore(state => state.isAuthenticated)
+  const userId = useAuthStore(state => state.user?.id ?? null)
 
   useEffect(() => {
-    if (isAuthenticated && user?.id) {
+    if (isAuthenticated && userId) {
       // 延迟加载，确保存储系统已初始化
       setTimeout(() => {
-        console.log('[AutoMessage] 加载用户配置:', user.id)
-        loadUserContexts(user.id)
+        console.log('[AutoMessage] 加载用户配置:', userId)
+        loadUserContexts(userId)
       }, 0)
     }
-  }, [isAuthenticated, user?.id, loadUserContexts])
+  }, [isAuthenticated, userId, loadUserContexts])
 }

@@ -33,7 +33,7 @@ export default function LiveStats() {
     events,
     startTime,
   } = useLiveStats()
-  const { currentAccountId } = useAccounts()
+  const currentAccountId = useAccounts(state => state.currentAccountId)
   const { config } = useAutoReplyConfig()
   const gate = useLiveFeatureGate()
   const { toast } = useToast()

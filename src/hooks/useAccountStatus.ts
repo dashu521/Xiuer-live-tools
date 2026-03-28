@@ -70,9 +70,10 @@ const useAccountStatusStore = create<AccountStatusStore>()(
  * 账号状态管理 Hook
  */
 export function useAccountStatus() {
-  const { statusMap, updateAccountStatus, removeAccountStatus } = useAccountStatusStore()
+  const statusMap = useAccountStatusStore(state => state.statusMap)
+  const updateAccountStatus = useAccountStatusStore(state => state.updateAccountStatus)
+  const removeAccountStatus = useAccountStatusStore(state => state.removeAccountStatus)
   const accounts = useAccounts(state => state.accounts)
-  const _currentAccountId = useAccounts(state => state.currentAccountId)
 
   // 定时更新状态的引用
   const intervalRef = useRef<NodeJS.Timeout | null>(null)

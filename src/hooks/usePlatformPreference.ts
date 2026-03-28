@@ -14,9 +14,10 @@ import { useCurrentLiveControl, useCurrentLiveControlActions } from './useLiveCo
 export function usePlatformPreference() {
   const currentAccountId = useAccounts(state => state.currentAccountId)
   const { setPlatform } = useCurrentLiveControlActions()
-
-  const { getDefaultPlatform, setDefaultPlatform, hasPreference, systemDefaultPlatform } =
-    usePlatformPreferenceStore()
+  const getDefaultPlatform = usePlatformPreferenceStore(state => state.getDefaultPlatform)
+  const setDefaultPlatform = usePlatformPreferenceStore(state => state.setDefaultPlatform)
+  const hasPreference = usePlatformPreferenceStore(state => state.hasPreference)
+  const systemDefaultPlatform = usePlatformPreferenceStore(state => state.systemDefaultPlatform)
 
   const isLoadingRef = useRef(false)
 
@@ -147,7 +148,8 @@ export function usePlatformPreference() {
 export function useAutoLoadPlatformPreference() {
   const currentAccountId = useAccounts(state => state.currentAccountId)
   const { setPlatform } = useCurrentLiveControlActions()
-  const { getDefaultPlatform, systemDefaultPlatform } = usePlatformPreferenceStore()
+  const getDefaultPlatform = usePlatformPreferenceStore(state => state.getDefaultPlatform)
+  const systemDefaultPlatform = usePlatformPreferenceStore(state => state.systemDefaultPlatform)
   const connectState = useCurrentLiveControl(context => context.connectState)
 
   const lastAccountIdRef = useRef<string | null>(null)

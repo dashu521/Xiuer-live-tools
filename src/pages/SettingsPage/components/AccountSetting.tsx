@@ -25,7 +25,10 @@ import {
 } from '../../../components/ui/card'
 
 export function AccountSetting() {
-  const { accounts, removeAccount, currentAccountId, defaultAccountId } = useAccounts()
+  const accounts = useAccounts(state => state.accounts)
+  const removeAccount = useAccounts(state => state.removeAccount)
+  const currentAccountId = useAccounts(state => state.currentAccountId)
+  const defaultAccountId = useAccounts(state => state.defaultAccountId)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const { toast } = useToast()
   const connectState = useCurrentLiveControl(context => context.connectState)

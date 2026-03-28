@@ -85,7 +85,7 @@ interface OneClickStartButtonProps {
 export function OneClickStartButton({ variant = 'default' }: OneClickStartButtonProps) {
   const { state, startAllTasks, stopAllTasks, isAnyTaskRunning } = useOneClickStart()
   const gate = useLiveFeatureGate()
-  const { currentAccountId } = useAccounts()
+  const currentAccountId = useAccounts(state => state.currentAccountId)
   const [showConfirm, setShowConfirm] = useState(false)
   const [skipConfirm, setSkipConfirmState] = useState(false)
   const [autoStartOnLive, setAutoStartOnLiveState] = useState(false)

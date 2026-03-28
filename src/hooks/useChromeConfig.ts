@@ -187,16 +187,17 @@ export function useCurrentChromeConfigActions() {
 
 // Hook: 自动加载当前用户的Chrome配置
 export function useLoadChromeConfigOnLogin() {
-  const { isAuthenticated, user } = useAuthStore()
+  const isAuthenticated = useAuthStore(state => state.isAuthenticated)
+  const userId = useAuthStore(state => state.user?.id ?? null)
   const loadUserConfigs = useChromeConfigStore(state => state.loadUserConfigs)
 
   useEffect(() => {
-    if (isAuthenticated && user?.id) {
+    if (isAuthenticated && userId) {
       // 延迟加载，确保存储系统已初始化
       setTimeout(() => {
-        console.log('[ChromeConfig] 加载用户配置:', user.id)
-        loadUserConfigs(user.id)
+        console.log('[ChromeConfig] 加载用户配置:', userId)
+        loadUserConfigs(userId)
       }, 0)
     }
-  }, [isAuthenticated, user?.id, loadUserConfigs])
+  }, [isAuthenticated, userId, loadUserConfigs])
 }

@@ -104,7 +104,10 @@ export function CoreConfigCard() {
     })
   }
 
-  const { accounts, removeAccount, currentAccountId, defaultAccountId } = useAccounts()
+  const accounts = useAccounts(state => state.accounts)
+  const removeAccount = useAccounts(state => state.removeAccount)
+  const currentAccountId = useAccounts(state => state.currentAccountId)
+  const defaultAccountId = useAccounts(state => state.defaultAccountId)
   const connectState = useCurrentLiveControl(context => context.connectState)
   const isConnected = connectState.status === 'connected'
   const currentAccount = accounts.find(acc => acc.id === currentAccountId)

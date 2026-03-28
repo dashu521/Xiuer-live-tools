@@ -347,16 +347,17 @@ export const useCurrentAutoPopUp = <T>(getter: (context: AutoPopUpContext) => T)
 
 // Hook: 自动加载配置
 export function useLoadAutoPopUpOnLogin() {
-  const { loadUserContexts } = useAutoPopUpStore()
-  const { isAuthenticated, user } = useAuthStore()
+  const loadUserContexts = useAutoPopUpStore(state => state.loadUserContexts)
+  const isAuthenticated = useAuthStore(state => state.isAuthenticated)
+  const userId = useAuthStore(state => state.user?.id ?? null)
 
   useEffect(() => {
-    if (isAuthenticated && user?.id) {
+    if (isAuthenticated && userId) {
       // 延迟加载，确保存储系统已初始化
       setTimeout(() => {
-        console.log('[AutoPopUp] 加载用户配置:', user.id)
-        loadUserContexts(user.id)
+        console.log('[AutoPopUp] 加载用户配置:', userId)
+        loadUserContexts(userId)
       }, 0)
     }
-  }, [isAuthenticated, user?.id, loadUserContexts])
+  }, [isAuthenticated, userId, loadUserContexts])
 }
