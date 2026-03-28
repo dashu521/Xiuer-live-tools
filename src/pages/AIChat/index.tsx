@@ -7,7 +7,8 @@ import { useAIChatStore } from '@/hooks/useAIChat'
 import ChatBox from './components/ChatBox'
 
 export default function AIChat() {
-  const { messages, clearMessages } = useAIChatStore()
+  const messages = useAIChatStore(state => state.messages)
+  const clearMessages = useAIChatStore(state => state.clearMessages)
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">

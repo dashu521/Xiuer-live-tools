@@ -13,11 +13,15 @@ export default function ChatInput({
   onSubmit: (messages: { role: string; content: string }[]) => void
 }) {
   const [input, setInput] = useState('')
-  const { status, addMessage, messages, config, apiKeys } = useAIChatStore()
+  const status = useAIChatStore(state => state.status)
+  const addMessage = useAIChatStore(state => state.addMessage)
+  const messages = useAIChatStore(state => state.messages)
+  const provider = useAIChatStore(state => state.config.provider)
+  const apiKeys = useAIChatStore(state => state.apiKeys)
   const { toast } = useToast()
 
   const handleSubmit = useMemoizedFn(async () => {
-    if (!apiKeys[config.provider]) {
+    if (!apiKeys[provider]) {
       toast.error('请先配置 API Key')
       return
     }

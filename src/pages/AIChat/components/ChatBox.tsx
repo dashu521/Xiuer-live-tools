@@ -14,19 +14,18 @@ interface ContextMessage {
 }
 
 const useChatMessaging = () => {
-  const {
-    status,
-    setStatus,
-    addMessage,
-    appendToChat,
-    appendToReasoning,
-    tryToHandleEmptyMessage,
-    config,
-    apiKeys,
-    customBaseURL,
-    autoScroll,
-    setAutoScroll,
-  } = useAIChatStore()
+  const status = useAIChatStore(state => state.status)
+  const setStatus = useAIChatStore(state => state.setStatus)
+  const addMessage = useAIChatStore(state => state.addMessage)
+  const appendToChat = useAIChatStore(state => state.appendToChat)
+  const appendToReasoning = useAIChatStore(state => state.appendToReasoning)
+  const tryToHandleEmptyMessage = useAIChatStore(state => state.tryToHandleEmptyMessage)
+  const provider = useAIChatStore(state => state.config.provider)
+  const model = useAIChatStore(state => state.config.model)
+  const apiKeys = useAIChatStore(state => state.apiKeys)
+  const customBaseURL = useAIChatStore(state => state.customBaseURL)
+  const autoScroll = useAIChatStore(state => state.autoScroll)
+  const setAutoScroll = useAIChatStore(state => state.setAutoScroll)
 
   useEventListener('wheel', ev => {
     if (ev.deltaY < 0 && autoScroll && status === 'replying') {
@@ -84,9 +83,9 @@ const useChatMessaging = () => {
       window.ipcRenderer
         .invoke(IPC_CHANNELS.tasks.aiChat.chat, {
           messages,
-          apiKey: apiKeys[config.provider],
-          provider: config.provider,
-          model: config.model,
+          apiKey: apiKeys[provider],
+          provider,
+          model,
           customBaseURL: customBaseURL,
         })
         .catch(error => {

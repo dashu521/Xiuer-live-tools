@@ -36,7 +36,7 @@ export class AIChatService {
   private openai: OpenAI
   private constructor(
     private apiKey: string,
-    private baseURL: string,
+    baseURL: string,
     private provider: ProviderType,
   ) {
     this.openai = new OpenAI({ apiKey, baseURL })

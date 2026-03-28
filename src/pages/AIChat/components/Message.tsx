@@ -17,7 +17,8 @@ export function Message({
 }: ChatMessage & {
   onRetry: (messages: { role: string; content: string; reasoning_content?: string }[]) => void
 }) {
-  const { messages, setMessages } = useAIChatStore()
+  const messages = useAIChatStore(state => state.messages)
+  const setMessages = useAIChatStore(state => state.setMessages)
 
   // 判断是否显示重试按钮
   const showRetry = useMemo(() => {
