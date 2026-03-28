@@ -43,6 +43,8 @@
     "changelog:extract": "tsx ./scripts/extract-changelog.js",
     "diag:deps": "node scripts/diagnose-deps.mjs",
     "slow-server": "tsx ./scripts/slow-server.js",
+    "perf:audit:auth-api": "node scripts/perf/run-auth-api-audit.mjs",
+    "perf:bench:task-manager": "tsx scripts/perf/benchmark-task-manager.ts",
     "providers:update-models": "tsx ./scripts/updateProvidersModels.js",
     "dist:clean": "node -e \"require('fs').rmSync('release',{recursive:true,force:true})\"",
     "dist:check": "node scripts/dist-check-appdir.js",
