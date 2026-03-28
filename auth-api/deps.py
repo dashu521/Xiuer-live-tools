@@ -1,4 +1,5 @@
 """JWT 与依赖：access_token 解析、get_current_user、refresh 校验；管理员 admin token 与审计日志"""
+from functools import lru_cache
 import hashlib
 import json
 import logging
@@ -31,6 +32,21 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+
+
+@lru_cache(maxsize=4096)
+def is_placeholder_password_hash(password_hash: str) -> bool:
+    """
+    判断密码哈希是否仍为短信注册占位密码。
+
+    这里对相同 hash 做进程内缓存，避免 /status 等高频接口重复执行 bcrypt 校验。
+    当用户修改密码后，hash 字符串会变化，因此不会命中旧缓存。
+    """
+    return verify_password("!", password_hash)
+
+
+def has_real_password(password_hash: str) -> bool:
+    return not is_placeholder_password_hash(password_hash)
 
 
 def create_access_token(user_id: str, jti: Optional[str] = None) -> str:
@@ -165,6 +181,34 @@ def require_active_access_session(token: str, db: Session) -> str:
     return user_id
 
 
+def _load_active_user(user_id: str, db: Session) -> Optional[User]:
+    user = db.get(User, user_id)
+    if user and user.status == "active":
+        return user
+
+    fallback_user = db.query(User).filter(User.username == user_id).first()
+    if fallback_user and fallback_user.status == "active":
+        return fallback_user
+    return None
+
+
+def _record_user_activity(db: Session, user: User, now: datetime) -> None:
+    expire_on_commit = db.expire_on_commit
+    try:
+        db.expire_on_commit = False
+        db.query(User).filter(User.id == user.id).update(
+            {"last_active_at": now},
+            synchronize_session=False,
+        )
+        db.commit()
+        user.last_active_at = now
+    except Exception:
+        db.rollback()
+        logger.exception("[Auth] failed to persist last_active_at", extra={"user_id": user.id})
+    finally:
+        db.expire_on_commit = expire_on_commit
+
+
 def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: Session = Depends(get_db),
@@ -175,21 +219,15 @@ def get_current_user(
             detail=err_token_invalid(),
         )
     user_id = require_active_access_session(credentials.credentials, db)
-    user = db.query(User).filter(
-        (User.id == user_id) | (User.username == user_id)
-    ).first()
-    if not user or user.status != "active":
+    user = _load_active_user(user_id, db)
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=err_token_invalid(),
         )
     now = datetime.utcnow()
     if not user.last_active_at or (now - user.last_active_at).total_seconds() > 60:
-        try:
-            user.last_active_at = now
-            db.commit()
-        except Exception:
-            db.rollback()
+        _record_user_activity(db, user, now)
     return user
 
 
@@ -204,12 +242,7 @@ def get_optional_user(
         user_id = require_active_access_session(credentials.credentials, db)
     except HTTPException:
         return None
-    user = db.query(User).filter(
-        (User.id == user_id) | (User.username == user_id)
-    ).first()
-    if not user or user.status != "active":
-        return None
-    return user
+    return _load_active_user(user_id, db)
 
 
 def err_token_invalid() -> dict:

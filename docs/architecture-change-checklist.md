@@ -56,6 +56,7 @@
 ### 3.1 任务系统
 
 - 新任务是否优先接入 `TaskManager`？
+- 同账号同任务的启动防重入是否仍由 `TaskManager` 负责，且 `ALREADY_RUNNING` 语义覆盖运行中、停止中和启动中窗口？
 - 批量停止是否仍然统一走 `TaskStateManager` / `stopAllLiveTasks`？
 - 是否避免页面层再维护一套独立任务总停逻辑？
 - 是否避免任务调度器反向读取 UI store 作为唯一判断来源？

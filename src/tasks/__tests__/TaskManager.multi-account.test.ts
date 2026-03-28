@@ -42,6 +42,29 @@ class MockAutoPopupTask extends MockTask {
   }
 }
 
+class SlowStartTask extends BaseTask {
+  static startCalls = 0
+  static releaseStart: (() => void) | null = null
+  static waitForStart: Promise<void> = Promise.resolve()
+
+  static prepare() {
+    SlowStartTask.startCalls = 0
+    SlowStartTask.waitForStart = new Promise<void>(resolve => {
+      SlowStartTask.releaseStart = resolve
+    })
+  }
+
+  constructor() {
+    super('autoSpeak')
+  }
+
+  async start(_ctx: TaskContext): Promise<void> {
+    SlowStartTask.startCalls += 1
+    await SlowStartTask.waitForStart
+    this.status = 'running'
+  }
+}
+
 // 模拟 TaskContext
 const createMockContext = (accountId: string): TaskContext => ({
   accountId,
@@ -268,6 +291,26 @@ describe('TaskManager 多账号隔离测试', () => {
       const secondStart = await taskManager.start('autoReply', ctxA)
       expect(secondStart.success).toBe(true)
       expect(taskManager.getStatus('autoReply', 'account-a')).toBe('running')
+    })
+
+    it('任务启动中的窗口内也应拦截重复启动', async () => {
+      taskManager = new TaskManagerImpl()
+      SlowStartTask.prepare()
+      taskManager.register(SlowStartTask as any)
+
+      const ctxA = createMockContext('account-a')
+
+      const firstStartPromise = taskManager.start('autoSpeak', ctxA)
+      const secondStart = await taskManager.start('autoSpeak', ctxA)
+
+      expect(secondStart.success).toBe(false)
+      expect(secondStart.reason).toBe('ALREADY_RUNNING')
+      expect(SlowStartTask.startCalls).toBe(1)
+
+      SlowStartTask.releaseStart?.()
+      const firstStart = await firstStartPromise
+      expect(firstStart.success).toBe(true)
+      expect(taskManager.getStatus('autoSpeak', 'account-a')).toBe('running')
     })
   })
 

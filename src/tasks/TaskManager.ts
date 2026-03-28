@@ -26,6 +26,8 @@ export class TaskManagerImpl {
   private taskTemplates: Map<TaskId, new () => Task> = new Map()
   // 账号任务状态：accountId -> taskId -> AccountTaskState
   private accountTasks: Map<string, Map<TaskId, AccountTaskState>> = new Map()
+  // 启动中的任务集合：用于锁住 await start() 窗口，防止重复启动
+  private startInFlight: Set<string> = new Set()
   // 已清理账号集合：用于区分“从未创建过”和“已显式清理”
   private cleanedAccounts: Set<string> = new Set()
   // 全局状态存储（向后兼容）
@@ -64,6 +66,10 @@ export class TaskManagerImpl {
     }
 
     return accountMap.get(taskId)!
+  }
+
+  private getTaskScopeKey(accountId: string, taskId: TaskId): string {
+    return `${accountId}:${taskId}`
   }
 
   /**
@@ -112,6 +118,7 @@ export class TaskManagerImpl {
     ctx: TaskContext,
   ): Promise<{ success: boolean; reason?: string; message?: string }> {
     const accountId = ctx.accountId
+    const taskScopeKey = this.getTaskScopeKey(accountId, taskId)
 
     // 【修复】获取或创建该账号的任务状态
     let taskState: AccountTaskState
@@ -155,6 +162,13 @@ export class TaskManagerImpl {
       this.statusStore.set(taskId, task.status)
     }
 
+    if (this.startInFlight.has(taskScopeKey)) {
+      console.log(
+        `[TaskManager] Task ${taskId} for account ${accountId} is already starting, preventing duplicate start`,
+      )
+      return { success: false, reason: 'ALREADY_RUNNING', message: '任务启动中' }
+    }
+
     // 【Phase 2B-1】检查该账号的任务是否已在运行
     // 基于任务实例的真实状态，而非调度器状态
     const isActuallyRunning = task.status === 'running' || task.status === 'stopping'
@@ -180,6 +194,7 @@ export class TaskManagerImpl {
       }
 
       // 启动任务（先启动，成功后再更新状态，避免状态不一致）
+      this.startInFlight.add(taskScopeKey)
       console.log(`[TaskManager] Starting task ${taskId} for account ${accountId}`)
       await task.start(ctx)
 
@@ -202,6 +217,8 @@ export class TaskManagerImpl {
         reason: 'ERROR',
         message: error instanceof Error ? error.message : '启动任务失败',
       }
+    } finally {
+      this.startInFlight.delete(taskScopeKey)
     }
   }
 
@@ -362,6 +379,10 @@ export class TaskManagerImpl {
       }
       this.accountTasks.delete(accountId)
       this.cleanedAccounts.add(accountId)
+    }
+
+    for (const taskId of this.taskTemplates.keys()) {
+      this.startInFlight.delete(this.getTaskScopeKey(accountId, taskId))
     }
   }
 }

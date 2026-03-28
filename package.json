@@ -16,7 +16,8 @@
   "scripts": {
     "dev": "cross-env USE_REAL_AUTH=true VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000 vite",
     "dev:force": "node -e \"require('fs').rmSync('dist-electron',{recursive:true,force:true})\" && cross-env VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000 vite",
-    "build": "tsc && vite build && node scripts/copy-runtime-files.js && node scripts/generate-build-config.js",
+    "build": "npm run build:check-env && tsc && vite build && node scripts/copy-runtime-files.js && node scripts/generate-build-config.js",
+    "build:check-env": "node scripts/validate-build-env.js",
     "preview": "vite preview",
     "lint": "biome check --no-errors-on-unmatched --files-ignore-unknown=true .",
     "typecheck": "tsc --noEmit",
@@ -29,7 +30,7 @@
     "auth:venv": "python3 -m venv auth-api/.venv && auth-api/.venv/bin/python -m pip install -r auth-api/requirements.txt",
     "auth:syntax": "cd auth-api && .venv/bin/python -m py_compile main.py config.py deps.py models.py schemas.py sms_service.py auth_feature_rules.py subscription_rules.py && find routers -name '*.py' -exec .venv/bin/python -m py_compile {} \\;",
     "auth:smoke": "cd auth-api && JWT_SECRET=test-secret-for-ci-32-bytes-minimum-key DATABASE_URL=sqlite:///tmp/test.db .venv/bin/python -c \"from main import app; print('FastAPI app imported successfully')\"",
-    "auth:test": "cd auth-api && .venv/bin/python -m unittest test_auth_feature_rules.py && .venv/bin/python -m unittest test_subscription_rules.py && .venv/bin/python -m unittest test_subscription_system.py && .venv/bin/python -m unittest test_single_session_enforcement.py && .venv/bin/python -m unittest test_auth_contracts.py && .venv/bin/python -m unittest test_subscription_contracts.py && .venv/bin/python -m unittest test_sms_service.py",
+    "auth:test": "cd auth-api && .venv/bin/python -m unittest test_auth_feature_rules.py && .venv/bin/python -m unittest test_subscription_rules.py && .venv/bin/python -m unittest test_subscription_system.py && .venv/bin/python -m unittest test_single_session_enforcement.py && .venv/bin/python -m unittest test_auth_contracts.py && .venv/bin/python -m unittest test_subscription_contracts.py && .venv/bin/python -m unittest test_config_sync.py && .venv/bin/python -m unittest test_healthcheck.py && .venv/bin/python -m unittest test_sms_service.py",
     "auth:check": "npm run auth:syntax && npm run auth:smoke && npm run auth:test",
     "ci:frontend": "npm run quality:check && node scripts/check-architecture-doc-sync.js",
     "ci:auth": "npm run auth:venv && npm run auth:check",

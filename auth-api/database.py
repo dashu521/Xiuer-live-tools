@@ -1,5 +1,6 @@
 """SQLAlchemy 引擎与会话，启动时创建表"""
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from config import settings
@@ -27,6 +28,29 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+def check_database_health() -> dict:
+    """执行轻量数据库探测，供 /health 使用。"""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {
+            "ok": True,
+            "dialect": engine.dialect.name,
+        }
+    except SQLAlchemyError as exc:
+        return {
+            "ok": False,
+            "dialect": engine.dialect.name,
+            "error": exc.__class__.__name__,
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "dialect": engine.dialect.name,
+            "error": exc.__class__.__name__,
+        }
 
 
 def create_tables():

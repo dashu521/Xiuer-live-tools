@@ -138,6 +138,31 @@ class AuthContractTests(unittest.TestCase):
         self.assertIn("start_ts", data)
         self.assertIn("end_ts", data)
 
+    def test_status_reports_has_password_for_password_registered_user(self):
+        register_data = self._register("status-user@example.com", "secret123")
+
+        response = self.client.get(
+            "/status",
+            headers={"Authorization": f"Bearer {register_data['access_token']}"},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertTrue(response.json()["has_password"])
+
+    def test_status_reports_no_password_for_sms_auto_created_user(self):
+        phone = "13800000011"
+        self._insert_sms_code(phone, "654321")
+
+        login_response = self.client.post("/auth/sms/login", json={"phone": phone, "code": "654321"})
+        self.assertEqual(login_response.status_code, 200, login_response.text)
+        access_token = login_response.json()["access_token"]
+
+        status_response = self.client.get(
+            "/status",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        self.assertEqual(status_response.status_code, 200, status_response.text)
+        self.assertFalse(status_response.json()["has_password"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,7 +1,7 @@
 # 项目架构固化文档
 
 > **版本**: v1.0  
-> **最后更新**: 2026-03-16  
+> **最后更新**: 2026-03-28  
 > **状态**: 已固化  
 > **负责人**: TEAM  
 > **当前适用性**: 当前有效  
@@ -154,6 +154,7 @@
 约束：
 
 - 新任务接入应优先纳入 `TaskManager`
+- 同账号同任务的重复启动拦截必须由 `TaskManager` 自身负责，包含任务已 `running` / `stopping` 以及 `await task.start()` 进行中的窗口；此时统一返回 `ALREADY_RUNNING`
 - 批量停止必须走 `TaskStateManager` / `stopAllLiveTasks`
 - 不允许页面自己再维护一套独立“总停”逻辑
 
