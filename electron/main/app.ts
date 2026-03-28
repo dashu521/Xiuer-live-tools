@@ -627,7 +627,6 @@ async function createWindow() {
     win.webContents.on('did-finish-load', async () => {
       writeStartupLog('事件: did-finish-load 触发（页面加载完成）')
       writeMainLog('INFO', 'Page finished loading')
-
     })
 
     win.webContents.on(
