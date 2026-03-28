@@ -336,9 +336,10 @@ export interface SmsSendResponse {
   sms_failed_message?: string
 }
 
-/** POST /auth/sms/send：发送手机验证码（使用 JSON body，避免敏感信息进入 URL） */
+/** POST /auth/sms/send：发送手机验证码（当前线上服务要求 query 参数） */
 export async function sendSmsCode(phone: string): Promise<ApiResult<SmsSendResponse>> {
-  return requestPublic<SmsSendResponse>('POST', '/auth/sms/send', { phone })
+  const path = `/auth/sms/send?phone=${encodeURIComponent(phone)}`
+  return requestPublic<SmsSendResponse>('POST', path)
 }
 
 /** 后端 POST /auth/sms/login 返回 - 已与密码登录格式统一 */
@@ -356,12 +357,13 @@ export interface SmsLoginResponse {
   needs_password?: boolean
 }
 
-/** POST /auth/sms/login：手机验证码登录（使用 JSON body，避免敏感信息进入 URL） */
+/** POST /auth/sms/login：手机验证码登录（当前线上服务要求 query 参数） */
 export async function loginWithSmsCode(
   phone: string,
   code: string,
 ): Promise<ApiResult<SmsLoginResponse>> {
-  return requestPublic<SmsLoginResponse>('POST', '/auth/sms/login', { phone, code })
+  const path = `/auth/sms/login?phone=${encodeURIComponent(phone)}&code=${encodeURIComponent(code)}`
+  return requestPublic<SmsLoginResponse>('POST', path)
 }
 
 /** POST /set-password：SMS 注册用户首次设置密码 */
@@ -382,17 +384,17 @@ export async function changePassword(
   })
 }
 
-/** POST /auth/sms/reset-password：通过手机验证码重置密码（忘记密码） */
+/** POST /auth/sms/reset-password：通过手机验证码重置密码（当前线上服务要求 query 参数） */
 export async function resetPasswordWithSms(
   phone: string,
   code: string,
   newPassword: string,
 ): Promise<ApiResult<{ ok: boolean; message: string }>> {
-  return requestPublic<{ ok: boolean; message: string }>('POST', '/auth/sms/reset-password', {
-    phone,
-    code,
-    new_password: newPassword,
-  })
+  const path =
+    `/auth/sms/reset-password?phone=${encodeURIComponent(phone)}` +
+    `&code=${encodeURIComponent(code)}` +
+    `&new_password=${encodeURIComponent(newPassword)}`
+  return requestPublic<{ ok: boolean; message: string }>('POST', path)
 }
 
 // ===================== 礼品卡 =====================

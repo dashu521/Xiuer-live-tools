@@ -275,14 +275,16 @@ export async function cloudSmsLogin(
   responseDetail?: string
 }> {
   const prefix = getAuthPathPrefix()
-  const url = `${prefix}/auth/sms/login`
+  const url =
+    `${prefix}/auth/sms/login?phone=${encodeURIComponent(phone)}` +
+    `&code=${encodeURIComponent(code)}`
 
   const { data, status, error, responseDetail } = await request<{
     user: CloudAuthResponse['user']
     token: string
     refresh_token?: string
     needs_password?: boolean
-  }>('POST', url, { body: { phone, code } })
+  }>('POST', url)
 
   if (error) {
     return {
