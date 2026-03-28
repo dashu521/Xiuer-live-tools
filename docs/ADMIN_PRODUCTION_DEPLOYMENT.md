@@ -165,6 +165,39 @@ cd /opt/auth-api && docker compose up -d --force-recreate api
 3. 如果经过 Nginx，确认 `/messages/stream` 已配置 `proxy_buffering off`
 4. 确认客户端当前版本已包含消息中心实时通道改动
 
+### 3.6 高可用入口建议
+
+当前推荐生产拓扑：
+
+- `gateway`：Nginx 统一入口
+- `api-a` / `api-b`：两个 `auth-api` 实例
+- `mysql` 或外部 `RDS`：数据库层
+
+建议使用仓库内新增的高可用编排文件：
+
+```bash
+# Compose 内置 MySQL
+docker compose -f docker-compose.ha.yml up -d
+
+# 外部 RDS
+docker compose -f docker-compose.ha.rds.yml up -d
+```
+
+关键点：
+
+1. 对外只暴露 `gateway`
+2. `api-a` / `api-b` 都依赖 `/health` 做容器级健康检查
+3. Nginx 普通请求启用 `proxy_next_upstream`
+4. `/messages/stream` 必须保持 `proxy_buffering off`
+
+建议在真正 `up -d` 前先执行：
+
+```bash
+bash deploy/check-auth-api-ha.sh
+```
+
+该脚本会优先做静态结构检查；如果服务器已安装 `docker compose` / `nginx`，还会继续做语法级校验。
+
 ---
 
 ## 6. 安全注意事项

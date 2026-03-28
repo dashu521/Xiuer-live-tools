@@ -92,6 +92,47 @@ DOCKER_BUILDKIT=0 docker compose -f docker-compose.rds.yml build --pull=false ap
 docker compose -f docker-compose.rds.yml up -d api --no-build
 ```
 
+### 5.1 高可用部署（推荐）
+
+当需要降低单实例重启或故障导致的中断时，优先使用双 API 实例 + Nginx 入口：
+
+- 使用本地 / Compose MySQL：
+
+```bash
+cd /opt/oba-live-tool/deploy
+DOCKER_BUILDKIT=0 docker compose -f docker-compose.ha.yml build --pull=false
+docker compose -f docker-compose.ha.yml up -d
+```
+
+- 使用外部 RDS：
+
+```bash
+cd /opt/oba-live-tool/deploy
+DOCKER_BUILDKIT=0 docker compose -f docker-compose.ha.rds.yml build --pull=false
+docker compose -f docker-compose.ha.rds.yml up -d
+```
+
+高可用方案特点：
+
+- `api-a` / `api-b` 双实例，分别做容器级健康检查
+- `gateway` 使用 Nginx 统一对外暴露 `8000`
+- `/messages/stream` 关闭代理缓冲，避免 SSE 被代理截断
+- 普通 HTTP 请求启用 `proxy_next_upstream`，实例失败时自动切换
+
+部署前可先执行基础自检：
+
+```bash
+cd /opt/oba-live-tool
+bash deploy/check-auth-api-ha.sh
+```
+
+脚本会检查：
+
+- HA compose 文件是否存在且包含关键服务
+- Nginx 配置是否包含 upstream、SSE 关闭缓冲、失败切换
+- 如果本机安装了 `docker compose` / `docker-compose`，自动执行 `config` 语法检查
+- 如果本机安装了 `nginx`，自动执行语法检查
+
 ### 6. Nginx 反代（可选，HTTPS）
 
 ```nginx
@@ -122,6 +163,8 @@ server {
 ```bash
 curl -s http://127.0.0.1:8000/health
 ```
+
+若使用高可用方案，`8000` 端口对应的是 Nginx 入口，返回内容应仍然来自后端 `auth-api /health`。
 
 ### 注册
 
