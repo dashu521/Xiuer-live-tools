@@ -53,16 +53,18 @@ const updaters = {
   siliconflow: fetchSiliconflowModels,
 }
 
-const newProviders = { ...providers }
+async function main() {
+  const newProviders = { ...providers }
 
-for (const [key, fetchModels] of Object.entries(updaters)) {
-  const models = await fetchModels()
-  if (models) {
-    newProviders[key].models = models
+  for (const [key, fetchModels] of Object.entries(updaters)) {
+    const models = await fetchModels()
+    if (models) {
+      newProviders[key].models = models
+    }
   }
-}
 
-await writeFile(providerPath, `export const providers = ${JSON.stringify(newProviders)} as const`)
+  await writeFile(providerPath, `export const providers = ${JSON.stringify(newProviders)} as const`)
+}
 
 // async function commitProviders() {
 //   const commitMessage = 'chore: 更新 AI 模型列表'
@@ -73,3 +75,5 @@ await writeFile(providerPath, `export const providers = ${JSON.stringify(newProv
 // }
 
 // await commitProviders()
+
+void main()

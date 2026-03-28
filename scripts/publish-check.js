@@ -136,6 +136,19 @@ function checkReleaseAssets(tagName) {
   }
 }
 
+function checkMacCdnSync() {
+  try {
+    exec('node scripts/verify-mac-cdn.js');
+    return { ok: true };
+  } catch (error) {
+    const output = error.stdout || error.stderr || error.message;
+    return {
+      ok: false,
+      error: String(output).trim() || error.message,
+    };
+  }
+}
+
 // 主流程
 async function main() {
   console.log(`${colors.bold}`);
@@ -173,7 +186,7 @@ async function main() {
   }
 
   // 检查 2: Release 资产
-  console.log(`\n${colors.cyan}检查 2/2: GitHub Release 资产完整性${colors.reset}`);
+  console.log(`\n${colors.cyan}检查 2/3: GitHub Release 资产完整性${colors.reset}`);
   const assets = checkReleaseAssets(tagName);
 
   if (assets.error) {
@@ -221,6 +234,16 @@ async function main() {
     logFail('macOS 自动更新配置 (latest-mac.yml)');
   }
 
+  // 检查 3: mac CDN latest 指向当前版本
+  console.log(`\n${colors.cyan}检查 3/3: mac CDN latest 与当前版本一致性${colors.reset}`);
+  const macCdnCheck = checkMacCdnSync();
+  if (macCdnCheck.ok) {
+    logPass('mac CDN latest 已同步到当前 package.json 版本');
+  } else {
+    logFail('mac CDN latest 未同步到当前 package.json 版本');
+    logInfo(macCdnCheck.error);
+  }
+
   // 可选资产
   console.log(`\n${colors.bold}其他:${colors.reset}`);
   if (assets.blockmap) {
@@ -233,8 +256,9 @@ async function main() {
   console.log(`\n${colors.bold}════════════════════════════════════════════════════════════${colors.reset}\n`);
 
   const windowsComplete = assets.windowsExe && assets.windowsZip && assets.latestYml;
-  const macComplete = assets.macDmg && assets.latestMacYml;
-  const autoUpdateReady = assets.latestYml && assets.latestMacYml;
+  const macReleaseAssetsComplete = assets.macDmg && assets.latestMacYml;
+  const macComplete = macReleaseAssetsComplete && macCdnCheck.ok;
+  const autoUpdateReady = assets.latestYml && assets.latestMacYml && macCdnCheck.ok;
 
   if (windowsComplete && macComplete) {
     console.log(`${colors.green}${colors.bold}🎉 发布完整！${colors.reset}\n`);
@@ -253,12 +277,13 @@ async function main() {
 
     console.log(`${colors.cyan}${colors.bold}📊 发布摘要${colors.reset}`);
     console.log(`  Windows: ✅ 已发布`);
-    console.log(`  macOS: ❌ 缺失`);
+    console.log(`  macOS: ❌ latest 未同步`);
     console.log(`  自动更新: ❌ 不完整\n`);
 
     console.log(`${colors.yellow}建议操作:${colors.reset}`);
     console.log('  1. 本地构建 Mac: npm run release:mac');
-    console.log('  2. 上传 Mac: npm run release:upload:mac');
+    console.log('  2. 上传 Mac: npm run upload:mac');
+    console.log('  3. 同步 OSS/CDN: npm run upload:mac:oss');
     console.log('  3. 重新检查: npm run publish:check\n');
   } else if (!windowsComplete && macComplete) {
     console.log(`${colors.yellow}${colors.bold}⚠️  发布部分完成${colors.reset}\n`);
@@ -293,6 +318,10 @@ async function main() {
       console.log(`  - ${name}`);
     }
     console.log('');
+  }
+
+  if (!windowsComplete || !macComplete || !autoUpdateReady) {
+    process.exit(1);
   }
 }
 

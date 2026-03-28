@@ -11,6 +11,7 @@
 
 const { execSync } = require('child_process');
 const fs = require('fs');
+const YAML = require('yaml');
 
 const colors = {
   reset: '\x1b[0m',
@@ -34,6 +35,11 @@ function exec(command, options = {}) {
     if (options.ignoreError) return '';
     throw error;
   }
+}
+
+function fail(message) {
+  log(`\n❌ ${message}`, 'error');
+  process.exit(1);
 }
 
 // 读取 package.json 版本
@@ -66,6 +72,54 @@ function getVerifyUrls(version) {
       type: 'dmg'
     }
   ];
+}
+
+function fetchText(url) {
+  return exec(`curl -s "${url}" 2>&1`);
+}
+
+function parseLatestMacYml(content) {
+  try {
+    return YAML.parse(content);
+  } catch (error) {
+    throw new Error(`latest-mac.yml 解析失败: ${error.message}`);
+  }
+}
+
+function validateLatestMacMetadata(version, metadata) {
+  const expectedArm64 = `Xiuer-Live-Assistant_${version}_macos_arm64.dmg`;
+  const expectedX64 = `Xiuer-Live-Assistant_${version}_macos_x64.dmg`;
+
+  if (!metadata || typeof metadata !== 'object') {
+    throw new Error('latest-mac.yml 内容为空或格式非法');
+  }
+
+  if (metadata.version !== version) {
+    throw new Error(`latest-mac.yml 版本不匹配: 期望 ${version}, 实际 ${metadata.version || '空'}`);
+  }
+
+  if (!Array.isArray(metadata.files) || metadata.files.length < 2) {
+    throw new Error('latest-mac.yml files 字段缺失或不完整');
+  }
+
+  const fileNames = metadata.files.map(file => file.url);
+  if (!fileNames.includes(expectedArm64)) {
+    throw new Error(`latest-mac.yml 缺少 arm64 产物: ${expectedArm64}`);
+  }
+  if (!fileNames.includes(expectedX64)) {
+    throw new Error(`latest-mac.yml 缺少 x64 产物: ${expectedX64}`);
+  }
+
+  const invalidFile = metadata.files.find(file => !file.sha512 || !file.size);
+  if (invalidFile) {
+    throw new Error(`latest-mac.yml 存在缺少 sha512/size 的文件项: ${invalidFile.url || 'unknown'}`);
+  }
+
+  if (metadata.path && ![expectedArm64, expectedX64].includes(metadata.path)) {
+    throw new Error(`latest-mac.yml path 字段异常: ${metadata.path}`);
+  }
+
+  return { expectedArm64, expectedX64 };
 }
 
 // 验证单个 URL
@@ -136,18 +190,29 @@ function main() {
     const version = getVersion();
     log(`当前版本: v${version}`, 'success');
     
-    // 2. 获取验证地址列表
+    // 2. 先校验 latest-mac.yml 元数据和当前版本一致
+    const latestMacUrl = 'https://download.xiuer.work/releases/latest/latest-mac.yml';
+    const latestMacContent = fetchText(latestMacUrl);
+    const latestMacMetadata = parseLatestMacYml(latestMacContent);
+    const { expectedArm64, expectedX64 } = validateLatestMacMetadata(version, latestMacMetadata);
+
+    log('\nlatest-mac.yml 元数据校验通过:', 'success');
+    log(`  版本号: ${latestMacMetadata.version}`, 'info');
+    log(`  path: ${latestMacMetadata.path}`, 'info');
+    log(`  files: ${expectedArm64}, ${expectedX64}`, 'info');
+
+    // 3. 获取验证地址列表
     const urls = getVerifyUrls(version);
     log(`\n需要验证 ${urls.length} 个地址:`, 'info');
     
-    // 3. 逐个验证
+    // 4. 逐个验证
     const results = [];
     for (const item of urls) {
       const result = verifyUrl(item);
       results.push(result);
     }
     
-    // 4. 统计结果
+    // 5. 统计结果
     const successCount = results.filter(r => r.success).length;
     const failCount = results.length - successCount;
     
@@ -155,7 +220,7 @@ function main() {
     log(`验证完成: ${successCount} 成功, ${failCount} 失败`, failCount > 0 ? 'error' : 'success');
     console.log(`${colors.bold}════════════════════════════════════════════════════════════${colors.reset}\n`);
     
-    // 5. 输出详细结果
+    // 6. 输出详细结果
     if (successCount > 0) {
       log('✅ 验证通过的地址:', 'success');
       for (const result of results.filter(r => r.success)) {
@@ -171,10 +236,9 @@ function main() {
       }
     }
     
-    // 6. 最终判定
+    // 7. 最终判定
     if (failCount > 0) {
-      log('\n❌ CDN 验证未通过，请检查 OSS 上传是否成功', 'error');
-      process.exit(1);
+      fail('CDN 验证未通过，请检查 OSS 上传与 latest-mac.yml 是否已同步到当前版本');
     } else {
       log('\n✅ 所有 CDN 地址验证通过！', 'success');
       log('\n📥 下载地址:', 'info');
@@ -184,8 +248,7 @@ function main() {
     }
     
   } catch (error) {
-    log(`\n❌ 错误: ${error.message}`, 'error');
-    process.exit(1);
+    fail(error.message);
   }
 }
 
