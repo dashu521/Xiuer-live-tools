@@ -193,8 +193,9 @@ export const useLiveControlStore = create<LiveControlStore>()(
                 accountId: account.id,
               })
               if (savedContext) {
+                const persistedStatus = savedContext.connectState.status
                 const safeConnectState =
-                  savedContext.connectState.status === 'connecting'
+                  persistedStatus === 'connecting' || persistedStatus === 'connected'
                     ? {
                         ...DEFAULT_CONNECT_STATE,
                         platform: savedContext.connectState.platform || '',
