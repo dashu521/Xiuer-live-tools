@@ -43,13 +43,11 @@ function useTaskEventIpcSync() {
   useIpcListener(IPC_CHANNELS.tasks.autoMessage.stoppedEvent, id => {
     setIsRunningAutoMessage(id, false)
     taskManager.syncStatus('autoSpeak', 'stopped', id)
-    console.log(`[TaskGate] Auto message stopped event for account ${id}`)
   })
 
   useIpcListener(IPC_CHANNELS.tasks.autoPopUp.stoppedEvent, id => {
     setIsRunningAutoPopUp(id, false)
     taskManager.syncStatus('autoPopup', 'stopped', id)
-    console.log(`[TaskGate] Auto popup stopped event for account ${id}`)
   })
 
   useIpcListener(IPC_CHANNELS.tasks.commentListener.stopped, id => {
@@ -58,7 +56,6 @@ function useTaskEventIpcSync() {
     setIsRunningAutoReply(id, false)
     setLiveStatsListening(id, false)
     taskManager.syncStatus('autoReply', 'stopped', id)
-    console.log(`[TaskGate] Auto reply listener stopped event for account ${id}`)
   })
 
   useEffect(() => {
@@ -75,7 +72,6 @@ function useTaskEventIpcSync() {
           (id: string) => {
             setIsRunningAutoMessage(id, false)
             taskManager.syncStatus('autoSpeak', 'stopped', id)
-            console.log(`[TaskGate] Auto message stopped(scoped) for account ${id}`)
           },
         ),
       )
@@ -88,7 +84,6 @@ function useTaskEventIpcSync() {
           (id: string) => {
             setIsRunningAutoPopUp(id, false)
             taskManager.syncStatus('autoPopup', 'stopped', id)
-            console.log(`[TaskGate] Auto popup stopped(scoped) for account ${id}`)
           },
         ),
       )
@@ -104,7 +99,6 @@ function useTaskEventIpcSync() {
             setIsRunningAutoReply(id, false)
             setLiveStatsListening(id, false)
             taskManager.syncStatus('autoReply', 'stopped', id)
-            console.log(`[TaskGate] Auto reply listener stopped(scoped) for account ${id}`)
           },
         ),
       )
@@ -132,13 +126,6 @@ function useLiveControlIpcSync() {
   const { toast } = useToast()
 
   useIpcListener(IPC_CHANNELS.tasks.liveControl.disconnectedEvent, async (id, reason) => {
-    console.log(`[renderer][${id}] ==============================================`)
-    console.log(`[renderer][${id}][event] 🚨 收到 disconnectedEvent 事件`, {
-      accountId: id,
-      reason: reason || '未知原因',
-      timestamp: new Date().toISOString(),
-    })
-
     const reasonStr = (reason || '') as string
     const isFatalDisconnect =
       reasonStr.includes('browser has been closed') ||
@@ -148,7 +135,6 @@ function useLiveControlIpcSync() {
 
     const currentStatus = useLiveControlStore.getState().contexts[id]?.connectState
     if (currentStatus?.phase === 'waiting_for_login' && !isFatalDisconnect) {
-      console.log(`[renderer][${id}][event] ⏭️ 忽略 disconnectedEvent：用户正在登录中（非致命断开）`)
       return
     }
 
@@ -162,7 +148,6 @@ function useLiveControlIpcSync() {
     }
 
     await stopAllLiveTasks(id, 'disconnected', false)
-    console.log(`[renderer][${id}] ==============================================`)
   })
 
   useIpcListener(IPC_CHANNELS.tasks.liveControl.stateChanged, ({ accountId, connectState }) => {
