@@ -39,14 +39,14 @@ function emitConnectionState(
 function setupIpcHandlers() {
   typedIpcMainHandle(
     IPC_CHANNELS.tasks.liveControl.connect,
-    async (_, { chromePath, headless, storageState, platform, account, traceId }) => {
+    async (_, { browserPath, headless, storageState, platform, account, traceId }) => {
       const logPrefix = traceId ? `[conn][${account.id}][${traceId}]` : `[conn][${account.id}]`
       const logger = createLogger(`@${account.name}`).scope(TASK_NAME)
 
       console.log(`[BrowserPopup] ${logPrefix} IPC received`, {
         platform,
         headless,
-        hasChromePath: !!chromePath,
+        hasBrowserPath: !!browserPath,
         hasStorageState: !!storageState,
       })
 
@@ -72,8 +72,8 @@ function setupIpcHandlers() {
           }
         }
 
-        if (chromePath) {
-          browserManager.setChromePath(chromePath)
+        if (browserPath) {
+          browserManager.setBrowserPath(browserPath)
         }
 
         logger.info(

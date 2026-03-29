@@ -141,9 +141,11 @@ export const IPC_CHANNELS = {
     load: 'config:load',
   },
   chrome: {
+    listBrowsers: 'chrome:listBrowsers',
     getPath: 'chrome:getPath',
     setPath: 'chrome:setPath',
     selectPath: 'chrome:selectPath',
+    testBrowser: 'chrome:testBrowser',
     toggleDevTools: 'chrome:toggleDevTools',
     saveState: 'chrome:saveState',
   },

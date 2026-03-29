@@ -163,6 +163,8 @@ export function createChromeConfigStorage(userId: string, accountId: string) {
     accountId,
     defaultConfig: {
       path: '',
+      selectedBrowserId: '',
+      browsers: [],
       storageState: '',
       headless: false,
     },

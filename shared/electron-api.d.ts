@@ -1,5 +1,6 @@
 import type { LogMessage } from 'electron-log'
 import type { ProgressInfo, UpdateDownloadedEvent } from 'electron-updater'
+import type { BrowserCandidate, BrowserTestResult } from 'shared/browser'
 import type { PlanType } from 'shared/planRules'
 import type { providers } from 'shared/providers'
 
@@ -119,7 +120,7 @@ export interface IpcChannels {
 
   // LiveControl
   [IPC_CHANNELS.tasks.liveControl.connect]: (params: {
-    chromePath?: string
+    browserPath?: string
     headless?: boolean
     storageState?: string
     platform: LiveControlPlatform
@@ -436,7 +437,9 @@ export interface IpcChannels {
 
   // Chrome
   [IPC_CHANNELS.chrome.selectPath]: () => string | null
+  [IPC_CHANNELS.chrome.listBrowsers]: (preferEdge?: boolean) => Promise<BrowserCandidate[]>
   [IPC_CHANNELS.chrome.getPath]: (edge?: boolean) => string | null
+  [IPC_CHANNELS.chrome.testBrowser]: (browserPath: string) => Promise<BrowserTestResult>
   [IPC_CHANNELS.chrome.toggleDevTools]: () => void
   [IPC_CHANNELS.chrome.setPath]: (path: string) => void
   [IPC_CHANNELS.chrome.saveState]: (accountId: string, state: string) => void

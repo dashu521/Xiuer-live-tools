@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { useAuthStore } from '@/stores/authStore'
+import { flushAllPersists, flushPersist, schedulePersist } from '@/utils/debouncedPersist'
 import { EVENTS, eventEmitter } from '@/utils/events'
 import type { StringFilterConfig } from '@/utils/filter'
 import { mergeWithoutArray } from '@/utils/misc'
@@ -168,15 +169,32 @@ export const useAutoReplyConfigStore = create<AutoReplyConfigStore>()(
       return state.contexts[accountId]
     }
 
-    const saveToStorage = (accountId: string, context: AutoReplyContext) => {
+    const saveToStorage = (
+      accountId: string,
+      context: AutoReplyContext,
+      options?: { immediate?: boolean },
+    ) => {
       const { currentUserId } = get()
       if (currentUserId) {
         try {
-          storageManager.set('auto-reply', context, {
-            level: 'account',
-            userId: currentUserId,
-            accountId,
-          })
+          const persistKey = `auto-reply:${currentUserId}:${accountId}`
+          const snapshot = {
+            ...context,
+            config: { ...context.config },
+          }
+          const write = () => {
+            storageManager.set('auto-reply', snapshot, {
+              level: 'account',
+              userId: currentUserId,
+              accountId,
+            })
+          }
+          if (options?.immediate) {
+            flushPersist(persistKey)
+            write()
+            return
+          }
+          schedulePersist(persistKey, write, 250)
         } catch (e) {
           console.error('[AutoReplyConfig] 保存到存储失败:', e)
         }
@@ -197,6 +215,7 @@ export const useAutoReplyConfigStore = create<AutoReplyConfigStore>()(
 
       loadUserContexts: (userId: string) => {
         const loadContexts = () => {
+          flushAllPersists()
           const { accounts } = useAccounts.getState()
           if (accounts.length === 0) {
             return
@@ -234,16 +253,13 @@ export const useAutoReplyConfigStore = create<AutoReplyConfigStore>()(
 
       resetAllContexts: () => {
         set(state => {
+          flushAllPersists()
           // 保存当前数据到存储
           const { currentUserId } = state
           if (currentUserId) {
             Object.entries(state.contexts).forEach(([accountId, context]) => {
               try {
-                storageManager.set('auto-reply', context, {
-                  level: 'account',
-                  userId: currentUserId,
-                  accountId,
-                })
+                saveToStorage(accountId, context, { immediate: true })
               } catch (e) {
                 console.error('[AutoReplyConfig] 保存配置失败:', e)
               }
@@ -258,44 +274,46 @@ export const useAutoReplyConfigStore = create<AutoReplyConfigStore>()(
 )
 
 export const useAutoReplyConfig = () => {
+  const store = useAutoReplyConfigStore()
   const currentAccountId = useAccounts(ctx => ctx.currentAccountId)
-  const accountConfig = useAutoReplyConfigStore(state => state.contexts[currentAccountId]?.config)
-  const updateConfig = useAutoReplyConfigStore(state => state.updateConfig)
-  const config = mergeWithoutArray(createDefaultConfig(), accountConfig ?? {})
+  const config = mergeWithoutArray(
+    createDefaultConfig(),
+    store.contexts[currentAccountId]?.config ?? {},
+  )
 
   return {
     config,
     updateKeywordRules: (rules: AutoReplyConfig['comment']['keywordReply']['rules']) => {
-      updateConfig(currentAccountId, {
+      store.updateConfig(currentAccountId, {
         comment: { keywordReply: { rules } },
       })
     },
     updateAIReplySettings: (settings: DeepPartial<AutoReplyConfig['comment']['aiReply']>) => {
-      updateConfig(currentAccountId, { comment: { aiReply: settings } })
+      store.updateConfig(currentAccountId, { comment: { aiReply: settings } })
     },
     updateGeneralSettings: (
       settings: DeepPartial<Pick<AutoReplyConfig, 'entry' | 'hideUsername'>>,
     ) => {
-      updateConfig(currentAccountId, settings)
+      store.updateConfig(currentAccountId, settings)
     },
     updateEventReplyContents: (
       replyType: EventMessageType,
       contents: SimpleEventReplyMessage[],
     ) => {
-      updateConfig(currentAccountId, {
+      store.updateConfig(currentAccountId, {
         [replyType]: { messages: contents },
       })
     },
     updateBlockList: (blockList: string[]) => {
-      updateConfig(currentAccountId, { blockList })
+      store.updateConfig(currentAccountId, { blockList })
     },
     updateKeywordReplyEnabled: (enable: boolean) => {
-      updateConfig(currentAccountId, {
+      store.updateConfig(currentAccountId, {
         comment: { keywordReply: { enable } },
       })
     },
     updateEventReplyEnabled: (replyType: EventMessageType, enable: boolean) => {
-      updateConfig(currentAccountId, {
+      store.updateConfig(currentAccountId, {
         [replyType]: { enable },
       })
     },
@@ -303,15 +321,15 @@ export const useAutoReplyConfig = () => {
       replyType: T,
       options: AutoReplyConfig[T]['options'],
     ) => {
-      updateConfig(currentAccountId, {
+      store.updateConfig(currentAccountId, {
         [replyType]: { options },
       })
     },
     updateWSConfig: (wsConfig: DeepPartial<AutoReplyConfig['ws']>) => {
-      updateConfig(currentAccountId, { ws: wsConfig })
+      store.updateConfig(currentAccountId, { ws: wsConfig })
     },
     updatePinCommentConfig: (pinCommentConfig: DeepPartial<AutoReplyConfig['pinComment']>) => {
-      updateConfig(currentAccountId, {
+      store.updateConfig(currentAccountId, {
         pinComment: pinCommentConfig,
       })
     },
@@ -320,17 +338,15 @@ export const useAutoReplyConfig = () => {
 
 // Hook: 自动加载配置
 export function useLoadAutoReplyConfigOnLogin() {
-  const loadUserContexts = useAutoReplyConfigStore(state => state.loadUserContexts)
-  const isAuthenticated = useAuthStore(state => state.isAuthenticated)
-  const userId = useAuthStore(state => state.user?.id ?? null)
+  const { loadUserContexts } = useAutoReplyConfigStore()
+  const { isAuthenticated, user } = useAuthStore()
 
   useEffect(() => {
-    if (isAuthenticated && userId) {
+    if (isAuthenticated && user?.id) {
       // 延迟加载，确保存储系统已初始化
       setTimeout(() => {
-        console.log('[AutoReplyConfig] 加载用户配置:', userId)
-        loadUserContexts(userId)
+        loadUserContexts(user.id)
       }, 0)
     }
-  }, [isAuthenticated, userId, loadUserContexts])
+  }, [isAuthenticated, user?.id, loadUserContexts])
 }

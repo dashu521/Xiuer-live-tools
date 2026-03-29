@@ -14,6 +14,8 @@ import { storageManager } from './StorageManager'
  * 初始化存储系统
  */
 export function initializeStorage(): void {
+  const enableStorageDiagnostics = import.meta.env.DEV
+
   // 注册适配器
   const localStorageAdapter = new LocalStorageAdapter()
   storageManager.registerAdapter(localStorageAdapter)
@@ -21,17 +23,15 @@ export function initializeStorage(): void {
   const secureStorageAdapter = new SecureStorageAdapter()
   storageManager.registerAdapter(secureStorageAdapter)
 
-  // 连接监控器
-  storageManager.addEventListener(event => {
-    storageMonitor.recordEvent(event)
-  })
+  if (enableStorageDiagnostics) {
+    storageManager.addEventListener(event => {
+      storageMonitor.recordEvent(event)
+    })
 
-  // 添加告警监听器
-  storageMonitor.addAlertListener(alert => {
-    console.warn('[Storage Alert]', alert)
-  })
-
-  console.log('[Storage] Storage system initialized')
+    storageMonitor.addAlertListener(alert => {
+      console.warn('[Storage Alert]', alert)
+    })
+  }
 }
 
 /**
@@ -43,8 +43,6 @@ export function initializeUserStorage(userId: string): void {
   storageManager.setCurrentUser(userId)
 
   // 首发版：不需要数据迁移，所有数据都是新格式
-
-  console.log('[Storage] User storage initialized:', userId)
 }
 
 /**
@@ -57,8 +55,6 @@ export function cleanupUserStorage(userId: string, preserveAccounts = true): voi
 
   // 清除当前用户
   storageManager.setCurrentUser(null)
-
-  console.log('[Storage] User storage cleaned up:', userId)
 }
 
 /**

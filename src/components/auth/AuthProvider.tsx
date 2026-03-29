@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isOffline = useIsOffline()
   const navigate = useNavigate()
   const accessContext = useAccessContext()
-  const runPendingActionAndClear = useGateStore(state => state.runPendingActionAndClear)
+  const { runPendingActionAndClear } = useGateStore()
   const refreshUserStatus = useAuthStore(s => s.refreshUserStatus)
   const clearTokensAndUnauth = useAuthStore(s => s.clearTokensAndUnauth)
   const { toast } = useToast()
@@ -192,11 +192,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const doHeartbeat = useCallback(async () => {
     // 停止条件检查
     if (!isAuthenticated || isKickedOutRef.current) {
-      console.log('[Heartbeat] Skipping: not authenticated or already kicked out')
       return
     }
-
-    console.log('[Heartbeat] Checking session...')
 
     try {
       const result = await sessionCheck()
@@ -216,8 +213,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           )
         }
         // 其他错误（如网络问题）不处理，让下次心跳继续检测
-      } else {
-        console.log('[Heartbeat] Session is valid')
       }
     } catch (error) {
       console.error('[Heartbeat] Unexpected error during heartbeat:', error)
@@ -246,8 +241,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     heartbeatTimerRef.current = setInterval(() => {
       void doHeartbeat()
     }, interval)
-
-    console.log('[Heartbeat] Started with interval:', interval, 'ms')
   }, [doHeartbeat])
 
   /**
@@ -257,7 +250,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (heartbeatTimerRef.current) {
       clearInterval(heartbeatTimerRef.current)
       heartbeatTimerRef.current = null
-      console.log('[Heartbeat] Stopped')
     }
   }, [])
 
@@ -274,8 +266,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const handleVisibilityChange = () => {
       const isVisible = document.visibilityState === 'visible'
       isPageVisibleRef.current = isVisible
-
-      console.log('[Heartbeat] Page visibility changed:', isVisible ? 'visible' : 'hidden')
 
       // 如果心跳正在运行，根据可见性调整频率
       if (heartbeatTimerRef.current && isAuthenticated && !isKickedOutRef.current) {

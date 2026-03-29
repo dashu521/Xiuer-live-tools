@@ -15,7 +15,11 @@ import { useAccounts } from '@/hooks/useAccounts'
 import { useCurrentAutoMessage } from '@/hooks/useAutoMessage'
 import { useCurrentAutoPopUp } from '@/hooks/useAutoPopUp'
 import { useAutoReply } from '@/hooks/useAutoReply'
-import { useCurrentChromeConfig, useCurrentChromeConfigActions } from '@/hooks/useChromeConfig'
+import {
+  useCurrentChromeConfig,
+  useCurrentChromeConfigActions,
+  useCurrentSelectedBrowser,
+} from '@/hooks/useChromeConfig'
 import { useCurrentLiveControl } from '@/hooks/useLiveControl'
 import { useLiveStatsStore } from '@/hooks/useLiveStats'
 import { useToast } from '@/hooks/useToast'
@@ -264,8 +268,9 @@ const getPlatformName = (platform: string) => {
 
 const ConnectToLiveControl = React.memo(() => {
   const connectState = useCurrentLiveControl(context => context.connectState)
-  const chromePath = useCurrentChromeConfig(context => context.path)
+  const browserPath = useCurrentChromeConfig(context => context.path)
   const storageState = useCurrentChromeConfig(context => context.storageState)
+  const selectedBrowser = useCurrentSelectedBrowser()
   let headless = useCurrentChromeConfig(context => context.headless ?? false)
   const account = useAccounts(store => store.getCurrentAccount())
   const connectRequestInFlightRef = useRef(false)
@@ -297,15 +302,17 @@ const ConnectToLiveControl = React.memo(() => {
           console.log(`[conn][${account.id}][${traceId}] UI 点击连接`, {
             accountId: account.id,
             platform: connectState.platform,
+            browser: selectedBrowser?.name || 'auto',
           })
           console.log('[State Machine] selectedPlatformId:', connectState.platform)
           console.log('[State Machine] headless config:', headless)
+          console.log('[State Machine] selected browser:', selectedBrowser)
           console.log('[State Machine] 主进程状态机开始连接')
 
           connectRequestInFlightRef.current = true
           const result = (await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.liveControl.connect, {
             headless,
-            chromePath,
+            browserPath,
             storageState,
             platform: connectState.platform as LiveControlPlatform,
             account,
