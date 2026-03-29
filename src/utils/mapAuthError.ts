@@ -27,6 +27,7 @@ const SMS_ERROR_MAP: Record<string, string> = {
   invalid_code: '验证码不对，请重新输入',
   code_expired: '验证码已经过期了，请重新获取',
   sms_send_failed: '短信发送失败，稍后再试一下',
+  sms_verify_failed: '短信验证码校验服务异常，请稍后重试',
 }
 
 /** 对象形式的鉴权错误入参，与 AuthErrorInput 的对象分支一致 */

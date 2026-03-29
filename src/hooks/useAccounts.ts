@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
-import { buildAccessContext, checkAccess, PLAN_TEXT_MAP } from '@/domain/access'
-import { useAuthStore } from '@/stores/authStore'
+import { buildAccessContext, checkAccess } from '@/domain/access/AccessControl'
+import { PLAN_TEXT_MAP } from '@/domain/access/planRules'
 import { flushAllPersists, flushPersist, schedulePersist } from '@/utils/debouncedPersist'
 import { EVENTS, eventEmitter } from '@/utils/events'
 import { storageManager } from '@/utils/storage/StorageManager'
@@ -357,26 +357,3 @@ export const useAccounts = create<AccountsStore>()(
     },
   })),
 )
-
-// 监听用户变化，自动切换数据
-// 返回清理函数，避免HMR热更新时重复订阅
-const unsubscribe =
-  typeof useAuthStore?.subscribe === 'function'
-    ? useAuthStore.subscribe((state, prevState) => {
-        const currentUserId = state.user?.id
-        const prevUserId = prevState.user?.id
-
-        // 用户登录
-        if (currentUserId && currentUserId !== prevUserId) {
-          useAccounts.getState().loadUserAccounts(currentUserId)
-        }
-
-        // 用户登出
-        if (!currentUserId && prevUserId) {
-          useAccounts.getState().reset()
-        }
-      })
-    : () => {}
-
-// 导出清理函数，供需要时使用
-export { unsubscribe }

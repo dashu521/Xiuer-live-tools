@@ -2,6 +2,7 @@
 import logging
 import re
 import time
+import unicodedata
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -27,6 +28,7 @@ from schemas import (
     err_phone_not_registered,
     err_sms_code_invalid_or_expired,
     err_sms_send_failed,
+    err_sms_verify_failed,
 )
 from sms_service import (
     SMS_CODE_EXPIRE_SECONDS,
@@ -66,6 +68,45 @@ def sms_status():
 
 def is_valid_phone(phone: str) -> bool:
     return bool(re.match(r"^1[3-9]\d{9}$", phone))
+
+
+def normalize_phone_input(phone: str) -> str:
+    normalized = unicodedata.normalize("NFKC", phone or "")
+    return re.sub(r"\D", "", normalized)
+
+
+def normalize_sms_code_input(code: str) -> str:
+    normalized = unicodedata.normalize("NFKC", code or "")
+    return re.sub(r"\s+", "", normalized)
+
+
+def is_invalid_sms_verify_message(message: Optional[str]) -> bool:
+    if not message:
+        return False
+    normalized = message.lower()
+    return any(
+        token in normalized
+        for token in (
+            "invalid_code",
+            "code_expired",
+            "not_supported",
+            "验证码错误",
+            "已过期",
+            "unknown",
+        )
+    )
+
+
+def raise_sms_verify_exception(phone: str, code: str, verify_msg: Optional[str]) -> None:
+    logger.warning(
+        "[SMS] verify failed: phone=%s code_suffix=%s verify_msg=%s",
+        mask_phone(phone),
+        code[-2:] if code else "",
+        verify_msg,
+    )
+    if is_invalid_sms_verify_message(verify_msg):
+        raise HTTPException(status_code=400, detail=err_sms_code_invalid_or_expired())
+    raise HTTPException(status_code=503, detail=err_sms_verify_failed())
 
 
 def get_client_ip(request: Request) -> str:
@@ -163,7 +204,7 @@ def send_sms(
     body: Optional[SendCodeBody] = Body(default=None),
     phone: Optional[str] = Query(default=None, description="11 位手机号"),
 ):
-    phone = (body.phone if body else phone) or ""
+    phone = normalize_phone_input((body.phone if body else phone) or "")
     request_id = getattr(request.state, "request_id", "unknown")
     client_ip = get_client_ip(request)
 
@@ -241,8 +282,8 @@ def login_with_sms(
     phone: Optional[str] = Query(default=None, description="11 位手机号"),
     code: Optional[str] = Query(default=None, description="6 位验证码"),
 ):
-    phone = (body.phone if body else phone) or ""
-    code = (body.code if body else code) or ""
+    phone = normalize_phone_input((body.phone if body else phone) or "")
+    code = normalize_sms_code_input((body.code if body else code) or "")
     allowed, error = check_brute_force(db, phone)
     if not allowed:
         logger.warning(f"[SMS] brute force check failed: phone={mask_phone(phone)}")
@@ -268,7 +309,7 @@ def login_with_sms(
         if verify_success:
             verified_ok = True
         if not verified_ok:
-            raise HTTPException(status_code=400, detail=err_sms_code_invalid_or_expired())
+            raise_sms_verify_exception(phone, code, verify_msg)
     elif not verified_ok:
         verify_success, verify_msg = sms_service.verify(phone, code)
         if verify_msg == "not_supported":
@@ -276,7 +317,7 @@ def login_with_sms(
         elif verify_success:
             verified_ok = True
         if not verified_ok:
-            raise HTTPException(status_code=400, detail=err_sms_code_invalid_or_expired())
+            raise_sms_verify_exception(phone, code, verify_msg)
 
     if not verified_ok:
         raise HTTPException(status_code=400, detail=err_sms_code_invalid_or_expired())
@@ -334,8 +375,8 @@ def reset_password_sms(
     new_password: Optional[str] = Query(default=None, description="新密码（至少 6 位）"),
 ):
     """POST /auth/sms/reset-password：通过手机验证码重置密码（忘记密码）"""
-    phone = (body.phone if body else phone) or ""
-    code = (body.code if body else code) or ""
+    phone = normalize_phone_input((body.phone if body else phone) or "")
+    code = normalize_sms_code_input((body.code if body else code) or "")
     new_password = (body.new_password if body else new_password) or ""
     if not is_valid_phone(phone):
         raise HTTPException(status_code=422, detail=err_phone_format_error())
@@ -364,7 +405,7 @@ def reset_password_sms(
         if verify_success:
             verified_ok = True
         if not verified_ok:
-            raise HTTPException(status_code=400, detail=err_sms_code_invalid_or_expired())
+            raise_sms_verify_exception(phone, code, verify_msg)
     elif not verified_ok:
         verify_success, verify_msg = sms_service.verify(phone, code)
         if verify_msg == "not_supported":
@@ -372,7 +413,7 @@ def reset_password_sms(
         elif verify_success:
             verified_ok = True
         if not verified_ok:
-            raise HTTPException(status_code=400, detail=err_sms_code_invalid_or_expired())
+            raise_sms_verify_exception(phone, code, verify_msg)
 
     if not verified_ok:
         raise HTTPException(status_code=400, detail=err_sms_code_invalid_or_expired())

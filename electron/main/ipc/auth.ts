@@ -2,25 +2,8 @@ import { ipcMain } from 'electron'
 import { IPC_CHANNELS } from '../../../shared/ipcChannels'
 import type { LoginCredentials, RegisterData, User } from '../../../src/types/auth'
 import { getAuthApiBaseUrl } from '../config/buildTimeConfig'
-import { AuthService } from '../services/AuthService'
-import {
-  clearStoredTokens,
-  fixTokenFilePermissions,
-  getStoredTokens,
-  setStoredTokens,
-} from '../services/CloudAuthStorage'
-import {
-  cloudLogin,
-  cloudMe,
-  cloudRefresh,
-  cloudRegister,
-  cloudSmsLogin,
-} from '../services/cloudAuthClient'
 import { cloudUserToSafeUser } from '../services/cloudAuthMappers'
 import windowManager from '../windowManager'
-
-// 启动时修复已有 token 文件权限
-fixTokenFilePermissions()
 
 const getEffectiveBase = (): string => {
   return getAuthApiBaseUrl()
@@ -71,6 +54,41 @@ const AUTH_PROXY_ALLOWLIST: Array<{ method: string; pattern: RegExp }> = [
 ]
 
 let messageStreamAbortController: AbortController | null = null
+let authServiceModulePromise: Promise<typeof import('../services/AuthService')> | null = null
+let cloudAuthStorageModulePromise: Promise<typeof import('../services/CloudAuthStorage')> | null =
+  null
+let cloudAuthClientModulePromise: Promise<typeof import('../services/cloudAuthClient')> | null =
+  null
+
+async function getAuthService() {
+  if (!authServiceModulePromise) {
+    authServiceModulePromise = import('../services/AuthService')
+  }
+  return (await authServiceModulePromise).AuthService
+}
+
+async function getCloudAuthStorage() {
+  if (!cloudAuthStorageModulePromise) {
+    cloudAuthStorageModulePromise = import('../services/CloudAuthStorage')
+  }
+  return cloudAuthStorageModulePromise
+}
+
+async function getCloudAuthClient() {
+  if (!cloudAuthClientModulePromise) {
+    cloudAuthClientModulePromise = import('../services/cloudAuthClient')
+  }
+  return cloudAuthClientModulePromise
+}
+
+async function fixCloudTokenPermissions() {
+  try {
+    const storage = await getCloudAuthStorage()
+    storage.fixTokenFilePermissions()
+  } catch (error) {
+    console.warn('[AUTH-AUDIT] fixTokenFilePermissions failed:', error)
+  }
+}
 
 function normalizeErrorDetail(
   error: unknown,
@@ -158,7 +176,8 @@ async function storeCloudTokens(
   accessToken: string,
   refreshToken: string | null | undefined,
 ): Promise<void> {
-  await setStoredTokens({
+  const storage = await getCloudAuthStorage()
+  storage.setStoredTokens({
     access_token: accessToken,
     refresh_token: refreshToken ?? accessToken,
   })
@@ -169,15 +188,17 @@ async function refreshStoredCloudSession(): Promise<{
   accessToken?: string
   error?: { code?: string; message?: string }
 }> {
-  const { refresh_token } = getStoredTokens()
+  const storage = await getCloudAuthStorage()
+  const { refresh_token } = storage.getStoredTokens()
   if (!refresh_token) {
-    clearStoredTokens()
+    storage.clearStoredTokens()
     return { success: false, error: { code: 'token_invalid', message: '缺少 refresh token' } }
   }
 
+  const { cloudRefresh } = await getCloudAuthClient()
   const refreshRes = await cloudRefresh(refresh_token)
   if (!refreshRes.success || !refreshRes.access_token) {
-    clearStoredTokens()
+    storage.clearStoredTokens()
     return {
       success: false,
       error: normalizeErrorDetail(refreshRes.error, '刷新会话失败'),
@@ -189,9 +210,11 @@ async function refreshStoredCloudSession(): Promise<{
 }
 
 async function getSafeCloudUserFromStoredSession(): Promise<SafeUser | null> {
-  const { access_token } = getStoredTokens()
+  const storage = await getCloudAuthStorage()
+  const { access_token } = storage.getStoredTokens()
   if (!access_token) return null
 
+  const { cloudMe } = await getCloudAuthClient()
   let meRes = await cloudMe(access_token)
   if (meRes.success && meRes.user) {
     return cloudUserToSafeUser(meRes.user)
@@ -215,11 +238,13 @@ async function getStoredSafeUser(): Promise<SafeUser | null> {
     return getSafeCloudUserFromStoredSession()
   }
 
-  const { access_token } = getStoredTokens()
+  const storage = await getCloudAuthStorage()
+  const { access_token } = storage.getStoredTokens()
   if (!access_token) {
     return null
   }
 
+  const AuthService = await getAuthService()
   const user = AuthService.getCurrentUser(access_token)
   return user ? AuthService.sanitizeUser(user) : null
 }
@@ -243,7 +268,8 @@ async function executeAuthenticatedProxyRequest(
     }
   }
 
-  const { access_token, refresh_token } = getStoredTokens()
+  const storage = await getCloudAuthStorage()
+  const { access_token, refresh_token } = storage.getStoredTokens()
   if (!access_token) {
     return {
       success: false,
@@ -271,7 +297,7 @@ async function executeAuthenticatedProxyRequest(
   let result = await performRequest(access_token)
   if (result.success || result.status !== 401 || !refresh_token) {
     if (!result.success && result.status === 401) {
-      clearStoredTokens()
+      storage.clearStoredTokens()
     }
     return result
   }
@@ -287,7 +313,7 @@ async function executeAuthenticatedProxyRequest(
 
   result = await performRequest(refreshed.accessToken)
   if (!result.success && result.status === 401) {
-    clearStoredTokens()
+    storage.clearStoredTokens()
   }
   return result
 }
@@ -302,6 +328,7 @@ async function ensureCloudUser(
   if (!accessToken) {
     return undefined
   }
+  const { cloudMe } = await getCloudAuthClient()
   const meRes = await cloudMe(accessToken)
   if (!meRes.success || !meRes.user) {
     return undefined
@@ -342,6 +369,7 @@ function parseMessageStreamEvent(block: string): { type: 'snapshot'; payload: un
 
 export function setupAuthHandlers() {
   logAuthAuditConfig()
+  void fixCloudTokenPermissions()
   // ----- 云鉴权：恢复会话（启动时 refresh -> me） -----
   ipcMain.handle(IPC_CHANNELS.auth.restoreSession, async () => {
     const user = await getStoredSafeUser()
@@ -369,6 +397,7 @@ export function setupAuthHandlers() {
       if (!identifier) {
         return { success: false, error: '请输入手机号或邮箱' }
       }
+      const { cloudRegister } = await getCloudAuthClient()
       const res = await cloudRegister(identifier, data.password)
       if (!res.success) {
         // [FIX] 将 error 对象转为字符串
@@ -393,9 +422,11 @@ export function setupAuthHandlers() {
         user,
       }
     }
+    const AuthService = await getAuthService()
     const result = await AuthService.register(data)
     if (result.success && result.token) {
-      await setStoredTokens({
+      const storage = await getCloudAuthStorage()
+      storage.setStoredTokens({
         access_token: result.token,
         refresh_token: result.token,
       })
@@ -414,6 +445,7 @@ export function setupAuthHandlers() {
       if (!identifier) {
         return { success: false, error: '请输入手机号或邮箱' }
       }
+      const { cloudLogin } = await getCloudAuthClient()
       const res = await cloudLogin(identifier, credentials.password)
       if (!res.success) {
         // 根据后端返回的错误信息判断错误类型
@@ -462,9 +494,11 @@ export function setupAuthHandlers() {
         user,
       }
     }
+    const AuthService = await getAuthService()
     const result = await AuthService.login(credentials)
     if (result.success && result.token) {
-      await setStoredTokens({
+      const storage = await getCloudAuthStorage()
+      storage.setStoredTokens({
         access_token: result.token,
         refresh_token: result.token,
       })
@@ -482,6 +516,7 @@ export function setupAuthHandlers() {
     if (!USE_CLOUD_AUTH) {
       return { success: false, error: '云鉴权未启用' }
     }
+    const { cloudSmsLogin } = await getCloudAuthClient()
     const res = await cloudSmsLogin(phone, code)
     if (!res.success) {
       const errorMessage =
@@ -514,13 +549,15 @@ export function setupAuthHandlers() {
 
   // Logout
   ipcMain.handle(IPC_CHANNELS.auth.logout, async () => {
-    const { access_token } = getStoredTokens()
+    const storage = await getCloudAuthStorage()
+    const { access_token } = storage.getStoredTokens()
     if (USE_CLOUD_AUTH) {
-      clearStoredTokens()
+      storage.clearStoredTokens()
       return true
     }
+    const AuthService = await getAuthService()
     const result = access_token ? AuthService.logout(access_token) : true
-    clearStoredTokens()
+    storage.clearStoredTokens()
     return result
   })
 
@@ -537,6 +574,7 @@ export function setupAuthHandlers() {
   // Check feature access（IPC 只暴露 SafeUser）
   ipcMain.handle(IPC_CHANNELS.auth.checkFeatureAccess, async (_, feature: string) => {
     const user = await getStoredSafeUser()
+    const AuthService = await getAuthService()
     const requiresAuth = AuthService.requiresAuthentication(feature)
     const requiredPlan = AuthService.getRequiredPlan(feature)
     const featureAccess = {
@@ -566,7 +604,8 @@ export function setupAuthHandlers() {
    * 替代 auth:getTokens，不返回完整 token
    */
   ipcMain.handle(IPC_CHANNELS.auth.getAuthSummary, async () => {
-    const tokens = await getStoredTokens()
+    const storage = await getCloudAuthStorage()
+    const tokens = storage.getStoredTokens()
     // 不返回 token 内容，只返回是否存在
     return {
       isAuthenticated: !!tokens.access_token,
@@ -593,7 +632,8 @@ export function setupAuthHandlers() {
       messageStreamAbortController = null
     }
 
-    const { access_token } = getStoredTokens()
+    const storage = await getCloudAuthStorage()
+    const { access_token } = storage.getStoredTokens()
     if (!access_token) {
       return { success: false, error: '未登录或会话已失效' }
     }
@@ -708,6 +748,7 @@ export function setupAuthHandlers() {
   // ipcMain.handle('auth:setTokens', ... ) // REMOVED - 登录流程内部处理
 
   ipcMain.handle(IPC_CHANNELS.auth.clearTokens, async () => {
-    await clearStoredTokens()
+    const storage = await getCloudAuthStorage()
+    storage.clearStoredTokens()
   })
 }

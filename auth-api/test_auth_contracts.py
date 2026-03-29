@@ -28,6 +28,16 @@ class _FailingSmsService:
         return False, "invalid_code"
 
 
+class _VerifyUnavailableSmsService:
+    mode = "aliyun_dypns"
+
+    async def send(self, phone: str, code: str):
+        return True, None
+
+    def verify(self, phone: str, code: str):
+        return False, "service_unavailable"
+
+
 class AuthContractTests(unittest.TestCase):
     def setUp(self):
         with engine.begin() as conn:
@@ -93,6 +103,24 @@ class AuthContractTests(unittest.TestCase):
 
         self.assertEqual(data["access_token"], data["token"])
         self.assertTrue(data["refresh_token"])
+
+    def test_sms_login_accepts_normalized_code_input(self):
+        phone = "13800000019"
+        self._insert_sms_code(phone, "123456")
+
+        response = self.client.post("/auth/sms/login", json={"phone": f" {phone} ", "code": " 123456 "})
+        self.assertEqual(response.status_code, 200, response.text)
+
+    def test_sms_verify_service_error_is_not_reported_as_invalid_code(self):
+        phone = "13800000020"
+        with patch("routers.sms.get_sms_service", return_value=_VerifyUnavailableSmsService()):
+            response = self.client.post("/auth/sms/login", json={"phone": phone, "code": "123456"})
+
+        self.assertEqual(response.status_code, 503, response.text)
+        self.assertEqual(
+            response.json()["detail"],
+            {"code": "sms_verify_failed", "message": "短信验证码校验服务异常，请稍后重试"},
+        )
 
     def test_sms_errors_are_structured_and_do_not_expose_vendor_details(self):
         invalid_phone = self.client.post("/auth/sms/send", json={"phone": "123"})

@@ -51,6 +51,14 @@ const MODE_CONFIG = {
   },
 } as const
 
+export function normalizePhoneInput(value: string): string {
+  return value.replace(/\D/g, '').slice(0, 11)
+}
+
+export function normalizeCodeInput(value: string): string {
+  return value.replace(/\D/g, '').slice(0, 6)
+}
+
 export function PhoneAuthDialog({
   isOpen,
   onClose,
@@ -95,15 +103,17 @@ export function PhoneAuthDialog({
   }, [countdown])
 
   const validatePhone = (): string | null => {
+    const normalizedPhone = normalizePhoneInput(phone)
     const phoneRegex = /^1[3-9]\d{9}$/
-    if (!phone || !phone.trim()) return '请输入手机号'
-    if (!phoneRegex.test(phone)) return '手机号格式不对，请检查一下'
+    if (!normalizedPhone) return '请输入手机号'
+    if (!phoneRegex.test(normalizedPhone)) return '手机号格式不对，请检查一下'
     return null
   }
 
   const validateCode = (): string | null => {
-    if (!code || !code.trim()) return '请输入验证码'
-    if (code.length !== 6) return '验证码是 6 位数字'
+    const normalizedCode = normalizeCodeInput(code)
+    if (!normalizedCode) return '请输入验证码'
+    if (normalizedCode.length !== 6) return '验证码是 6 位数字'
     return null
   }
 
@@ -122,7 +132,7 @@ export function PhoneAuthDialog({
 
     setIsSubmitting(true)
     try {
-      const result = await sendSmsCode(phone)
+      const result = await sendSmsCode(normalizePhoneInput(phone))
       if (result.ok && result.data?.success) {
         const smsFailed = result.data?.sms_failed
         if (smsFailed) {
@@ -206,7 +216,9 @@ export function PhoneAuthDialog({
         return
       }
 
-      const result = (await authAPI.loginWithSms(phone, code)) as {
+      const normalizedPhone = normalizePhoneInput(phone)
+      const normalizedCode = normalizeCodeInput(code)
+      const result = (await authAPI.loginWithSms(normalizedPhone, normalizedCode)) as {
         success: boolean
         user?: {
           id: string
@@ -321,7 +333,11 @@ export function PhoneAuthDialog({
 
     setIsSubmitting(true)
     try {
-      const result = await resetPasswordWithSms(phone, code, newPassword)
+      const result = await resetPasswordWithSms(
+        normalizePhoneInput(phone),
+        normalizeCodeInput(code),
+        newPassword,
+      )
       if (result.ok) {
         toast.success({
           title: '密码已重置',
@@ -421,7 +437,7 @@ export function PhoneAuthDialog({
                   type="tel"
                   placeholder="请输入手机号"
                   value={phone}
-                  onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                  onChange={e => setPhone(normalizePhoneInput(e.target.value))}
                   className="h-10 rounded-lg text-sm mt-1"
                   style={{
                     backgroundColor: 'var(--input-bg)',
@@ -447,7 +463,7 @@ export function PhoneAuthDialog({
                     type="text"
                     placeholder="请输入验证码"
                     value={code}
-                    onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    onChange={e => setCode(normalizeCodeInput(e.target.value))}
                     className="h-10 rounded-lg text-sm flex-1"
                     style={{
                       backgroundColor: 'var(--input-bg)',

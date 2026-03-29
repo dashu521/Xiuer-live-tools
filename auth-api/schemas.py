@@ -230,6 +230,10 @@ def err_sms_send_failed() -> dict:
     return {"code": "sms_send_failed", "message": "短信发送失败"}
 
 
+def err_sms_verify_failed() -> dict:
+    return {"code": "sms_verify_failed", "message": "短信验证码校验服务异常，请稍后重试"}
+
+
 # ----- 礼品卡相关 -----
 class RedeemGiftCardBody(BaseModel):
     code: str = Field(..., min_length=1, max_length=14, description="兑换码")

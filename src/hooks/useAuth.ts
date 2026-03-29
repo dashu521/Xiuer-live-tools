@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { normalizePlan, PLAN_TEXT_MAP } from '@/domain/access'
+import { normalizePlan, PLAN_TEXT_MAP } from '@/domain/access/planRules'
 import { useAuthStore } from '@/stores/authStore'
 
 export function useAuthInit() {

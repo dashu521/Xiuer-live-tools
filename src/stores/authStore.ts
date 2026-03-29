@@ -561,6 +561,20 @@ export const useAuthStore = create<AuthStore>()(
         set({ isLoading: true, authCheckDone: false })
 
         try {
+          if (typeof window === 'undefined' || !window.authAPI?.getAuthSummary) {
+            set({
+              isAuthenticated: false,
+              user: null,
+              token: null,
+              refreshToken: null,
+              isLoading: false,
+              authCheckDone: true,
+              isOffline: false,
+              error: null,
+            })
+            return
+          }
+
           const summary = await window.authAPI.getAuthSummary()
           if (!summary.hasToken) {
             set({
