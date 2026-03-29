@@ -252,6 +252,52 @@
 - 停止一个消费者时，只释放自己的监听占用；只有无消费者时才真正关闭底层监听
 - `shared/ipcChannels.ts`、preload whitelist、renderer 监听名称必须同步为 `commentListener`
 
+### 3.6 浏览器选择与浏览器会话
+
+当前原则：
+
+- 浏览器连接配置不再只是一条浏览器路径，而是“浏览器选择 + 候选列表 + 手动导入 + 可启动验证”的组合
+- 自动检测与连接实际使用的浏览器必须共享同一份账号级配置
+- 浏览器检测需要区分“发现可执行文件”和“浏览器可被会话管理器成功拉起”两个阶段
+
+主文件：
+
+- `/Users/xiuer/TRAE-CN/Xiuer-live-tools/electron/main/ipc/browser.ts`
+- `/Users/xiuer/TRAE-CN/Xiuer-live-tools/electron/main/utils/checkChrome.ts`
+- `/Users/xiuer/TRAE-CN/Xiuer-live-tools/electron/main/managers/BrowserSessionManager.ts`
+- `/Users/xiuer/TRAE-CN/Xiuer-live-tools/src/hooks/useChromeConfig.ts`
+- `/Users/xiuer/TRAE-CN/Xiuer-live-tools/src/pages/SettingsPage/components/CoreConfigCard.tsx`
+- `/Users/xiuer/TRAE-CN/Xiuer-live-tools/shared/browser.ts`
+
+约束：
+
+- 连接中控台时，页面层只能提交 shared 契约定义的浏览器参数，不允许重新拼装私有字段
+- 浏览器候选列表、默认浏览器、浏览器测试结果必须落在同一份账号级配置中
+- 若扩展 Chromium 兼容浏览器支持，必须同步更新 shared 类型、preload whitelist 和设置页交互
+
+### 3.7 本地持久化与最终一致同步
+
+当前原则：
+
+- 账号级和高频 UI 配置应优先通过短防抖 / 批量写入落盘，避免每次状态变化都立即写存储
+- 切用户、切账号、退出前必须提供 flush 机制，确保关键配置不会因节流丢失
+- 云端配置同步以“最终一致”为目标，不要求每一次本地变更都立即上云
+
+主文件：
+
+- `/Users/xiuer/TRAE-CN/Xiuer-live-tools/src/utils/debouncedPersist.ts`
+- `/Users/xiuer/TRAE-CN/Xiuer-live-tools/src/hooks/accountScopedContextStorage.ts`
+- `/Users/xiuer/TRAE-CN/Xiuer-live-tools/src/hooks/useAccounts.ts`
+- `/Users/xiuer/TRAE-CN/Xiuer-live-tools/src/hooks/useLiveControl.ts`
+- `/Users/xiuer/TRAE-CN/Xiuer-live-tools/src/hooks/useChromeConfig.ts`
+- `/Users/xiuer/TRAE-CN/Xiuer-live-tools/src/services/configSyncService.ts`
+
+约束：
+
+- 高频运行态、临时态不应直接触发云同步
+- 本地持久化节流后，必须补充回归测试覆盖“恢复启动”“切用户”“切账号”的最终状态
+- 调整 shared 契约或持久化字段时，必须同步审查云端配置契约是否受影响
+
 ---
 
 ## 4. 模块依赖规则
