@@ -1,9 +1,9 @@
 /**
  * 账号状态管理 Hook
- * 集中管理所有账号的任务运行状态
+ * 事件驱动聚合所有账号的连接与任务运行状态
  */
 
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect } from 'react'
 import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
 import type {
@@ -14,21 +14,17 @@ import type {
 } from '@/types/account-status'
 import { taskStateManager } from '@/utils/TaskStateManager'
 import { useAccounts } from './useAccounts'
+import { useAutoMessageStore } from './useAutoMessage'
+import { useAutoPopUpStore } from './useAutoPopUp'
+import { useAutoReplyStore } from './useAutoReply'
 import { useLiveControlStore } from './useLiveControl'
+import { useLiveStatsStore } from './useLiveStats'
 
-/**
- * 账号状态 Store
- */
 interface AccountStatusStore {
-  /** 所有账号状态 */
   statusMap: AccountStatusMap
-  /** 更新账号状态 */
   updateAccountStatus: (accountId: string, state: Partial<AccountTaskState>) => void
-  /** 设置完整状态映射 */
   setStatusMap: (map: AccountStatusMap) => void
-  /** 获取账号状态 */
   getAccountStatus: (accountId: string) => AccountTaskState | undefined
-  /** 清理账号状态 */
   removeAccountStatus: (accountId: string) => void
 }
 
@@ -52,9 +48,7 @@ const useAccountStatusStore = create<AccountStatusStore>()(
 
     setStatusMap: map => set({ statusMap: map }),
 
-    getAccountStatus: accountId => {
-      return get().statusMap[accountId]
-    },
+    getAccountStatus: accountId => get().statusMap[accountId],
 
     removeAccountStatus: accountId => {
       set(prev => {
@@ -66,177 +60,293 @@ const useAccountStatusStore = create<AccountStatusStore>()(
   })),
 )
 
-/**
- * 账号状态管理 Hook
- */
+type Unsubscribe = () => void
+
+let syncRefCount = 0
+let syncCleanups: Unsubscribe[] = []
+
+type TaskSignal = {
+  autoMessageRunning: boolean
+  autoPopUpRunning: boolean
+  autoReplyRunning: boolean
+  autoReplyListening: string
+  liveStatsListening: boolean
+}
+
+type TaskSignalEntry = [string, TaskSignal]
+type LiveControlSignalEntry = [string, ConnectionStatus]
+
+function getConnectionStatus(accountId: string): ConnectionStatus {
+  const connectState = useLiveControlStore.getState().contexts[accountId]?.connectState
+  switch (connectState?.status) {
+    case 'connecting':
+      return 'connecting'
+    case 'connected':
+      return 'connected'
+    case 'disconnected':
+      return 'disconnected'
+    case 'error':
+      return 'error'
+    default:
+      return 'disconnected'
+  }
+}
+
+function getTaskStatuses(accountId: string): TaskStatusInfo[] {
+  return taskStateManager
+    .getTaskStates(accountId)
+    .filter(task => task.type !== 'sub-account')
+    .map(task => ({
+      taskId:
+        task.type === 'auto-message'
+          ? 'autoSpeak'
+          : task.type === 'auto-popup'
+            ? 'autoPopup'
+            : task.type === 'auto-reply'
+              ? 'autoReply'
+              : 'liveStats',
+      status: task.isRunning ? 'running' : 'idle',
+    }))
+}
+
+function syncAccountStatus(accountId: string): void {
+  if (!accountId) return
+
+  useAccountStatusStore.getState().updateAccountStatus(accountId, {
+    accountId,
+    connectionStatus: getConnectionStatus(accountId),
+    tasks: getTaskStatuses(accountId),
+  })
+}
+
+function syncAllAccountStatuses(): void {
+  const accounts = useAccounts.getState().accounts
+  accounts.forEach(account => syncAccountStatus(account.id))
+}
+
+function pickTaskSignalsFromContexts(
+  autoMessageContexts: Record<string, { isRunning?: boolean }>,
+  autoPopUpContexts: Record<string, { isRunning?: boolean }>,
+  autoReplyContexts: Record<string, { isRunning?: boolean; isListening?: string }>,
+  liveStatsContexts: Record<string, { isListening?: boolean }>,
+): TaskSignalEntry[] {
+  const accountIds = new Set([
+    ...Object.keys(autoMessageContexts),
+    ...Object.keys(autoPopUpContexts),
+    ...Object.keys(autoReplyContexts),
+    ...Object.keys(liveStatsContexts),
+  ])
+
+  const entries: TaskSignalEntry[] = [...accountIds].map(accountId => [
+    accountId,
+    {
+      autoMessageRunning: autoMessageContexts[accountId]?.isRunning ?? false,
+      autoPopUpRunning: autoPopUpContexts[accountId]?.isRunning ?? false,
+      autoReplyRunning: autoReplyContexts[accountId]?.isRunning ?? false,
+      autoReplyListening: autoReplyContexts[accountId]?.isListening ?? 'stopped',
+      liveStatsListening: liveStatsContexts[accountId]?.isListening ?? false,
+    },
+  ])
+
+  entries.sort(([a], [b]) => a.localeCompare(b))
+  return entries
+}
+
+function pickLiveControlSignals(
+  contexts: Record<string, { connectState?: { status?: ConnectionStatus } }>,
+): LiveControlSignalEntry[] {
+  return Object.entries(contexts)
+    .filter(([accountId]) => accountId !== 'default')
+    .map(
+      ([accountId, context]) =>
+        [accountId, context.connectState?.status ?? 'disconnected'] as LiveControlSignalEntry,
+    )
+}
+
+function syncChangedKeys<T>(
+  prevEntries: Array<[string, T]>,
+  nextEntries: Array<[string, T]>,
+  onChanged: (accountId: string) => void,
+) {
+  const prevMap = new Map(prevEntries)
+  const nextMap = new Map(nextEntries)
+  const accountIds = new Set([...prevMap.keys(), ...nextMap.keys()])
+
+  for (const accountId of accountIds) {
+    const prevValue = prevMap.get(accountId)
+    const nextValue = nextMap.get(accountId)
+    if (JSON.stringify(prevValue) !== JSON.stringify(nextValue)) {
+      onChanged(accountId)
+    }
+  }
+}
+
+export function ensureAccountStatusSync(): void {
+  syncRefCount += 1
+  if (syncRefCount > 1) {
+    return
+  }
+
+  syncAllAccountStatuses()
+
+  syncCleanups.push(
+    useAccounts.subscribe((state, prevState) => {
+      const nextIds = state.accounts.map(account => account.id)
+      const prevIds = prevState.accounts.map(account => account.id)
+      const nextSet = new Set(nextIds)
+      const prevSet = new Set(prevIds)
+
+      for (const accountId of nextSet) {
+        if (!prevSet.has(accountId)) {
+          syncAccountStatus(accountId)
+        }
+      }
+
+      for (const accountId of prevSet) {
+        if (!nextSet.has(accountId)) {
+          useAccountStatusStore.getState().removeAccountStatus(accountId)
+        }
+      }
+    }),
+  )
+
+  syncCleanups.push(
+    useLiveControlStore.subscribe((state, prevState) => {
+      const next = pickLiveControlSignals(state.contexts)
+      const prev = pickLiveControlSignals(prevState.contexts)
+      syncChangedKeys(prev, next, syncAccountStatus)
+    }),
+  )
+
+  syncCleanups.push(
+    useAutoMessageStore.subscribe((state, prevState) => {
+      const next = pickTaskSignalsFromContexts(
+        state.contexts,
+        useAutoPopUpStore.getState().contexts,
+        useAutoReplyStore.getState().contexts,
+        useLiveStatsStore.getState().contexts,
+      )
+      const prev = pickTaskSignalsFromContexts(
+        prevState.contexts,
+        useAutoPopUpStore.getState().contexts,
+        useAutoReplyStore.getState().contexts,
+        useLiveStatsStore.getState().contexts,
+      )
+      syncChangedKeys(prev, next, syncAccountStatus)
+    }),
+  )
+
+  syncCleanups.push(
+    useAutoPopUpStore.subscribe((state, prevState) => {
+      const next = pickTaskSignalsFromContexts(
+        useAutoMessageStore.getState().contexts,
+        state.contexts,
+        useAutoReplyStore.getState().contexts,
+        useLiveStatsStore.getState().contexts,
+      )
+      const prev = pickTaskSignalsFromContexts(
+        useAutoMessageStore.getState().contexts,
+        prevState.contexts,
+        useAutoReplyStore.getState().contexts,
+        useLiveStatsStore.getState().contexts,
+      )
+      syncChangedKeys(prev, next, syncAccountStatus)
+    }),
+  )
+
+  syncCleanups.push(
+    useAutoReplyStore.subscribe((state, prevState) => {
+      const next = pickTaskSignalsFromContexts(
+        useAutoMessageStore.getState().contexts,
+        useAutoPopUpStore.getState().contexts,
+        state.contexts,
+        useLiveStatsStore.getState().contexts,
+      )
+      const prev = pickTaskSignalsFromContexts(
+        useAutoMessageStore.getState().contexts,
+        useAutoPopUpStore.getState().contexts,
+        prevState.contexts,
+        useLiveStatsStore.getState().contexts,
+      )
+      syncChangedKeys(prev, next, syncAccountStatus)
+    }),
+  )
+
+  syncCleanups.push(
+    useLiveStatsStore.subscribe((state, prevState) => {
+      const next = pickTaskSignalsFromContexts(
+        useAutoMessageStore.getState().contexts,
+        useAutoPopUpStore.getState().contexts,
+        useAutoReplyStore.getState().contexts,
+        state.contexts,
+      )
+      const prev = pickTaskSignalsFromContexts(
+        useAutoMessageStore.getState().contexts,
+        useAutoPopUpStore.getState().contexts,
+        useAutoReplyStore.getState().contexts,
+        prevState.contexts,
+      )
+      syncChangedKeys(prev, next, syncAccountStatus)
+    }),
+  )
+}
+
+export function releaseAccountStatusSync(): void {
+  syncRefCount = Math.max(0, syncRefCount - 1)
+  if (syncRefCount > 0) {
+    return
+  }
+
+  for (const cleanup of syncCleanups) {
+    cleanup()
+  }
+  syncCleanups = []
+}
+
+export function resetAccountStatusSyncForTests(): void {
+  syncRefCount = 0
+  for (const cleanup of syncCleanups) {
+    cleanup()
+  }
+  syncCleanups = []
+  useAccountStatusStore.setState({ statusMap: {} })
+}
+
 export function useAccountStatus() {
-  const { statusMap, updateAccountStatus, removeAccountStatus } = useAccountStatusStore()
-  const accounts = useAccounts(state => state.accounts)
-  const currentAccountId = useAccounts(state => state.currentAccountId)
+  const statusMap = useAccountStatusStore(state => state.statusMap)
+  const removeAccountStatus = useAccountStatusStore(state => state.removeAccountStatus)
 
-  // 定时更新状态的引用
-  const currentIntervalRef = useRef<NodeJS.Timeout | null>(null)
-  const backgroundIntervalRef = useRef<NodeJS.Timeout | null>(null)
-
-  /**
-   * 刷新指定账号的状态
-   */
-  const refreshAccountStatus = useCallback(
-    (accountId: string) => {
-      // 获取连接状态
-      const connectState = useLiveControlStore.getState().contexts[accountId]?.connectState
-
-      let connectionStatus: ConnectionStatus = 'disconnected'
-      if (connectState) {
-        switch (connectState.status) {
-          case 'connecting':
-            connectionStatus = 'connecting'
-            break
-          case 'connected':
-            connectionStatus = 'connected'
-            break
-          case 'disconnected':
-            connectionStatus = 'disconnected'
-            break
-          default:
-            connectionStatus = 'disconnected'
-        }
-      }
-
-      const tasks: TaskStatusInfo[] = taskStateManager
-        .getTaskStates(accountId)
-        .filter(task => task.type !== 'sub-account')
-        .map(task => ({
-          taskId:
-            task.type === 'auto-message'
-              ? 'autoSpeak'
-              : task.type === 'auto-popup'
-                ? 'autoPopup'
-                : task.type === 'auto-reply'
-                  ? 'autoReply'
-                  : 'liveStats',
-          status: task.isRunning ? 'running' : 'idle',
-        }))
-
-      updateAccountStatus(accountId, {
-        accountId,
-        connectionStatus,
-        tasks,
-      })
-    },
-    [updateAccountStatus],
-  )
-
-  /**
-   * 刷新所有账号状态
-   */
-  const refreshAllStatus = useCallback(() => {
-    accounts.forEach(account => {
-      refreshAccountStatus(account.id)
-    })
-  }, [accounts, refreshAccountStatus])
-
-  const refreshCurrentAccountStatus = useCallback(() => {
-    if (currentAccountId) {
-      refreshAccountStatus(currentAccountId)
-    }
-  }, [currentAccountId, refreshAccountStatus])
-
-  const refreshBackgroundStatus = useCallback(() => {
-    accounts.forEach(account => {
-      if (account.id !== currentAccountId) {
-        refreshAccountStatus(account.id)
-      }
-    })
-  }, [accounts, currentAccountId, refreshAccountStatus])
-
-  /**
-   * 开始定时刷新
-   */
-  const startPolling = useCallback(
-    (options?: { currentInterval?: number; backgroundInterval?: number }) => {
-      const currentInterval = options?.currentInterval ?? 2000
-      const backgroundInterval = options?.backgroundInterval ?? 8000
-      if (currentIntervalRef.current) {
-        clearInterval(currentIntervalRef.current)
-      }
-      if (backgroundIntervalRef.current) {
-        clearInterval(backgroundIntervalRef.current)
-      }
-
-      // 立即刷新一次
-      refreshAllStatus()
-
-      currentIntervalRef.current = setInterval(() => {
-        refreshCurrentAccountStatus()
-      }, currentInterval)
-
-      backgroundIntervalRef.current = setInterval(() => {
-        refreshBackgroundStatus()
-      }, backgroundInterval)
-
-      return () => {
-        if (currentIntervalRef.current) {
-          clearInterval(currentIntervalRef.current)
-          currentIntervalRef.current = null
-        }
-        if (backgroundIntervalRef.current) {
-          clearInterval(backgroundIntervalRef.current)
-          backgroundIntervalRef.current = null
-        }
-      }
-    },
-    [refreshAllStatus, refreshBackgroundStatus, refreshCurrentAccountStatus],
-  )
-
-  /**
-   * 停止定时刷新
-   */
-  const stopPolling = useCallback(() => {
-    if (currentIntervalRef.current) {
-      clearInterval(currentIntervalRef.current)
-      currentIntervalRef.current = null
-    }
-    if (backgroundIntervalRef.current) {
-      clearInterval(backgroundIntervalRef.current)
-      backgroundIntervalRef.current = null
+  useEffect(() => {
+    ensureAccountStatusSync()
+    return () => {
+      releaseAccountStatusSync()
     }
   }, [])
 
-  useEffect(() => {
-    refreshAllStatus()
-  }, [refreshAllStatus])
+  const refreshAccountStatus = useCallback((accountId: string) => {
+    syncAccountStatus(accountId)
+  }, [])
 
-  // 组件卸载时清理
-  useEffect(() => {
-    return () => {
-      stopPolling()
-    }
-  }, [stopPolling])
+  const refreshAllStatus = useCallback(() => {
+    syncAllAccountStatuses()
+  }, [])
 
   return {
     statusMap,
     refreshAccountStatus,
     refreshAllStatus,
-    startPolling,
-    stopPolling,
+    startPolling: () => () => {},
+    stopPolling: () => {},
     removeAccountStatus,
   }
 }
 
-/**
- * 获取指定账号的状态（Selector Hook）
- */
 export function useAccountStatusSelector(accountId: string) {
   return useAccountStatusStore(useCallback(state => state.statusMap[accountId], [accountId]))
 }
 
-/**
- * 获取所有账号状态
- */
 export function useAllAccountStatus() {
   return useAccountStatusStore(state => state.statusMap)
 }
 
-// 导出 Store 供外部使用
 export { useAccountStatusStore }

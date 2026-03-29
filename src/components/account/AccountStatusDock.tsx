@@ -310,18 +310,7 @@ export const AccountStatusDock = React.memo(function AccountStatusDock({
   const dockRef = useRef<HTMLDivElement>(null)
 
   // 启动状态轮询
-  const { startPolling, stopPolling } = useAccountStatus()
-  useEffect(() => {
-    const cleanup = startPolling(
-      isExpanded
-        ? { currentInterval: 2000, backgroundInterval: 8000 }
-        : { currentInterval: 5000, backgroundInterval: 15000 },
-    )
-    return () => {
-      cleanup()
-      stopPolling()
-    }
-  }, [isExpanded, startPolling, stopPolling])
+  useAccountStatus()
 
   // 点击外部收起悬浮栏
   useEffect(() => {
