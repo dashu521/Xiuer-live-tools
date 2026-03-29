@@ -24,13 +24,9 @@ const ipcRendererApi: ElectronAPI['ipcRenderer'] = {
       return () => {}
     }
 
-    console.log(`[Preload][on] ✅ Registered listener for channel: ${String(channel)}`)
-
     const subscription = (_event: IpcRendererEvent, ...args: Parameters<IpcChannels[Channel]>) => {
       const receiveTime = Date.now()
       const accountId = args[0] || 'unknown'
-      console.log(`[Preload][on] 📥 Forwarding event: ${String(channel)}`, ...args)
-      console.log(`[Preload][on] 📊 Receive time: ${receiveTime}, accountId: ${accountId}`)
       // 通过自定义事件通知 renderer 记录时间
       window.dispatchEvent(
         new CustomEvent('ipc-receive', {
@@ -42,7 +38,6 @@ const ipcRendererApi: ElectronAPI['ipcRenderer'] = {
 
     ipcRenderer.on(channel as string, subscription)
     return () => {
-      console.log(`[Preload][on] 🔚 Unregistered listener for channel: ${String(channel)}`)
       ipcRenderer.off(channel as string, subscription)
     }
   },

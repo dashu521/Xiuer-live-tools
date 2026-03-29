@@ -299,10 +299,7 @@ export const AccountStatusDock = React.memo(function AccountStatusDock({
   maxCompactAccounts = 4,
 }: AccountStatusDockProps) {
   const [isExpanded, setIsExpanded] = useState(defaultExpanded)
-  const accounts = useAccounts(state => state.accounts)
-  const currentAccountId = useAccounts(state => state.currentAccountId)
-  const switchAccount = useAccounts(state => state.switchAccount)
-  const reorderAccounts = useAccounts(state => state.reorderAccounts)
+  const { accounts, currentAccountId, switchAccount, reorderAccounts } = useAccounts()
   const accountStatusMap = useAllAccountStatus()
   const { startAllTasks, stopAllTasks } = useOneClickStart()
 
@@ -315,12 +312,16 @@ export const AccountStatusDock = React.memo(function AccountStatusDock({
   // 启动状态轮询
   const { startPolling, stopPolling } = useAccountStatus()
   useEffect(() => {
-    const cleanup = startPolling(2000)
+    const cleanup = startPolling(
+      isExpanded
+        ? { currentInterval: 2000, backgroundInterval: 8000 }
+        : { currentInterval: 5000, backgroundInterval: 15000 },
+    )
     return () => {
       cleanup()
       stopPolling()
     }
-  }, [startPolling, stopPolling])
+  }, [isExpanded, startPolling, stopPolling])
 
   // 点击外部收起悬浮栏
   useEffect(() => {

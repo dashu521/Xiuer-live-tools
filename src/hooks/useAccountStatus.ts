@@ -70,13 +70,13 @@ const useAccountStatusStore = create<AccountStatusStore>()(
  * 账号状态管理 Hook
  */
 export function useAccountStatus() {
-  const statusMap = useAccountStatusStore(state => state.statusMap)
-  const updateAccountStatus = useAccountStatusStore(state => state.updateAccountStatus)
-  const removeAccountStatus = useAccountStatusStore(state => state.removeAccountStatus)
+  const { statusMap, updateAccountStatus, removeAccountStatus } = useAccountStatusStore()
   const accounts = useAccounts(state => state.accounts)
+  const currentAccountId = useAccounts(state => state.currentAccountId)
 
   // 定时更新状态的引用
-  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  const currentIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const backgroundIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   /**
    * 刷新指定账号的状态
@@ -136,42 +136,76 @@ export function useAccountStatus() {
     })
   }, [accounts, refreshAccountStatus])
 
+  const refreshCurrentAccountStatus = useCallback(() => {
+    if (currentAccountId) {
+      refreshAccountStatus(currentAccountId)
+    }
+  }, [currentAccountId, refreshAccountStatus])
+
+  const refreshBackgroundStatus = useCallback(() => {
+    accounts.forEach(account => {
+      if (account.id !== currentAccountId) {
+        refreshAccountStatus(account.id)
+      }
+    })
+  }, [accounts, currentAccountId, refreshAccountStatus])
+
   /**
    * 开始定时刷新
    */
   const startPolling = useCallback(
-    (interval = 2000) => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
+    (options?: { currentInterval?: number; backgroundInterval?: number }) => {
+      const currentInterval = options?.currentInterval ?? 2000
+      const backgroundInterval = options?.backgroundInterval ?? 8000
+      if (currentIntervalRef.current) {
+        clearInterval(currentIntervalRef.current)
+      }
+      if (backgroundIntervalRef.current) {
+        clearInterval(backgroundIntervalRef.current)
       }
 
       // 立即刷新一次
       refreshAllStatus()
 
-      // 定时刷新
-      intervalRef.current = setInterval(() => {
-        refreshAllStatus()
-      }, interval)
+      currentIntervalRef.current = setInterval(() => {
+        refreshCurrentAccountStatus()
+      }, currentInterval)
+
+      backgroundIntervalRef.current = setInterval(() => {
+        refreshBackgroundStatus()
+      }, backgroundInterval)
 
       return () => {
-        if (intervalRef.current) {
-          clearInterval(intervalRef.current)
-          intervalRef.current = null
+        if (currentIntervalRef.current) {
+          clearInterval(currentIntervalRef.current)
+          currentIntervalRef.current = null
+        }
+        if (backgroundIntervalRef.current) {
+          clearInterval(backgroundIntervalRef.current)
+          backgroundIntervalRef.current = null
         }
       }
     },
-    [refreshAllStatus],
+    [refreshAllStatus, refreshBackgroundStatus, refreshCurrentAccountStatus],
   )
 
   /**
    * 停止定时刷新
    */
   const stopPolling = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current)
-      intervalRef.current = null
+    if (currentIntervalRef.current) {
+      clearInterval(currentIntervalRef.current)
+      currentIntervalRef.current = null
+    }
+    if (backgroundIntervalRef.current) {
+      clearInterval(backgroundIntervalRef.current)
+      backgroundIntervalRef.current = null
     }
   }, [])
+
+  useEffect(() => {
+    refreshAllStatus()
+  }, [refreshAllStatus])
 
   // 组件卸载时清理
   useEffect(() => {

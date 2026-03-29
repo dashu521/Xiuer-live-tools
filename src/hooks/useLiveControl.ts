@@ -4,6 +4,7 @@ import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { type ConnectState, DEFAULT_CONNECT_STATE } from '@/config/platformConfig'
 import { useAuthStore } from '@/stores/authStore'
+import { flushAllPersists, flushPersist, schedulePersist } from '@/utils/debouncedPersist'
 import { EVENTS, eventEmitter } from '@/utils/events'
 import { storageManager } from '@/utils/storage/StorageManager'
 import { useAccounts } from './useAccounts'
@@ -44,13 +45,6 @@ const READONLY_DEFAULT_CONTEXT: LiveControlContext = {
   streamState: 'unknown',
 }
 
-function restoreConnectState(savedConnectState: ConnectState | undefined): ConnectState {
-  return {
-    ...DEFAULT_CONNECT_STATE,
-    platform: savedConnectState?.platform || '',
-  }
-}
-
 export const useLiveControlStore = create<LiveControlStore>()(
   immer((set, get) => {
     eventEmitter.on(EVENTS.ACCOUNT_ADDED, (accountId: string) => {
@@ -86,7 +80,11 @@ export const useLiveControlStore = create<LiveControlStore>()(
       return state.contexts[accountId]
     }
 
-    const saveToStorage = (accountId: string, context: LiveControlContext) => {
+    const saveToStorage = (
+      accountId: string,
+      context: LiveControlContext,
+      options?: { immediate?: boolean },
+    ) => {
       const { currentUserId } = get()
       if (currentUserId) {
         try {
@@ -105,11 +103,20 @@ export const useLiveControlStore = create<LiveControlStore>()(
                   }
                 : connectState,
           }
-          storageManager.set('live-control', dataToSave, {
-            level: 'account',
-            userId: currentUserId,
-            accountId,
-          })
+          const persistKey = `live-control:${currentUserId}:${accountId}`
+          const write = () => {
+            storageManager.set('live-control', dataToSave, {
+              level: 'account',
+              userId: currentUserId,
+              accountId,
+            })
+          }
+          if (options?.immediate) {
+            flushPersist(persistKey)
+            write()
+            return
+          }
+          schedulePersist(persistKey, write, 250)
         } catch (e) {
           console.error('[LiveControl] 保存到存储失败:', e)
         }
@@ -156,6 +163,7 @@ export const useLiveControlStore = create<LiveControlStore>()(
 
       loadUserContexts: (userId: string) => {
         const loadContexts = () => {
+          flushAllPersists()
           const { accounts, currentAccountId } = useAccounts.getState()
           if (accounts.length === 0) {
             return
@@ -176,12 +184,6 @@ export const useLiveControlStore = create<LiveControlStore>()(
             accounts.forEach(account => {
               // 【修复】仅在当前账号已有内存上下文时才跳过，避免启动后当前账号无法从存储恢复
               if (account.id === currentAccountId && currentContext) {
-                console.log(
-                  '[LiveControl] 保留当前账号上下文:',
-                  account.id,
-                  '平台:',
-                  state.contexts[account.id]?.connectState.platform,
-                )
                 return
               }
 
@@ -191,10 +193,16 @@ export const useLiveControlStore = create<LiveControlStore>()(
                 accountId: account.id,
               })
               if (savedContext) {
+                const safeConnectState =
+                  savedContext.connectState.status === 'connecting'
+                    ? {
+                        ...DEFAULT_CONNECT_STATE,
+                        platform: savedContext.connectState.platform || '',
+                      }
+                    : { ...savedContext.connectState }
+
                 state.contexts[account.id] = {
-                  // 启动恢复时仅保留平台选择，不直接恢复旧的连接/错误态，
-                  // 避免重启后在未校验真实会话的情况下误显示“已连接”。
-                  connectState: restoreConnectState(savedContext.connectState),
+                  connectState: safeConnectState,
                   accountName: null,
                   streamState: 'unknown',
                 }
@@ -218,6 +226,7 @@ export const useLiveControlStore = create<LiveControlStore>()(
 
       resetAllContexts: () =>
         set(state => {
+          flushAllPersists()
           // 保存当前数据到存储
           const { currentUserId } = state
           if (currentUserId) {
@@ -315,17 +324,15 @@ export const useStreamStatus = () => useCurrentLiveControl(context => context.st
 
 // Hook: 自动加载配置
 export function useLoadLiveControlOnLogin() {
-  const loadUserContexts = useLiveControlStore(state => state.loadUserContexts)
-  const isAuthenticated = useAuthStore(state => state.isAuthenticated)
-  const userId = useAuthStore(state => state.user?.id ?? null)
+  const { loadUserContexts } = useLiveControlStore()
+  const { isAuthenticated, user } = useAuthStore()
 
   useEffect(() => {
-    if (isAuthenticated && userId) {
+    if (isAuthenticated && user?.id) {
       // 延迟加载，确保存储系统已初始化
       setTimeout(() => {
-        console.log('[LiveControl] 加载用户配置:', userId)
-        loadUserContexts(userId)
+        loadUserContexts(user.id)
       }, 0)
     }
-  }, [isAuthenticated, userId, loadUserContexts])
+  }, [isAuthenticated, user?.id, loadUserContexts])
 }

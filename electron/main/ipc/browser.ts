@@ -1,16 +1,25 @@
 import { dialog } from 'electron'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
+import { browserManager } from '#/managers/BrowserSessionManager'
 import { typedIpcMainHandle } from '#/utils'
-import { findChromium } from '#/utils/checkChrome'
+import { findChromium, listDetectedBrowsers } from '#/utils/checkChrome'
 
 function setupIpcHandlers() {
+  typedIpcMainHandle(IPC_CHANNELS.chrome.listBrowsers, async (_, preferEdge = false) => {
+    return await listDetectedBrowsers(preferEdge)
+  })
+
   typedIpcMainHandle(IPC_CHANNELS.chrome.getPath, async (_, edge) => {
     const path = await findChromium(edge)
     return path
   })
 
+  typedIpcMainHandle(IPC_CHANNELS.chrome.testBrowser, async (_, browserPath: string) => {
+    return await browserManager.testBrowserLaunch(browserPath)
+  })
+
   typedIpcMainHandle(IPC_CHANNELS.chrome.selectPath, async () => {
-    // 打开文件选择器，选择 chrome.exe/msedge.exe
+    // 打开文件选择器，允许用户选择任意浏览器可执行文件
     if (process.platform === 'darwin') {
       dialog.showErrorBox(
         '无法选择文件',
@@ -48,22 +57,14 @@ function setupIpcHandlers() {
     } else {
       const result = await dialog.showOpenDialog({
         properties: ['openFile', 'treatPackageAsDirectory'],
-        filters: [{ name: 'chrome|msedge', extensions: ['exe'] }],
+        filters: [{ name: 'Browser Executable', extensions: ['exe'] }],
       })
 
       if (result.canceled || result.filePaths.length === 0) {
         return null
       }
 
-      const selectedPath = result.filePaths[0]
-      const fileName = selectedPath.toLowerCase().split('\\').pop()
-      if (fileName === 'chrome.exe' || fileName === 'msedge.exe') {
-        return selectedPath
-      }
-      dialog.showErrorBox(
-        '无效的选择',
-        `选择的文件（${fileName}）似乎不是正确的可执行文件。\n\n请选择名为 'chrome.exe' 或 'msedge.exe' 的文件。`,
-      )
+      return result.filePaths[0]
     }
     return null
   })
