@@ -1,8 +1,16 @@
 import { app, BrowserWindow, shell } from 'electron'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { accountManager } from '#/managers/AccountManager'
-import { clearStoredTokens } from '#/services/CloudAuthStorage'
 import { typedIpcMainHandle } from '#/utils'
+
+let cloudAuthStoragePromise: Promise<typeof import('#/services/CloudAuthStorage')> | null = null
+
+async function clearCloudStoredTokens() {
+  if (!cloudAuthStoragePromise) {
+    cloudAuthStoragePromise = import('#/services/CloudAuthStorage')
+  }
+  ;(await cloudAuthStoragePromise).clearStoredTokens()
+}
 
 function setupIpcHandlers() {
   typedIpcMainHandle(IPC_CHANNELS.chrome.toggleDevTools, event => {
@@ -43,7 +51,7 @@ function setupIpcHandlers() {
 
   /** 清除本地登录数据：主进程 token 存储（userData/auth/tokens.enc），渲染进程需自行清除 localStorage 与 store */
   typedIpcMainHandle(IPC_CHANNELS.app.clearLocalLoginData, async () => {
-    clearStoredTokens()
+    await clearCloudStoredTokens()
   })
 }
 

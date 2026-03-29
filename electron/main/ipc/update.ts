@@ -2,10 +2,26 @@ import { app, ipcMain } from 'electron'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { createLogger, isAppQuitting } from '#/logger'
 import { enhancedUpdateManager } from '#/managers/EnhancedUpdateManager'
-import { rollbackManager } from '#/managers/RollbackManager'
 
 const logger = createLogger('update-ipc')
 const DEFAULT_UPDATE_SOURCE = 'official'
+
+let rollbackManagerPromise: Promise<typeof import('#/managers/RollbackManager')> | null = null
+
+async function getRollbackManager() {
+  if (!rollbackManagerPromise) {
+    rollbackManagerPromise = import('#/managers/RollbackManager')
+  }
+  return (await rollbackManagerPromise).rollbackManager
+}
+
+async function isRollbackOperational() {
+  try {
+    return (await getRollbackManager()).isOperational()
+  } catch {
+    return false
+  }
+}
 
 export function setupUpdateIpcHandlers() {
   // 检查更新
@@ -30,7 +46,7 @@ export function setupUpdateIpcHandlers() {
 
   ipcMain.handle(IPC_CHANNELS.updater.listBackups, async () => {
     logger.info('IPC: listBackups called')
-    if (!rollbackManager.isOperational()) {
+    if (!(await isRollbackOperational())) {
       return []
     }
     const backups = await enhancedUpdateManager.listBackups()
@@ -47,7 +63,7 @@ export function setupUpdateIpcHandlers() {
       logger.warn('IPC: rollback called during app quitting, ignored')
       return { success: false, error: '应用正在退出' }
     }
-    if (!rollbackManager.isOperational()) {
+    if (!(await isRollbackOperational())) {
       return { success: false, error: '当前运行环境不支持回滚' }
     }
     logger.info('IPC: rollback called', { targetVersion: targetVersion || 'latest' })
@@ -76,7 +92,7 @@ export function setupUpdateIpcHandlers() {
   ipcMain.handle(IPC_CHANNELS.updater.getStatus, async () => {
     const packagedCanUpdate =
       (process.platform === 'win32' || process.platform === 'darwin') && app.isPackaged
-    const backupCapabilities = rollbackManager.isOperational()
+    const backupCapabilities = await isRollbackOperational()
 
     return {
       platform: process.platform,

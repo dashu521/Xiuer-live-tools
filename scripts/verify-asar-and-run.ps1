@@ -1,4 +1,4 @@
-# V1.0 打包验证：解压 app.asar、检查 playwright-extra、启动 exe 并输出前 30 行日志
+# V1.0 打包验证：解压 app.asar、检查 playwright-core、启动 exe 并输出前 30 行日志
 # 以脚本所在目录向上定位到项目根（含 package.json），在 release\*\win-unpacked\resources 下查找 app.asar（优先最新版本号目录）
 
 $ErrorActionPreference = "Stop"
@@ -54,13 +54,13 @@ $exePath = Join-Path $winUnpackedDir "TASI-live-Supertool.exe"
 if (Test-Path $extractDir) { Remove-Item -Recurse -Force $extractDir }
 npx --yes @electron/asar extract $AsarPath $extractDir
 
-# 检查 node_modules/playwright-extra
-$playwrightExtra = Join-Path $extractDir "node_modules\playwright-extra"
-if (-not (Test-Path $playwrightExtra)) {
-  Write-Host "FAIL: node_modules/playwright-extra does not exist in app.asar"
+# 检查 node_modules/playwright-core
+$playwrightCore = Join-Path $extractDir "node_modules\playwright-core"
+if (-not (Test-Path $playwrightCore)) {
+  Write-Host "FAIL: node_modules/playwright-core does not exist in app.asar"
   exit 1
 }
-Write-Host "OK: node_modules/playwright-extra exists in app.asar"
+Write-Host "OK: node_modules/playwright-core exists in app.asar"
 
 # 启动 exe 并捕获前 30 行
 if (-not (Test-Path $exePath)) { Write-Host "FAIL: exe not found at $exePath"; exit 1 }

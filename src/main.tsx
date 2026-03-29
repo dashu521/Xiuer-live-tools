@@ -8,7 +8,20 @@ import './index.css'
 
 async function bootstrap() {
   if (import.meta.env.DEV) {
-    await import('./lib/wdyr')
+    const warmups = await Promise.allSettled([
+      import('./lib/wdyr'),
+      // 预热壳层异步 chunk，避免 DEV 首次启动时头部/侧边栏出现明显空白。
+      import('./components/auth/AuthProvider'),
+      import('./components/common/Sidebar'),
+      import('./components/common/AccountSwitcher'),
+      import('./components/app/AppRuntimeBoot'),
+    ])
+
+    for (const result of warmups) {
+      if (result.status === 'rejected') {
+        console.warn('[UI] DEV chunk warmup skipped:', result.reason)
+      }
+    }
   }
 
   // 启动诊断：若 Console 有 [UI] 日志说明页面已加载到我们的应用

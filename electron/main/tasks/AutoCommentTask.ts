@@ -140,7 +140,6 @@ export function createAutoCommentTask(
       validateConfig(mergedConfig),
       Result.andThen(_ => intervalTask.validateInterval(mergedConfig.scheduler.interval)),
       Result.inspect(() => {
-        const _oldConfig = { ...config }
         config = mergedConfig
 
         // 更新间隔（热更新，不重启任务）

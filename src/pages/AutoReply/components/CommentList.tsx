@@ -139,19 +139,6 @@ const MessageItem = memo(
   },
 )
 
-const _EnterRoomMessage = ({ message }: { message: Message }) => {
-  const displayName = message.nick_name
-
-  return (
-    <div className="flex items-center gap-2 p-2 rounded-md border border-primary/30 bg-primary/5">
-      <span className="font-medium">{displayName}</span>
-      <Badge variant="info" className="text-xs">
-        进入直播间
-      </Badge>
-    </div>
-  )
-}
-
 export default function CommentList({
   highlight: highlightedCommentId,
 }: {

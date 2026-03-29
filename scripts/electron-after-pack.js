@@ -22,9 +22,6 @@ const MAIN_PROCESS_DEPS = new Set([
   'electron-updater',
   'jsonwebtoken',
   'playwright',
-  'playwright-extra',
-  'playwright-extra-plugin-stealth',
-  'puppeteer-extra-plugin-stealth',
   'uuid',
   'exceljs',
   // electron-log 用于日志
@@ -68,12 +65,6 @@ const TRANSITIVE_DEPS_WHITELIST = new Set([
   'lodash.isplainobject',
   'lodash.isstring',
   'lodash.once',
-  // puppeteer-extra 相关
-  'puppeteer-extra-plugin',
-  'puppeteer-extra-plugin-user-data-dir',
-  'puppeteer-extra-plugin-user-preferences',
-  'deepmerge',
-  'debug',
   // 其他常用工具
   'graceful-fs',
   'fs-extra',

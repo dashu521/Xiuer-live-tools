@@ -13,7 +13,7 @@ function setupIpcHandlers() {
     IPC_CHANNELS.tasks.aiChat.chat,
     async (_, { messages, apiKey, provider, model, customBaseURL }) => {
       try {
-        const aiService = AIChatService.createService(apiKey, provider, customBaseURL)
+        const aiService = await AIChatService.createService(apiKey, provider, customBaseURL)
         for await (const { content, reasoning } of aiService.chatStream(messages, model)) {
           if (content) {
             windowManager.send(IPC_CHANNELS.tasks.aiChat.stream, {
@@ -45,7 +45,7 @@ function setupIpcHandlers() {
     IPC_CHANNELS.tasks.aiChat.normalChat,
     async (_, { messages, apiKey, provider, model, customBaseURL }) => {
       try {
-        const aiService = AIChatService.createService(apiKey, provider, customBaseURL)
+        const aiService = await AIChatService.createService(apiKey, provider, customBaseURL)
         const output = await aiService.chat(messages, model)
         return output
       } catch (error) {
@@ -63,7 +63,7 @@ function setupIpcHandlers() {
     IPC_CHANNELS.tasks.aiChat.testApiKey,
     async (_, { apiKey, provider, customBaseURL }) => {
       try {
-        const aiService = AIChatService.createService(apiKey, provider, customBaseURL)
+        const aiService = await AIChatService.createService(apiKey, provider, customBaseURL)
         await aiService.checkAPIKey()
         return {
           success: true,

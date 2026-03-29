@@ -11,9 +11,7 @@ const devDeps = pkg.devDependencies || {}
 
 const names = [
   'playwright',
-  'playwright-extra',
-  'playwright-extra-plugin-stealth',
-  'puppeteer-extra-plugin-stealth',
+  'playwright-core',
 ]
 
 console.log('\npackage.json:')
@@ -38,5 +36,5 @@ function runNpmLs(pkgName) {
   }
 }
 
-runNpmLs('playwright-extra')
 runNpmLs('playwright')
+runNpmLs('playwright-core')

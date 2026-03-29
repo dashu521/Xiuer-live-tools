@@ -16,7 +16,7 @@ import {
   Tray,
 } from 'electron'
 import { accountManager } from './managers/AccountManager'
-import { updateManager } from './managers/UpdateManager'
+import { enhancedUpdateManager } from './managers/EnhancedUpdateManager'
 import windowManager from './windowManager'
 import './ipc'
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -632,7 +632,7 @@ async function createWindow() {
 
       // 启动时静默检查更新
       if (!isQuitting) {
-        await updateManager.silentCheckForUpdate()
+        await enhancedUpdateManager.silentCheckForUpdate()
       }
     })
 

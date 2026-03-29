@@ -11,7 +11,7 @@
  */
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
-import { buildAccessContext, checkAccess } from '@/domain/access'
+import { buildAccessContext, checkAccess } from '@/domain/access/AccessControl'
 import { type GateActionName, getFeatureTypeForGateAction } from '@/domain/access/gateActions'
 
 export type GuardActionOptions = {

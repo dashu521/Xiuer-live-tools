@@ -1,8 +1,18 @@
 import { dialog } from 'electron'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
-import { browserManager } from '#/managers/BrowserSessionManager'
 import { typedIpcMainHandle } from '#/utils'
 import { findChromium, listDetectedBrowsers } from '#/utils/checkChrome'
+
+let browserSessionManagerPromise: Promise<
+  typeof import('#/managers/BrowserSessionManager')
+> | null = null
+
+async function getBrowserManager() {
+  if (!browserSessionManagerPromise) {
+    browserSessionManagerPromise = import('#/managers/BrowserSessionManager')
+  }
+  return (await browserSessionManagerPromise).browserManager
+}
 
 function setupIpcHandlers() {
   typedIpcMainHandle(IPC_CHANNELS.chrome.listBrowsers, async (_, preferEdge = false) => {
@@ -15,7 +25,7 @@ function setupIpcHandlers() {
   })
 
   typedIpcMainHandle(IPC_CHANNELS.chrome.testBrowser, async (_, browserPath: string) => {
-    return await browserManager.testBrowserLaunch(browserPath)
+    return await (await getBrowserManager()).testBrowserLaunch(browserPath)
   })
 
   typedIpcMainHandle(IPC_CHANNELS.chrome.selectPath, async () => {

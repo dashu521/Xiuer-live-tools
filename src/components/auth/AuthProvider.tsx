@@ -1,7 +1,7 @@
 import { Loader2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { useAccessContext } from '@/domain/access'
+import { useAccessContext } from '@/domain/access/AccessControl'
 import { GATE_ACTIONS } from '@/domain/access/gateActions'
 import { useAccounts } from '@/hooks/useAccounts'
 import { useAuthInit } from '@/hooks/useAuth'
@@ -16,6 +16,7 @@ import {
 } from '@/stores/authStore'
 import { useGateStore } from '@/stores/gateStore'
 import { usePlatformPreferenceStore } from '@/stores/platformPreferenceStore'
+import { initializeStorage } from '@/utils/storage'
 
 /** 心跳检测周期（毫秒） */
 const HEARTBEAT_INTERVAL = 30 * 1000 // 30秒
@@ -36,6 +37,9 @@ const UserCenter = lazy(async () => {
   const module = await import('@/components/auth/UserCenter')
   return { default: module.UserCenter }
 })
+
+// AuthProvider chunk 必须在渲染任何依赖 storageManager 的页面前完成初始化。
+initializeStorage()
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [showAuthDialog, setShowAuthDialog] = useState(false)

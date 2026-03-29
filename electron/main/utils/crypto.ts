@@ -3,7 +3,6 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'node:
 const ALGORITHM = 'aes-256-gcm'
 const KEY_LEN = 32
 const IV_LEN = 16
-const _TAG_LEN = 16
 const SALT_LEN = 32
 
 const DEFAULT_KEY = 'xiuer-live-giftcard-secret-key-2025'

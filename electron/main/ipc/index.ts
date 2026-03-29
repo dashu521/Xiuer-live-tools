@@ -7,7 +7,6 @@ import { setupBrowserIpcHandlers } from './browser'
 import { setupCommentListenerIpcHandlers } from './commentListener'
 import { setupLiveControlIpcHandlers } from './connection'
 import { setupDiagnosticsIpcHandlers } from './diagnostics'
-import { setupGiftCardIpcHandlers } from './giftCard'
 import { setupLiveStatsIpcHandlers } from './liveStats'
 import { setupPinCommentIpcHandler } from './pinComment'
 import { setupSubAccountIpcHandlers } from './subAccount'
@@ -26,4 +25,3 @@ setupPinCommentIpcHandler()
 setupAuthHandlers()
 setupLiveStatsIpcHandlers()
 setupSubAccountIpcHandlers()
-setupGiftCardIpcHandlers()

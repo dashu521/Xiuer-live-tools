@@ -6,7 +6,7 @@ import { findChromium } from '#/utils/checkChrome'
 
 const logger = createLogger('BrowserSessionManager')
 
-// 加载 playwright-extra（带 stealth 插件）
+// 加载 playwright-core 运行时入口
 let chromium: typeof import('playwright').chromium | null = null
 try {
   const fs = require('node:fs') as typeof import('fs')
@@ -36,12 +36,12 @@ try {
   const loaded = require(loadPath) as { chromium: typeof import('playwright').chromium }
   chromium = loaded.chromium
   if (!chromium) {
-    logger.error('playwright-extra loaded but chromium is undefined')
+    logger.error('playwright runtime loaded but chromium is undefined')
   } else {
-    logger.info('playwright-extra loaded successfully')
+    logger.info('playwright runtime loaded successfully')
   }
 } catch (error) {
-  logger.error('Failed to load playwright-extra:', error)
+  logger.error('Failed to load playwright runtime:', error)
 }
 
 export interface BrowserSession {
@@ -77,7 +77,7 @@ class BrowserSessionManager {
     )
     logger.info(`[Browser] createBrowser called with headless=${headless}`)
     if (!chromium) {
-      const errorMsg = 'playwright-extra 未能正确加载，无法启动浏览器'
+      const errorMsg = 'playwright 运行时未能正确加载，无法启动浏览器'
       console.error('[BrowserPopup] [BrowserSessionManager] chromium is null or undefined')
       logger.error(errorMsg)
       throw new Error(errorMsg)

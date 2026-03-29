@@ -117,11 +117,9 @@ export function getOnboardingStats(): {
 
   const welcomeShown = data.filter(e => e.event === 'welcome_shown').length
   const welcomeCompleted = data.filter(e => e.event === 'welcome_completed').length
-  const _welcomeSkipped = data.filter(e => e.event === 'welcome_skipped').length
 
   const quickStartShown = data.filter(e => e.event === 'quickstart_shown').length
   const quickStartCompleted = data.filter(e => e.event === 'quickstart_completed').length
-  const _quickStartSkipped = data.filter(e => e.event === 'quickstart_skipped').length
 
   const tourStarted = data.filter(e => e.event === 'feature_tour_started').length
   const tourCompleted = data.filter(e => e.event === 'feature_tour_completed').length

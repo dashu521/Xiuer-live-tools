@@ -1,10 +1,23 @@
 import { User } from 'lucide-react'
-import { memo, useCallback } from 'react'
-import { UpdateStatusChip } from '@/components/update/UpdateStatusChip'
+import { lazy, memo, Suspense, useCallback } from 'react'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useAuthStore } from '@/stores/authStore'
-import { AccountSwitcher } from './AccountSwitcher'
-import { MessageCenterButton } from './MessageCenterButton'
 import { ThemeSelector } from './ThemeSelector'
+
+const UpdateStatusChip = lazy(async () => {
+  const module = await import('@/components/update/UpdateStatusChip')
+  return { default: module.UpdateStatusChip }
+})
+
+const MessageCenterButton = lazy(async () => {
+  const module = await import('./MessageCenterButton')
+  return { default: module.MessageCenterButton }
+})
+
+const AccountSwitcher = lazy(async () => {
+  const module = await import('./AccountSwitcher')
+  return { default: module.AccountSwitcher }
+})
 
 export const Header = memo(function Header() {
   const user = useAuthStore(state => state.user)
@@ -41,12 +54,18 @@ export const Header = memo(function Header() {
       </div>
 
       <div className="flex min-w-0 items-center gap-2 md:gap-3">
-        <UpdateStatusChip />
+        <Suspense fallback={null}>
+          <UpdateStatusChip />
+        </Suspense>
         <ThemeSelector />
-        <MessageCenterButton />
+        <Suspense fallback={null}>
+          <MessageCenterButton />
+        </Suspense>
 
         <div data-tour="account-switcher" className="w-[8.5rem] md:w-[12.5rem]">
-          <AccountSwitcher />
+          <Suspense fallback={<Skeleton className="h-9 w-full rounded-lg" />}>
+            <AccountSwitcher />
+          </Suspense>
         </div>
 
         {isAuthenticated && user ? (

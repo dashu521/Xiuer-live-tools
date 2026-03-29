@@ -78,7 +78,7 @@ export default defineConfig(({ command }) => {
               '@radix-ui/react-context-menu',
             ],
             // Markdown 相关库单独打包（按需加载）
-            'markdown-vendor': ['react-markdown', 'highlight.js', 'rehype-highlight', 'remark-gfm'],
+            'markdown-vendor': ['react-markdown', 'remark-gfm'],
             // HTML 清洗单独打包，避免和 Markdown 高亮强绑定
             'html-vendor': ['dompurify'],
             // 工具库单独打包
@@ -165,9 +165,6 @@ export default defineConfig(({ command }) => {
                 external: [
                   'electron',
                   'playwright',
-                  'playwright-extra',
-                  'playwright-extra-plugin-stealth',
-                  'puppeteer-extra-plugin-stealth',
                   'bufferutil',
                   'utf-8-validate',
                   'better-sqlite3',
@@ -201,9 +198,6 @@ export default defineConfig(({ command }) => {
               rollupOptions: {
                 external: [
                   'playwright',
-                  'playwright-extra',
-                  'playwright-extra-plugin-stealth',
-                  'puppeteer-extra-plugin-stealth',
                   'bufferutil',
                   'utf-8-validate',
                   'better-sqlite3',

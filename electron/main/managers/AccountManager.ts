@@ -2,7 +2,7 @@ import { Result } from '@praha/byethrow'
 import { ErrorFactory } from '@praha/error-factory'
 import { emitter } from '#/event/eventBus'
 import { createLogger } from '#/logger'
-import { AccountSession } from '#/services/AccountSession'
+import type { AccountSession } from '#/services/AccountSession'
 import { type ReconnectReason, reconnectManager } from '#/services/ReconnectManager'
 
 class AccountNotFoundError extends ErrorFactory({
@@ -14,6 +14,8 @@ export class AccountManager {
   accountSessions: Map<string, AccountSession> = new Map()
   accountNames: Map<string, string> = new Map()
   private logger = createLogger('账号管理')
+  private accountSessionModulePromise: Promise<typeof import('#/services/AccountSession')> | null =
+    null
   // 保存事件处理函数引用，用于清理
   private pageClosedHandler: (payload: { accountId: string; reason?: string }) => void
 
@@ -78,7 +80,14 @@ export class AccountManager {
     emitter.on('page-closed', this.pageClosedHandler)
   }
 
-  createSession(platformName: LiveControlPlatform, account: Account) {
+  private async loadAccountSessionModule() {
+    if (!this.accountSessionModulePromise) {
+      this.accountSessionModulePromise = import('#/services/AccountSession')
+    }
+    return this.accountSessionModulePromise
+  }
+
+  async createSession(platformName: LiveControlPlatform, account: Account) {
     this.setAccountName(account.id, account.name)
     const existSession = this.accountSessions.get(account.id)
     if (existSession) {
@@ -86,6 +95,7 @@ export class AccountManager {
       existSession.disconnect('重新连接', { closeBrowser: false })
     }
 
+    const { AccountSession } = await this.loadAccountSessionModule()
     const accountSession = new AccountSession(platformName, account)
     this.accountSessions.set(account.id, accountSession)
     return accountSession

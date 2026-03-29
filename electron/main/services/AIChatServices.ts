@@ -1,4 +1,3 @@
-import OpenAI, { AuthenticationError, NotFoundError } from 'openai'
 import { providers } from 'shared/providers'
 import { createLogger } from '#/logger'
 import type { AIChatStore } from '../../../src/hooks/useAIChat'
@@ -31,18 +30,50 @@ interface CheckAPIKeyFail {
 
 type CheckAPIKeyResult = CheckAPIKeySuccess | CheckAPIKeyFail
 
+type OpenAIConstructor = typeof import('openai').default
+type OpenAIClient = InstanceType<OpenAIConstructor>
+type OpenAIErrorConstructors = {
+  AuthenticationError: typeof import('openai').AuthenticationError
+  NotFoundError: typeof import('openai').NotFoundError
+}
+
+let openaiModulePromise: Promise<{ OpenAI: OpenAIConstructor } & OpenAIErrorConstructors> | null =
+  null
+
+async function loadOpenAIModule() {
+  if (!openaiModulePromise) {
+    openaiModulePromise = import('openai').then(module => ({
+      OpenAI: module.default,
+      AuthenticationError: module.AuthenticationError,
+      NotFoundError: module.NotFoundError,
+    }))
+  }
+  return openaiModulePromise
+}
+
 export class AIChatService {
   private logger: ReturnType<typeof createLogger> = createLogger('AI对话')
-  private openai: OpenAI
+  private openai: OpenAIClient
+  private apiKey: string
+  private AuthenticationError: OpenAIErrorConstructors['AuthenticationError']
+  private NotFoundError: OpenAIErrorConstructors['NotFoundError']
   private constructor(
-    private apiKey: string,
-    baseURL: string,
+    apiKey: string,
+    openai: OpenAIClient,
+    errors: OpenAIErrorConstructors,
     private provider: ProviderType,
   ) {
-    this.openai = new OpenAI({ apiKey, baseURL })
+    this.apiKey = apiKey
+    this.openai = openai
+    this.AuthenticationError = errors.AuthenticationError
+    this.NotFoundError = errors.NotFoundError
   }
 
-  public static createService(apiKey: string, provider: ProviderType, customBaseURL?: string) {
+  public static async createService(
+    apiKey: string,
+    provider: ProviderType,
+    customBaseURL?: string,
+  ) {
     let baseURL: string
     if (provider === 'custom') {
       if (!customBaseURL) {
@@ -53,7 +84,9 @@ export class AIChatService {
       baseURL = providers[provider].baseURL
     }
 
-    return new AIChatService(apiKey, baseURL, provider)
+    const { OpenAI, AuthenticationError, NotFoundError } = await loadOpenAIModule()
+    const openai = new OpenAI({ apiKey, baseURL })
+    return new AIChatService(apiKey, openai, { AuthenticationError, NotFoundError }, provider)
   }
 
   public async *chatStream(messages: ChatMessage[], model: string) {
@@ -154,13 +187,13 @@ export class AIChatService {
         kind: 'success',
       }
     } catch (error) {
-      if (error instanceof NotFoundError) {
+      if (error instanceof this.NotFoundError) {
         return {
           kind: 'fail',
           type: 'NotFoundError',
         }
       }
-      if (error instanceof AuthenticationError) {
+      if (error instanceof this.AuthenticationError) {
         return {
           kind: 'fail',
           type: 'AuthenticationError',

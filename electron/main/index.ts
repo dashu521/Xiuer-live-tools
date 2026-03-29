@@ -10,9 +10,6 @@ const UNPACKED_EXTERNALS = new Set([
   'electron-updater',
   'playwright',
   'playwright-core',
-  'playwright-extra',
-  'playwright-extra-plugin-stealth',
-  'puppeteer-extra-plugin-stealth',
 ])
 if (app?.isPackaged && process.resourcesPath) {
   const Mod = require('node:module') as { prototype: { require: (id: string) => unknown } }

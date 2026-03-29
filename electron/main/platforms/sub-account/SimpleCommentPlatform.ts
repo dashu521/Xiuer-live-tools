@@ -37,7 +37,6 @@ export function createSimpleCommentPlatform(config: SimplePlatformConfig): IPerf
   disconnect(): Promise<void>
 } {
   let page: Page | null = null
-  let _currentRoomId: string | null = null
 
   return {
     _isPerformComment: true as const,
@@ -88,7 +87,6 @@ export function createSimpleCommentPlatform(config: SimplePlatformConfig): IPerf
 
         // 等待页面加载完成（检查评论框是否存在）
         await page.waitForSelector(config.commentInputSelector, { timeout: 10000 })
-        _currentRoomId = roomId
         console.log(`[${config.name}] 已进入直播间: ${roomId}`)
         return true
       } catch (error) {
@@ -151,7 +149,6 @@ export function createSimpleCommentPlatform(config: SimplePlatformConfig): IPerf
      */
     disconnect: async (): Promise<void> => {
       page = null
-      _currentRoomId = null
     },
   }
 }

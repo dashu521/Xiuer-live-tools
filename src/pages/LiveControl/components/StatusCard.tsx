@@ -169,7 +169,6 @@ const StatusCardContent = React.memo(
 
     const isConnected = connectState.status === 'connected'
     const isConnecting = connectState.status === 'connecting'
-    const _isError = connectState.status === 'error'
     const isAnyTaskRunning =
       isAutoReplyRunning || isAutoMessageRunning || isAutoPopUpRunning || isLiveStatsRunning
 

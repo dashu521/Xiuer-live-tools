@@ -85,7 +85,6 @@ const RECOVERY_STRATEGIES: Record<UpdateErrorCode, RecoveryStrategy> = {
 
 class UpdateErrorHandler {
   private errorCounts: Map<string, number> = new Map()
-  private maxRetries = 3
   private retryDelays: Map<string, number> = new Map()
 
   async handleError(error: UpdateError): Promise<ErrorHandlingResult> {

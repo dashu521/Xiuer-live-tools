@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useState } from 'react'
 import { AuthDialog } from '@/components/auth/AuthDialog'
-import { normalizePlan, PLAN_TEXT_MAP } from '@/domain/access'
+import { normalizePlan, PLAN_TEXT_MAP } from '@/domain/access/planRules'
 import { useAuthStore } from '@/stores/authStore'
 import type { SafeUser } from '@/types/auth'
 

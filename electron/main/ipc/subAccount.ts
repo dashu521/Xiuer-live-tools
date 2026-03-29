@@ -2,8 +2,6 @@ import { Result } from '@praha/byethrow'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { isSameSubAccountLiveRoomUrl } from 'shared/subAccountLiveRoom'
 import { SUB_ACCOUNT_WORKSPACE_ID, SUB_ACCOUNT_WORKSPACE_NAME } from 'shared/subAccountWorkspace'
-// 导入验证库（使用已存在的 zod）
-import { z } from 'zod'
 import { createLogger } from '#/logger'
 import { type SubAccountStatus, subAccountManager } from '#/managers/SubAccountManager'
 import { subAccountTaskManager } from '#/managers/SubAccountTaskManager'
@@ -24,15 +22,6 @@ import {
   validateUrl,
 } from '#/utils/securityValidators'
 import windowManager from '#/windowManager'
-
-// 子账号导入数据验证 Schema
-const ImportAccountSchema = z.object({
-  id: z.string().min(1).max(100),
-  name: z.string().min(1).max(100),
-  platform: z.enum(['douyin', 'kuaishou', 'taobao', 'xiaohongshu']),
-})
-
-const _ImportAccountsArraySchema = z.array(ImportAccountSchema)
 
 const TASK_NAME = '小号互动'
 

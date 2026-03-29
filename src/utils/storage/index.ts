@@ -19,8 +19,6 @@ export {
   initializeStorage,
   initializeUserStorage,
 } from './init'
-// 导出迁移工具
-export { DataMigrator } from './migration/DataMigrator'
 // 导出监控工具
 export { StorageMonitor } from './monitor/StorageMonitor'
 // 导出存储管理器

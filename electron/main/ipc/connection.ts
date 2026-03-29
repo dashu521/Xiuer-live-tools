@@ -3,7 +3,6 @@ import { Result } from '@praha/byethrow'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { createLogger } from '#/logger'
 import { accountManager } from '#/managers/AccountManager'
-import { browserManager } from '#/managers/BrowserSessionManager'
 import { typedIpcMainHandle } from '#/utils'
 import windowManager from '#/windowManager'
 
@@ -11,6 +10,17 @@ const TASK_NAME = '中控台'
 
 /** 主进程允许同时连接的最大账号数，避免内存与 FD 耗尽 */
 const MAX_CONCURRENT_ACCOUNTS = 10
+
+let browserSessionManagerPromise: Promise<
+  typeof import('#/managers/BrowserSessionManager')
+> | null = null
+
+async function getBrowserManager() {
+  if (!browserSessionManagerPromise) {
+    browserSessionManagerPromise = import('#/managers/BrowserSessionManager')
+  }
+  return (await browserSessionManagerPromise).browserManager
+}
 
 function emitConnectionState(
   accountId: string,
@@ -73,14 +83,14 @@ function setupIpcHandlers() {
         }
 
         if (browserPath) {
-          browserManager.setBrowserPath(browserPath)
+          ;(await getBrowserManager()).setBrowserPath(browserPath)
         }
 
         logger.info(
           `${logPrefix}[connect:start] platform=${platform} account=${account.name} headless=${headless}`,
         )
 
-        const accountSession = accountManager.createSession(platform, account)
+        const accountSession = await accountManager.createSession(platform, account)
 
         console.log(`[BrowserPopup] ${logPrefix} Session created, calling connect()`)
 

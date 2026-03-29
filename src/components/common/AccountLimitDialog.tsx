@@ -9,7 +9,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { PLAN_COLOR_MAP, PLAN_ICON_MAP, TIER_BENEFITS } from '@/config/userCenter'
-import { PLAN_TEXT_MAP, type PlanType, useAccessContext } from '@/domain/access'
+import { useAccessContext } from '@/domain/access/AccessControl'
+import { PLAN_TEXT_MAP, type PlanType } from '@/domain/access/planRules'
 
 interface AccountLimitDialogProps {
   isOpen: boolean

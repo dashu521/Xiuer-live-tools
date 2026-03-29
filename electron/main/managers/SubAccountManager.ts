@@ -2,7 +2,7 @@ import { Result } from '@praha/byethrow'
 import type { Browser, BrowserContext, Page } from 'playwright'
 import { normalizeSubAccountLiveRoomUrl } from 'shared/subAccountLiveRoom'
 import { createLogger } from '#/logger'
-import { browserManager, type StorageState } from '#/managers/BrowserSessionManager'
+import type { StorageState } from '#/managers/BrowserSessionManager'
 import type { IPerformComment, IPlatform } from '#/platforms/IPlatform'
 import { SUB_ACCOUNT_PLATFORM_CONFIGS } from '#/platforms/sub-account/SimpleCommentPlatform'
 import {
@@ -50,15 +50,6 @@ export interface SubAccountSession {
   lastEnterError?: string
 }
 
-const USER_AGENTS = [
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0',
-]
-
 const VIEWPORTS = [
   { width: 1280, height: 720 },
   { width: 1366, height: 768 },
@@ -66,6 +57,17 @@ const VIEWPORTS = [
   { width: 1536, height: 864 },
   { width: 1920, height: 1080 },
 ]
+
+let browserSessionManagerPromise: Promise<
+  typeof import('#/managers/BrowserSessionManager')
+> | null = null
+
+async function getBrowserManager() {
+  if (!browserSessionManagerPromise) {
+    browserSessionManagerPromise = import('#/managers/BrowserSessionManager')
+  }
+  return (await browserSessionManagerPromise).browserManager
+}
 
 class SubAccountManager {
   private sessions: Map<string, SubAccountSession> = new Map()
@@ -333,13 +335,12 @@ class SubAccountManager {
         }
       }
 
-      const browserSession = await browserManager.createSession(headless, storageState)
+      const browserSession = await (await getBrowserManager()).createSession(headless, storageState)
       const { browser, context, page } = browserSession
 
       const viewport = VIEWPORTS[Math.floor(Math.random() * VIEWPORTS.length)]
       await page.setViewportSize(viewport)
 
-      const _userAgent = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)]
       await context.addInitScript(() => {
         Object.defineProperty(navigator, 'webdriver', { get: () => false })
       })

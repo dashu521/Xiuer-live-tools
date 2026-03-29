@@ -2,7 +2,6 @@ import { RefreshCwIcon, TerminalIcon } from 'lucide-react'
 import { Outlet } from 'react-router'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { DefaultErrorFallback, ErrorBoundary } from '@/components/common/ErrorBoundary'
-import Sidebar from '@/components/common/Sidebar'
 import {
   ContextMenu,
   ContextMenuContent,
@@ -12,14 +11,10 @@ import {
 } from '@/components/ui/context-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Toaster } from '@/components/ui/toaster'
-import { useAppIpcBootstrap } from '@/hooks/useAppIpcBootstrap'
-import { useAutoStartOnLive } from '@/hooks/useAutoStartOnLive'
 import { useDevMode } from '@/hooks/useDevMode'
 import { Header } from './components/common/Header'
 import './App.css'
 import React, { lazy, Suspense, useEffect, useState } from 'react'
-import { AuthProvider } from '@/components/auth/AuthProvider'
-import { QuickStartDialog, WelcomeDialog } from '@/components/onboarding'
 import {
   getQuickStartCompleted,
   getWelcomeCompleted,
@@ -27,18 +22,9 @@ import {
   setWelcomeCompleted,
 } from '@/constants/authStorageKeys'
 import { configSyncService } from '@/services/configSyncService'
-import { initializePlatformPreferenceService } from '@/services/platformPreferenceService'
 import { useAuthCheckDone, useIsAuthenticated } from '@/stores/authStore'
-import { initializeStorage } from '@/utils/storage'
 import { useAccounts } from './hooks/useAccounts'
-import { useAIChatStore } from './hooks/useAIChat'
-import { useLoadAutoMessageOnLogin } from './hooks/useAutoMessage'
-import { useLoadAutoPopUpOnLogin } from './hooks/useAutoPopUp'
-import { useLoadAutoReplyConfigOnLogin } from './hooks/useAutoReplyConfig'
-import { useLoadChromeConfigOnLogin } from './hooks/useChromeConfig'
-import { useLiveControlStore, useLoadLiveControlOnLogin } from './hooks/useLiveControl'
-import { useLoadSubAccountOnLogin } from './hooks/useSubAccount'
-import { useTaskConnectionGuard } from './hooks/useTaskConnectionGuard'
+import { useLiveControlStore } from './hooks/useLiveControl'
 import { useToast } from './hooks/useToast'
 
 const UpdateDialog = lazy(async () => {
@@ -46,42 +32,86 @@ const UpdateDialog = lazy(async () => {
   return { default: module.UpdateDialog }
 })
 
+const WelcomeDialog = lazy(async () => {
+  const module = await import('@/components/onboarding/WelcomeDialog')
+  return { default: module.WelcomeDialog }
+})
+
+const QuickStartDialog = lazy(async () => {
+  const module = await import('@/components/onboarding/QuickStartDialog')
+  return { default: module.QuickStartDialog }
+})
+
+const AppRuntimeBoot = lazy(async () => import('@/components/app/AppRuntimeBoot'))
+
+const Sidebar = lazy(async () => import('@/components/common/Sidebar'))
+
+const AuthProvider = lazy(async () => {
+  const module = await import('@/components/auth/AuthProvider')
+  return { default: module.AuthProvider }
+})
+
+function AppBootFallback() {
+  return (
+    <div
+      className="flex min-h-screen flex-col items-center justify-center gap-4"
+      style={{ backgroundColor: 'var(--app-bg)' }}
+    >
+      <Skeleton className="h-8 w-8 rounded-full" />
+      <span className="text-muted-foreground text-sm">加载中…</span>
+    </div>
+  )
+}
+
+function SidebarFallback() {
+  return (
+    <aside
+      className="relative z-[1] flex w-16 min-w-16 flex-col md:w-56 md:min-w-[14rem]"
+      style={{
+        backgroundColor: 'var(--sidebar-bg)',
+        boxShadow: 'var(--sidebar-edge-shadow)',
+      }}
+    >
+      <div className="flex-1 px-2 py-5 md:px-4">
+        <div className="space-y-2">
+          {Array.from({ length: 7 }).map((_, index) => (
+            <div
+              key={index}
+              className="flex items-center justify-center gap-3 rounded-lg px-3 py-2.5 md:justify-start"
+            >
+              <Skeleton className="h-5 w-5 rounded-md" />
+              <Skeleton className="hidden h-4 w-20 rounded md:block" />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="shrink-0 border-t border-border/40 px-2 py-3 md:px-4">
+        <div className="space-y-2">
+          {Array.from({ length: 2 }).map((_, index) => (
+            <div
+              key={index}
+              className="flex items-center justify-center gap-3 rounded-lg px-3 py-2 md:justify-start"
+            >
+              <Skeleton className="h-4 w-4 rounded-md" />
+              <Skeleton className="hidden h-4 w-16 rounded md:block" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </aside>
+  )
+}
+
 function AppContent() {
   const { enabled: devMode } = useDevMode()
   const { accounts, currentAccountId } = useAccounts()
-  const hydrateApiKeys = useAIChatStore(state => state.hydrateApiKeys)
   // 【修复】直接解构 setConnectState，避免 selector 返回新对象导致无限循环
   const setConnectState = useLiveControlStore(state => state.setConnectState)
 
-  // 全局 IPC 同步集中在专用 bootstrap hook，App 只负责装配
-  useAppIpcBootstrap()
-  // 开播自动启动必须全局挂载，不能依赖用户停留在直播控制台页面
-  useAutoStartOnLive()
-
-  // 【数据隔离】登录时加载各 Store 的配置
-  useLoadChromeConfigOnLogin()
-  useLoadAutoReplyConfigOnLogin()
-  useLoadAutoPopUpOnLogin()
-  useLoadAutoMessageOnLogin()
-  useLoadSubAccountOnLogin()
-  useLoadLiveControlOnLogin()
-
-  // 【关键】监听连接状态，当连接断开时自动停止所有任务（兜底机制）
-  useTaskConnectionGuard()
-
-  // 初始化平台偏好设置服务（应用启动时执行一次）
-  useEffect(() => {
-    initializePlatformPreferenceService()
-  }, [])
-
-  useEffect(() => {
-    void hydrateApiKeys()
-  }, [hydrateApiKeys])
-
   // Check if running in Electron environment
   useEffect(() => {
-    if (!window.ipcRenderer) {
-      console.error('window.ipcRenderer is not available. Please run this app in Electron.')
+    if (!window.ipcRenderer && import.meta.env.DEV) {
+      console.warn('[UI] window.ipcRenderer is unavailable in browser-only DEV preview.')
     }
   }, [])
 
@@ -157,12 +187,18 @@ function AppContent() {
             className="flex flex-col h-screen overflow-hidden"
             style={{ backgroundColor: 'var(--app-bg)' }}
           >
+            <Suspense fallback={null}>
+              <AppRuntimeBoot />
+            </Suspense>
+
             {/* 头部标题：固定高度；主内容区高度 = 100vh - 头部 - 底部日志，无全局滚动 */}
             <Header />
 
             <div className="flex flex-1 min-h-0 overflow-hidden gap-0">
               {/* 侧边栏 */}
-              <Sidebar />
+              <Suspense fallback={<SidebarFallback />}>
+                <Sidebar />
+              </Suspense>
 
               <main
                 className="min-h-0 flex-1 flex flex-col overflow-hidden p-3 md:p-6"
@@ -297,29 +333,32 @@ function AppWithOnboarding() {
   return (
     <>
       <AppContent />
-      <WelcomeDialog
-        isOpen={showWelcome}
-        onClose={handleWelcomeClose}
-        onStart={handleWelcomeStart}
-      />
-      <QuickStartDialog
-        isOpen={showQuickStart}
-        onClose={handleQuickStartClose}
-        onConnect={handleQuickStartConnect}
-      />
+      <Suspense fallback={null}>
+        <WelcomeDialog
+          isOpen={showWelcome}
+          onClose={handleWelcomeClose}
+          onStart={handleWelcomeStart}
+        />
+      </Suspense>
+      <Suspense fallback={null}>
+        <QuickStartDialog
+          isOpen={showQuickStart}
+          onClose={handleQuickStartClose}
+          onConnect={handleQuickStartConnect}
+        />
+      </Suspense>
     </>
   )
 }
 
-// 在应用启动时立即初始化存储系统（必须在 AuthProvider 之前）
-initializeStorage()
-
 export default function App() {
   return (
     <ErrorBoundary fallback={DefaultErrorFallback}>
-      <AuthProvider>
-        <AppWithOnboarding />
-      </AuthProvider>
+      <Suspense fallback={<AppBootFallback />}>
+        <AuthProvider>
+          <AppWithOnboarding />
+        </AuthProvider>
+      </Suspense>
     </ErrorBoundary>
   )
 }

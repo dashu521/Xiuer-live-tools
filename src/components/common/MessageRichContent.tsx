@@ -1,14 +1,11 @@
 import Markdown from 'react-markdown'
-import rehypeHighlight from 'rehype-highlight'
 import remarkGfm from 'remark-gfm'
-import 'highlight.js/styles/vs.css'
 
 export function MessageRichContent({ content }: { content: string }) {
   return (
     <div className="message-rich-content text-sm leading-7 text-foreground">
       <Markdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeHighlight]}
         components={{
           h1: props => <h1 className="mb-4 text-2xl font-semibold tracking-tight" {...props} />,
           h2: props => <h2 className="mb-3 mt-6 text-xl font-semibold tracking-tight" {...props} />,

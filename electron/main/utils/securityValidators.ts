@@ -56,8 +56,6 @@ export function validateUrl(input: unknown): { valid: boolean; url?: string; err
 const DANGEROUS_CHARS = /[<>:"/\\|?*\x00-\x1f]/
 // 路径遍历模式
 const PATH_TRAVERSAL = /\.\.(\\|\/)/
-// 只允许字母、数字、中文、常见安全符号
-const _SAFE_FILENAME_PATTERN = /^[a-zA-Z0-9\u4e00-\u9fa5._\- ]+$/
 
 /**
  * 校验文件名是否安全

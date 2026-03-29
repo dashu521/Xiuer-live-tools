@@ -5,15 +5,12 @@ import { arch, platform } from 'node:os'
 import path from 'node:path'
 import { app, net, shell } from 'electron'
 import type { AppUpdater, ProgressInfo, UpdateDownloadedEvent, UpdateInfo } from 'electron-updater'
-import { marked } from 'marked'
-import semver from 'semver'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
-import * as yaml from 'yaml'
 import windowManager from '#/windowManager'
 import { getUpdateUrl } from '../../config/download'
 import { createLogger, isAppQuitting } from '../logger'
 import { errorMessage, sleep } from '../utils'
-import { type BackupInfo, rollbackManager } from './RollbackManager'
+import type { BackupInfo } from './RollbackManager'
 import { UpdateErrorCode, updateErrorHandler } from './UpdateErrorHandler'
 
 const logger = createLogger('enhanced-update')
@@ -33,67 +30,45 @@ type LatestYml = {
   releaseDate: string
 }
 
-const _PRODUCT_NAME = '秀儿直播助手'
+type SemverModule = typeof import('semver')
+type YamlModule = typeof import('yaml')
+type RollbackManagerModule = typeof import('./RollbackManager')
 
-marked.use({
-  renderer: {
-    link: ({ href, title, text }) => {
-      return `<a href="${href}" target="_blank" rel="noopener noreferrer"${title ? ` title="${title}"` : ''}>${text}</a>`
-    },
-  },
-})
+let semverModulePromise: Promise<SemverModule> | null = null
+let yamlModulePromise: Promise<YamlModule> | null = null
+let rollbackManagerModulePromise: Promise<RollbackManagerModule> | null = null
 
-function _extractChanges(changelogContent: string, userVersion: string): string {
-  const lines = changelogContent.split('\n')
-  const result = []
-
-  for (const line of lines) {
-    const versionMatch = line.match(/^##\s+v?([0-9]+\.[0-9]+\.[0-9]+)/)
-
-    if (versionMatch) {
-      const versionInLog = versionMatch[1]
-      if (semver.lte(versionInLog, userVersion)) {
-        break
-      }
-    }
-
-    result.push(line)
+function loadSemver() {
+  if (!semverModulePromise) {
+    semverModulePromise = import('semver')
   }
-
-  return result.slice(1).join('\n')
+  return semverModulePromise
 }
 
-async function _fetchWithRetry(url: string | URL, retries = 3, delay = 1000) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const res = (await timeoutFetch(url)) as Response
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      return res
-    } catch (e) {
-      if (i === retries - 1) throw e
-      await sleep(delay)
-    }
+function loadYaml() {
+  if (!yamlModulePromise) {
+    yamlModulePromise = import('yaml')
   }
+  return yamlModulePromise
 }
 
-async function timeoutFetch(url: string | URL, timeout = 5000) {
-  const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), timeout)
+function loadRollbackManagerModule() {
+  if (!rollbackManagerModulePromise) {
+    rollbackManagerModulePromise = import('./RollbackManager')
+  }
+  return rollbackManagerModulePromise
+}
 
+async function getRollbackManager() {
+  const module = await loadRollbackManagerModule()
+  return module.rollbackManager
+}
+
+async function isRollbackOperational(): Promise<boolean> {
   try {
-    const response = await net.fetch(url.toString(), {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-      },
-    })
-    clearTimeout(timeoutId)
-    return response
-  } catch (err) {
-    if ((err as Error).name === 'AbortError') {
-      throw new Error('Fetch timeout')
-    }
-    throw err
+    return (await getRollbackManager()).isOperational()
+  } catch {
+    return false
   }
 }
 
@@ -248,6 +223,7 @@ class EnhancedUpdateManager {
     logger.info(`Rolling back to version: ${targetVersion || 'latest'}`)
 
     try {
+      const rollbackManager = await getRollbackManager()
       const latestBackup = rollbackManager.getLatestBackup()
       if (!targetVersion && !latestBackup) {
         logger.warn('No backup available for rollback')
@@ -278,7 +254,7 @@ class EnhancedUpdateManager {
   }
 
   async listBackups(): Promise<BackupInfo[]> {
-    return await rollbackManager.listBackups()
+    return await (await getRollbackManager()).listBackups()
   }
 
   setAutoCheck(enabled: boolean, intervalMs = 3600000): void {
@@ -356,9 +332,10 @@ class EnhancedUpdateManager {
       error: message,
     })
 
+    const canRollback = options.canRollback ?? (await isRollbackOperational())
     const updateError = updateErrorHandler.createError(UpdateErrorCode.UNKNOWN_ERROR, message, {
       recoverable: options.recoverable ?? true,
-      canRollback: options.canRollback ?? rollbackManager.isOperational(),
+      canRollback,
       details: { downloadURL: options.downloadURL },
     })
     await updateErrorHandler.handleError(updateError)
@@ -407,8 +384,9 @@ class EnhancedWindowsUpdater implements Updater {
       if (isAppQuitting) return
       logger.info(`Update available: ${info.version}`)
 
-      if (rollbackManager.isOperational()) {
+      if (await isRollbackOperational()) {
         try {
+          const rollbackManager = await getRollbackManager()
           const backup = await rollbackManager.createBackup(app.getVersion())
           logger.info(`Backup created: ${backup.id}`)
         } catch (error) {
@@ -484,6 +462,7 @@ class EnhancedWindowsUpdater implements Updater {
         // 使用默认 GitHub provider 配置（从 electron-builder.json 读取）
         const result = await this.autoUpdater.checkForUpdates()
         const newVersion = result?.updateInfo?.version || app.getVersion()
+        const semver = await loadSemver()
         return {
           update: semver.gt(newVersion, app.getVersion()),
           version: app.getVersion(),
@@ -506,6 +485,7 @@ class EnhancedWindowsUpdater implements Updater {
 
       const result = await this.autoUpdater.checkForUpdates()
       const newVersion = result?.updateInfo?.version || app.getVersion()
+      const semver = await loadSemver()
       return {
         update: semver.gt(newVersion, app.getVersion()),
         version: app.getVersion(),
@@ -552,6 +532,7 @@ class EnhancedMacOSUpdater implements Updater {
       const cacheBuster = `_t=${Date.now()}`
       const latestYmlURL = new URL(`latest-mac.yml?${cacheBuster}`, assetsBaseURL).href
       const ymlContent = (await net.fetch(latestYmlURL).then(res => res.text())) as string
+      const yaml = await loadYaml()
       const latestYml = yaml.parse(ymlContent) as LatestYml
 
       if (!latestYml) {
@@ -559,6 +540,7 @@ class EnhancedMacOSUpdater implements Updater {
       }
 
       this.versionInfo = latestYml
+      const semver = await loadSemver()
 
       if (!semver.gt(latestYml.version, app.getVersion())) {
         logger.info(`${app.getVersion()} 已经是最新版本`)
@@ -577,7 +559,8 @@ class EnhancedMacOSUpdater implements Updater {
 
       logger.info(`Update available: ${app.getVersion()} -> ${latestYml.version}`)
 
-      if (rollbackManager.isOperational()) {
+      if (await isRollbackOperational()) {
+        const rollbackManager = await getRollbackManager()
         const backup = await rollbackManager.createBackup(app.getVersion())
         logger.info(`Backup created: ${backup.id}`)
       } else {
