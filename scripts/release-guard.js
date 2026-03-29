@@ -425,6 +425,17 @@ function scanHighRiskContent() {
     );
   }
 
+  function isTestFixtureFile(filePath) {
+    const normalizedPath = filePath.split(path.sep).join('/');
+    return (
+      normalizedPath.includes('/__tests__/') ||
+      normalizedPath.endsWith('.test.ts') ||
+      normalizedPath.endsWith('.test.tsx') ||
+      normalizedPath.endsWith('.spec.ts') ||
+      normalizedPath.endsWith('.spec.tsx')
+    );
+  }
+
   function scanFile(filePath) {
     try {
       const content = fs.readFileSync(filePath, 'utf-8');
@@ -435,6 +446,18 @@ function scanHighRiskContent() {
         const line = lines[i];
         for (const { pattern, name } of riskPatterns) {
           if (pattern.test(line)) {
+            if (isTestFixtureFile(filePath) && (name === '17701259200' || name === 'test_users.db')) {
+              infoFindings.push({
+                file: filePath,
+                line: i + 1,
+                content: line.trim().substring(0, 80),
+                risk: name,
+                note: '测试夹具命中，已按非生产风险处理',
+                isFallback: false,
+              });
+              continue;
+            }
+
             const finding = {
               file: filePath,
               line: i + 1,
