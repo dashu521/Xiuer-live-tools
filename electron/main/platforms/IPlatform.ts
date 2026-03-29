@@ -30,6 +30,18 @@ export function isPerformPopup(platform: IPlatform): platform is IPlatform & IPe
   return '_isPerformPopup' in platform && platform._isPerformPopup === true
 }
 
+export interface IPopupGoodsScanner {
+  _isPopupGoodsScanner: true
+  /** 扫描当前直播中控台/商品页上的商品序号，用于自动填充 */
+  scanPopupGoodsIds(): Result.ResultAsync<number[], Error>
+}
+
+export function isPopupGoodsScanner(
+  platform: IPlatform,
+): platform is IPlatform & IPopupGoodsScanner {
+  return '_isPopupGoodsScanner' in platform && platform._isPopupGoodsScanner === true
+}
+
 export interface IPerformComment {
   _isPerformComment: true
   /** 在互动评论区域发送评论，返回结果表示是否成功置顶 */

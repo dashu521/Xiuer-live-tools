@@ -1,6 +1,16 @@
 import { useMemoizedFn } from 'ahooks'
-import { AlertCircle, Clock, Keyboard, Package, Plus, Trash2 } from 'lucide-react'
-import React, { useEffect, useState } from 'react'
+import {
+  AlertCircle,
+  Clock,
+  Keyboard,
+  Loader2,
+  Package,
+  Plus,
+  RefreshCcw,
+  Trash2,
+} from 'lucide-react'
+import React, { useEffect, useRef, useState } from 'react'
+import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -15,7 +25,7 @@ import {
   useAutoPopUpActions,
   useCurrentAutoPopUp,
 } from '@/hooks/useAutoPopUp'
-import { useCurrentPlatform } from '@/hooks/useLiveControl'
+import { useConnectionStatus, useCurrentPlatform } from '@/hooks/useLiveControl'
 import { useToast } from '@/hooks/useToast'
 import { MOCK_GOODS_IDS, shouldUseMockGoods } from '@/utils/mockGoodsData'
 import ShortcutConfigTab from './ShortcutConfigTab'
@@ -165,14 +175,21 @@ const GoodsItemEditDialog: React.FC<GoodsItemEditDialogProps> = ({
 const GoodsListCard = React.memo(() => {
   // 【P1-3】使用 goods 替代 goodsIds
   const goods = useCurrentAutoPopUp(context => context.config.goods) ?? []
+  const goodsAutoFillAttempted = useCurrentAutoPopUp(
+    context => context.goodsAutoFillAttempted ?? false,
+  )
+  const goodsAutoFillLocked = useCurrentAutoPopUp(context => context.goodsAutoFillLocked ?? false)
   const defaultInterval = useCurrentAutoPopUp(context => context.config.scheduler.interval)
-  const { setGoods } = useAutoPopUpActions()
+  const { setGoods, setGoodsAutoFillState } = useAutoPopUpActions()
   const { toast } = useToast()
   const platform = useCurrentPlatform()
+  const connectionStatus = useConnectionStatus()
   const { currentAccountId } = useAccounts()
   const [inputValue, setInputValue] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const [editingItem, setEditingItem] = useState<GoodsItemConfig | null>(null)
+  const [isAutoFilling, setIsAutoFilling] = useState(false)
+  const autoFillRequestRef = useRef(false)
 
   // 当账号切换时，重置编辑状态
   useEffect(() => {
@@ -180,6 +197,7 @@ const GoodsListCard = React.memo(() => {
     setIsEditing(false)
     setInputValue('')
     setEditingItem(null)
+    autoFillRequestRef.current = false
   }, [currentAccountId])
 
   // 【测试模式检查】仅在测试平台或开发模式下启用 Mock 数据
@@ -198,6 +216,18 @@ const GoodsListCard = React.memo(() => {
 
   // 将商品数组转换为文本（仅提取ID）
   const goodsToText = (items: GoodsItemConfig[]) => items.map(g => g.id).join(', ')
+
+  const mergeGoodsByIds = useMemoizedFn((ids: number[]) =>
+    ids.map(id => goods.find(item => item.id === id) ?? { id }),
+  )
+
+  const persistManualGoods = useMemoizedFn((nextGoods: GoodsItemConfig[]) => {
+    setGoods(nextGoods)
+    setGoodsAutoFillState({
+      goodsAutoFillAttempted: true,
+      goodsAutoFillLocked: true,
+    })
+  })
 
   // 将文本解析为商品配置数组
   const parseGoods = (text: string): GoodsItemConfig[] => {
@@ -236,7 +266,7 @@ const GoodsListCard = React.memo(() => {
       const existing = goods.find(g => g.id === newItem.id)
       return existing ? { ...existing } : newItem
     })
-    setGoods(mergedItems)
+    persistManualGoods(mergedItems)
     setIsEditing(false)
     toast.success(`已保存 ${newItems.length} 个商品`)
   })
@@ -249,7 +279,7 @@ const GoodsListCard = React.memo(() => {
 
   // 清空列表
   const handleClear = useMemoizedFn(() => {
-    setGoods([])
+    persistManualGoods([])
     setInputValue('')
     toast.success('已清空商品列表')
   })
@@ -263,16 +293,82 @@ const GoodsListCard = React.memo(() => {
         newItems.push(sample)
       }
     }
-    setGoods(newItems)
+    persistManualGoods(newItems)
     toast.success('已添加示例商品')
+  })
+
+  const handleAutoFill = useMemoizedFn(async (source: 'manual' | 'init' = 'manual') => {
+    if (!currentAccountId) {
+      if (source === 'manual') {
+        toast.error('请先选择账号')
+      }
+      return
+    }
+    if (connectionStatus !== 'connected') {
+      if (source === 'manual') {
+        toast.error('请先连接直播中控台，再自动读取商品序号')
+      }
+      return
+    }
+
+    setIsAutoFilling(true)
+    try {
+      const result = await window.ipcRenderer.invoke(
+        IPC_CHANNELS.tasks.autoPopUp.fetchGoodsIds,
+        currentAccountId,
+      )
+      if (!result.success || !result.goodsIds || result.goodsIds.length === 0) {
+        if (source === 'manual') {
+          toast.error(result.error || '未读取到商品序号')
+        }
+        return
+      }
+
+      const mergedGoods = mergeGoodsByIds(result.goodsIds)
+      setGoods(mergedGoods)
+      setGoodsAutoFillState({
+        goodsAutoFillAttempted: true,
+      })
+      setInputValue(goodsToText(mergedGoods))
+      setIsEditing(false)
+      if (source === 'manual') {
+        toast.success(`已自动填充 ${result.goodsIds.length} 个商品序号`)
+      }
+    } catch (error) {
+      if (source === 'manual') {
+        toast.error(error instanceof Error ? error.message : '自动填充失败')
+      }
+    } finally {
+      setIsAutoFilling(false)
+      autoFillRequestRef.current = false
+    }
   })
 
   // 【P1-3】更新单个商品配置
   const handleUpdateItem = useMemoizedFn((updatedItem: GoodsItemConfig) => {
     const newGoods = goods.map(g => (g.id === updatedItem.id ? updatedItem : g))
-    setGoods(newGoods)
+    persistManualGoods(newGoods)
     toast.success(`商品 #${updatedItem.id} 设置已更新`)
   })
+
+  useEffect(() => {
+    if (goods.length > 0) return
+    if (goodsAutoFillAttempted || goodsAutoFillLocked) return
+    if (connectionStatus !== 'connected') return
+    if (!currentAccountId) return
+    if (isAutoFilling || autoFillRequestRef.current) return
+
+    autoFillRequestRef.current = true
+    void handleAutoFill('init')
+  }, [
+    goods.length,
+    goodsAutoFillAttempted,
+    goodsAutoFillLocked,
+    connectionStatus,
+    currentAccountId,
+    isAutoFilling,
+    handleAutoFill,
+  ])
 
   return (
     <Card className="overflow-hidden">
@@ -321,6 +417,20 @@ const GoodsListCard = React.memo(() => {
                           设置时间
                         </Button>
                       )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8"
+                        onClick={() => void handleAutoFill()}
+                        disabled={isAutoFilling}
+                      >
+                        {isAutoFilling ? (
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCcw className="mr-1.5 h-3.5 w-3.5" />
+                        )}
+                        自动填充
+                      </Button>
                       <Button variant="outline" size="sm" className="h-8" onClick={handleAddSample}>
                         <Plus className="mr-1.5 h-3.5 w-3.5" />
                         添加示例
@@ -403,7 +513,9 @@ const GoodsListCard = React.memo(() => {
               {/* 提示信息 */}
               <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/50 rounded-lg px-3 py-2">
                 <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                <span>商品序号对应直播中控台中的商品顺序。点击商品标签可设置单独的弹窗间隔。</span>
+                <span>
+                  商品序号对应直播中控台中的商品顺序。连接中控台后可点“自动填充”读取当前商品序号；点击商品标签可设置单独的弹窗间隔。
+                </span>
               </div>
             </div>
           </TabsContent>

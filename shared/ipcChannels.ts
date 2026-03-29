@@ -65,6 +65,7 @@ export const IPC_CHANNELS = {
       start: 'tasks:autoPopUp:start',
       stop: 'tasks:autoPopUp:stop',
       updateConfig: 'tasks:autoPopUp:updateConfig',
+      fetchGoodsIds: 'tasks:autoPopUp:fetchGoodsIds',
       /** @deprecated 使用 stoppedFor(accountId) 替代 */
       stoppedEvent: 'tasks:autoPopUp:stoppedEvent',
       /** 账号隔离的停止事件 */

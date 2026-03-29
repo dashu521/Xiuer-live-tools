@@ -6,11 +6,18 @@ import {
   connect,
   ensurePage,
   getAccountName,
+  getAllGoodsIdsFromScroller,
   getItemFromVirtualScroller,
   openUrlByElement,
   toggleButton,
 } from '../helper'
-import type { ICommentListener, IPerformComment, IPerformPopup, IPlatform } from '../IPlatform'
+import type {
+  ICommentListener,
+  IPerformComment,
+  IPerformPopup,
+  IPlatform,
+  IPopupGoodsScanner,
+} from '../IPlatform'
 import { XiaohongshuCommentListener } from './commentListener'
 import { REGEXPS, SELECTORS, TEXTS, URLS } from './constant'
 import { xiaohongshuElementFinder as elementFinder } from './elment-finder'
@@ -21,11 +28,12 @@ const PLATFORM_NAME = '小红书' as const
  * 小红书（千帆）
  */
 export class XiaohongshuPlatform
-  implements IPlatform, IPerformPopup, IPerformComment, ICommentListener
+  implements IPlatform, IPerformPopup, IPerformComment, ICommentListener, IPopupGoodsScanner
 {
   readonly _isCommentListener = true
   readonly _isPerformComment = true
   readonly _isPerformPopup = true
+  readonly _isPopupGoodsScanner = true
   private mainPage: Page | null = null
   private commentListener: XiaohongshuCommentListener | null = null
   private accountName = ''
@@ -107,6 +115,13 @@ export class XiaohongshuPlatform
     return Result.pipe(
       ensurePage(this.mainPage),
       Result.andThen(page => comment(page, elementFinder, message, false)),
+    )
+  }
+
+  async scanPopupGoodsIds() {
+    return Result.pipe(
+      ensurePage(this.mainPage),
+      Result.andThen(page => getAllGoodsIdsFromScroller(page, elementFinder)),
     )
   }
 

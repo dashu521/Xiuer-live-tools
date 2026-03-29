@@ -22,16 +22,31 @@ import { PageNotFoundError, type PlatformError } from '#/errors/PlatformError'
 import { createLogger } from '#/logger'
 import type { BrowserSession } from '#/managers/BrowserSessionManager'
 import { getRandomDouyinLiveMessage } from '#/utils'
-import { comment, ensurePage, getItemFromVirtualScroller, toggleButton } from '../helper'
-import type { ICommentListener, IPerformComment, IPerformPopup, IPlatform } from '../IPlatform'
+import {
+  comment,
+  ensurePage,
+  getAllGoodsIdsFromScroller,
+  getItemFromVirtualScroller,
+  toggleButton,
+} from '../helper'
+import type {
+  ICommentListener,
+  IPerformComment,
+  IPerformPopup,
+  IPlatform,
+  IPopupGoodsScanner,
+} from '../IPlatform'
 import { devElementFinder as elementFinder } from './element-finder'
 
 const PLATFORM_NAME = '测试平台' as const
 
-export class DevPlatform implements IPlatform, IPerformComment, IPerformPopup, ICommentListener {
+export class DevPlatform
+  implements IPlatform, IPerformComment, IPerformPopup, ICommentListener, IPopupGoodsScanner
+{
   readonly _isPerformPopup = true
   readonly _isPerformComment = true
   readonly _isCommentListener = true
+  readonly _isPopupGoodsScanner = true
 
   private listenerTimer: ReturnType<typeof setInterval> | null = null
   private mainPage: Page | null = null
@@ -78,6 +93,13 @@ export class DevPlatform implements IPlatform, IPerformComment, IPerformPopup, I
     return Result.pipe(
       ensurePage(this.mainPage),
       Result.andThen(page => comment(page, elementFinder, message, false)),
+    )
+  }
+
+  async scanPopupGoodsIds() {
+    return Result.pipe(
+      ensurePage(this.mainPage),
+      Result.andThen(page => getAllGoodsIdsFromScroller(page, elementFinder)),
     )
   }
 

@@ -196,6 +196,11 @@ export interface IpcChannels {
     accountId: string,
     config: Partial<AutoPopupConfig>,
   ) => void
+  [IPC_CHANNELS.tasks.autoPopUp.fetchGoodsIds]: (accountId: string) => Promise<{
+    success: boolean
+    goodsIds?: number[]
+    error?: string
+  }>
   [IPC_CHANNELS.tasks.autoPopUp.registerShortcuts]: (
     accountId: string,
     shortcuts: { accelerator: string; goodsIds: number[] }[],

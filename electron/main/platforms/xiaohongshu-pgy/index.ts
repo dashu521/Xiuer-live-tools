@@ -1,7 +1,13 @@
 import type { Page } from 'playwright'
 import type { BrowserSession } from '#/managers/BrowserSessionManager'
 import { getAccountName, openUrlByElement } from '../helper'
-import type { ICommentListener, IPerformComment, IPerformPopup, IPlatform } from '../IPlatform'
+import type {
+  ICommentListener,
+  IPerformComment,
+  IPerformPopup,
+  IPlatform,
+  IPopupGoodsScanner,
+} from '../IPlatform'
 import { XiaohongshuPlatform } from '../xiaohongshu'
 import { REGEXPS, SELECTORS, URLS } from './constant'
 
@@ -11,10 +17,11 @@ const PLATFORM_NAME = '蒲公英' as const
  * 蒲公英
  */
 export class XiaohongshuPgyPlatform
-  implements IPlatform, IPerformPopup, IPerformComment, ICommentListener
+  implements IPlatform, IPerformPopup, IPerformComment, ICommentListener, IPopupGoodsScanner
 {
   readonly _isPerformComment = true
   readonly _isPerformPopup = true
+  readonly _isPopupGoodsScanner = true
   private mainPage: Page | null = null
   readonly _isCommentListener = true
   private accountName = ''
@@ -84,6 +91,10 @@ export class XiaohongshuPgyPlatform
 
   async performPopup(...args: Parameters<IPerformPopup['performPopup']>) {
     return XiaohongshuPlatform.prototype.performPopup.apply(this, args)
+  }
+
+  async scanPopupGoodsIds() {
+    return await XiaohongshuPlatform.prototype.scanPopupGoodsIds.call(this)
   }
 
   async performComment(message: string) {

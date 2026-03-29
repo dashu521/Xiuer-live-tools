@@ -7,10 +7,17 @@ import {
   comment,
   connect,
   ensurePage,
+  getAllGoodsIdsFromScroller,
   getItemFromVirtualScroller,
   openUrlByElement,
 } from '../helper'
-import type { ICommentListener, IPerformComment, IPerformPopup, IPlatform } from '../IPlatform'
+import type {
+  ICommentListener,
+  IPerformComment,
+  IPerformPopup,
+  IPlatform,
+  IPopupGoodsScanner,
+} from '../IPlatform'
 import { TaobaoCommentListener } from './commentListener'
 import { REGEXPS, SELECTORS, URLS } from './constant'
 import { taobaoElementFinder as elementFinder } from './element-finder'
@@ -20,10 +27,13 @@ const PLATFORM_NAME = '淘宝' as const
 /**
  * 淘宝
  */
-export class TaobaoPlatform implements IPlatform, IPerformPopup, IPerformComment, ICommentListener {
+export class TaobaoPlatform
+  implements IPlatform, IPerformPopup, IPerformComment, ICommentListener, IPopupGoodsScanner
+{
   readonly _isCommentListener = true
   readonly _isPerformComment = true
   readonly _isPerformPopup = true
+  readonly _isPopupGoodsScanner = true
   private mainPage: Page | null = null
   private commentListener: TaobaoCommentListener | null = null
 
@@ -160,6 +170,13 @@ export class TaobaoPlatform implements IPlatform, IPerformPopup, IPerformComment
     return Result.pipe(
       ensurePage(this.mainPage),
       Result.andThen(page => comment(page, elementFinder, message, false)),
+    )
+  }
+
+  async scanPopupGoodsIds() {
+    return Result.pipe(
+      ensurePage(this.mainPage),
+      Result.andThen(page => getAllGoodsIdsFromScroller(page, elementFinder)),
     )
   }
 

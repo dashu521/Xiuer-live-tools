@@ -6,10 +6,11 @@ import {
   connect,
   ensurePage,
   getAccountName,
+  getAllGoodsIdsFromScroller,
   getItemFromVirtualScroller,
   toggleButton,
 } from '../helper'
-import type { IPerformComment, IPerformPopup, IPlatform } from '../IPlatform'
+import type { IPerformComment, IPerformPopup, IPlatform, IPopupGoodsScanner } from '../IPlatform'
 import { REGEXPS, SELECTORS, TEXTS, URLS } from './constant'
 import { douyinEosElementFinder as elementFinder } from './element-finder'
 
@@ -18,9 +19,12 @@ const PLATFORM_NAME = '抖音团购' as const
 /**
  * 抖音团购
  */
-export class DouyinEosPlatform implements IPlatform, IPerformPopup, IPerformComment {
+export class DouyinEosPlatform
+  implements IPlatform, IPerformPopup, IPerformComment, IPopupGoodsScanner
+{
   readonly _isPerformComment = true
   readonly _isPerformPopup = true
+  readonly _isPopupGoodsScanner = true
   public mainPage: Page | null = null
 
   async connect(browserSession: BrowserSession) {
@@ -92,6 +96,13 @@ export class DouyinEosPlatform implements IPlatform, IPerformPopup, IPerformComm
     return Result.pipe(
       ensurePage(this.mainPage),
       Result.andThen(page => comment(page, elementFinder, message, false)),
+    )
+  }
+
+  async scanPopupGoodsIds() {
+    return Result.pipe(
+      ensurePage(this.mainPage),
+      Result.andThen(page => getAllGoodsIdsFromScroller(page, elementFinder)),
     )
   }
 

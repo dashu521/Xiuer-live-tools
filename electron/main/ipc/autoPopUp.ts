@@ -45,6 +45,35 @@ function setupIpcHandlers() {
     )
   })
 
+  typedIpcMainHandle(IPC_CHANNELS.tasks.autoPopUp.fetchGoodsIds, async (_, accountId) => {
+    const logger = createLogger(`@${accountManager.getAccountName(accountId)}`).scope(TASK_NAME)
+    const accountSession = accountManager.getSession(accountId)
+    if (Result.isFailure(accountSession)) {
+      logger.error('读取商品序号失败：', accountSession.error)
+      return {
+        success: false,
+        error:
+          accountSession.error instanceof Error ? accountSession.error.message : '读取商品序号失败',
+      }
+    }
+
+    const goodsIdsResult = await accountSession.value.fetchAutoPopupGoodsIds()
+    if (Result.isFailure(goodsIdsResult)) {
+      logger.error('读取商品序号失败：', goodsIdsResult.error)
+      return {
+        success: false,
+        error:
+          goodsIdsResult.error instanceof Error ? goodsIdsResult.error.message : '读取商品序号失败',
+      }
+    }
+
+    logger.info(`成功读取商品序号，共 ${goodsIdsResult.value.length} 个`)
+    return {
+      success: true,
+      goodsIds: goodsIdsResult.value,
+    }
+  })
+
   typedIpcMainHandle(IPC_CHANNELS.tasks.autoPopUp.registerShortcuts, (_, accountId, shortcuts) => {
     const logger = createLogger(`@${accountManager.getAccountName(accountId)}`).scope('快捷键弹窗')
     for (const sc of shortcuts) {

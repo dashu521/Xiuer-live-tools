@@ -27,6 +27,7 @@ import {
   isPerformComment,
   isPerformPopup,
   isPinComment,
+  isPopupGoodsScanner,
 } from '#/platforms/IPlatform'
 import { accountRuntimeManager } from '#/services/AccountScopedRuntimeManager'
 import { type ReconnectReason, reconnectManager } from '#/services/ReconnectManager'
@@ -719,6 +720,18 @@ export class AccountSession {
       return task.updateConfig(config)
     }
     return Result.fail(new TaskNotSupportedError({ taskName: `update-${type}` }))
+  }
+
+  public async fetchAutoPopupGoodsIds(): Result.ResultAsync<number[], Error> {
+    if (!isPerformPopup(this.platform)) {
+      return Result.fail(new TaskNotSupportedError({ taskName: 'auto-popup' }))
+    }
+
+    if (!isPopupGoodsScanner(this.platform)) {
+      return Result.fail(new TaskNotSupportedError({ taskName: 'scan-auto-popup-goods' }))
+    }
+
+    return await this.platform.scanPopupGoodsIds()
   }
 
   /**

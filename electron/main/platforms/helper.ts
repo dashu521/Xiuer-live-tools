@@ -208,6 +208,66 @@ export async function getItemFromVirtualScroller(
   )
 }
 
+/** 读取当前商品列表中的全部商品序号，兼容虚拟列表和普通列表。 */
+export async function getAllGoodsIdsFromScroller(
+  page: Page,
+  elementFinder: IElementFinder,
+  maxScrollPasses = 30,
+): Result.ResultAsync<number[], PlatformError> {
+  const SCROLL_TOLERANCE = 10
+  const LOAD_WAIT_MS = 500
+  const seenGoodsIds = new Set<number>()
+  let lastScrollTop = Number.NaN
+
+  for (let pass = 0; pass < maxScrollPasses; pass++) {
+    const currentGoodsItems = await elementFinder.getCurrentGoodsItemsList(page)
+    if (Result.isFailure(currentGoodsItems)) {
+      return currentGoodsItems
+    }
+
+    const currentIdResults = await Promise.all(
+      currentGoodsItems.value.map(item => elementFinder.getIdFromGoodsItem(item)),
+    )
+
+    for (const idResult of currentIdResults) {
+      if (Result.isSuccess(idResult)) {
+        seenGoodsIds.add(idResult.value)
+      }
+    }
+
+    const scrollContainer = await elementFinder.getGoodsItemsScrollContainer(page)
+    if (Result.isFailure(scrollContainer)) {
+      if (seenGoodsIds.size > 0) {
+        return Result.succeed([...seenGoodsIds].sort((a, b) => a - b))
+      }
+      return scrollContainer
+    }
+
+    const lastItem = currentGoodsItems.value[currentGoodsItems.value.length - 1]
+    await lastItem.scrollIntoViewIfNeeded({ timeout: 5000 })
+    await sleep(LOAD_WAIT_MS)
+
+    const currentScrollTop = await scrollContainer.value.evaluate(el => el.scrollTop)
+    if (
+      !Number.isNaN(lastScrollTop) &&
+      Math.abs(lastScrollTop - currentScrollTop) <= SCROLL_TOLERANCE
+    ) {
+      break
+    }
+    lastScrollTop = currentScrollTop
+  }
+
+  if (seenGoodsIds.size === 0) {
+    return Result.fail(
+      new ElementNotFoundError({
+        elementName: '商品列表',
+      }),
+    )
+  }
+
+  return Result.succeed([...seenGoodsIds].sort((a, b) => a - b))
+}
+
 const TOGGLE_BUTTON_MAX_TRY_COUNT = 5
 export async function toggleButton(
   button: ElementHandle<SVGElement | HTMLElement>,

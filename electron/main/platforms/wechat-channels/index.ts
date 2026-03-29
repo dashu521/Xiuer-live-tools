@@ -6,6 +6,7 @@ import {
   comment,
   ensurePage,
   getAccountName,
+  getAllGoodsIdsFromScroller,
   getItemFromVirtualScroller,
   toggleButton,
 } from '../helper'
@@ -15,6 +16,7 @@ import type {
   IPerformPopup,
   IPinComment,
   IPlatform,
+  IPopupGoodsScanner,
 } from '../IPlatform'
 import { WeChatChannelCommentListener } from './commentListener'
 import { REGEXPS, SELECTORS, TEXT, URLS } from './constant'
@@ -26,12 +28,19 @@ const PLATFORM_NAME = '微信视频号' as const
  * 微信视频号
  */
 export class WechatChannelPlatform
-  implements IPlatform, IPerformPopup, IPerformComment, ICommentListener, IPinComment
+  implements
+    IPlatform,
+    IPerformPopup,
+    IPerformComment,
+    ICommentListener,
+    IPinComment,
+    IPopupGoodsScanner
 {
   readonly _isPinComment = true
   readonly _isCommentListener = true
   readonly _isPerformComment = true
   readonly _isPerformPopup = true
+  readonly _isPopupGoodsScanner = true
   private mainPage: Page | null = null
   /** 商品列表页面 */
   private productsPage: Page | null = null
@@ -136,6 +145,13 @@ export class WechatChannelPlatform
     return Result.pipe(
       ensurePage(this.mainPage),
       Result.andThen(page => comment(page, elementFinder, message, false)),
+    )
+  }
+
+  async scanPopupGoodsIds() {
+    return Result.pipe(
+      ensurePage(this.productsPage),
+      Result.andThen(page => getAllGoodsIdsFromScroller(page, elementFinder)),
     )
   }
 

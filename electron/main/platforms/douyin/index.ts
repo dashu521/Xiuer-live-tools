@@ -6,11 +6,18 @@ import {
   connect,
   ensurePage,
   getAccountName,
+  getAllGoodsIdsFromScroller,
   getItemFromVirtualScroller,
   openUrlByElement,
   toggleButton,
 } from '../helper'
-import type { ICommentListener, IPerformComment, IPerformPopup, IPlatform } from '../IPlatform'
+import type {
+  ICommentListener,
+  IPerformComment,
+  IPerformPopup,
+  IPlatform,
+  IPopupGoodsScanner,
+} from '../IPlatform'
 import { CompassListener, ControlListener } from './commentListener'
 import { REGEXPS, SELECTORS, TEXTS, URLS } from './constant'
 import { douyinElementFinder as elementFinder } from './element-finder'
@@ -20,10 +27,13 @@ const PLATFORM_NAME = '抖音小店' as const
 /**
  * 抖音小店
  */
-export class DouyinPlatform implements IPlatform, IPerformPopup, IPerformComment, ICommentListener {
+export class DouyinPlatform
+  implements IPlatform, IPerformPopup, IPerformComment, ICommentListener, IPopupGoodsScanner
+{
   readonly _isPerformComment = true
   readonly _isPerformPopup = true
   readonly _isCommentListener = true
+  readonly _isPopupGoodsScanner = true
 
   public mainPage: Page | null = null
   private commentListener: ICommentListener | null = null
@@ -100,6 +110,13 @@ export class DouyinPlatform implements IPlatform, IPerformPopup, IPerformComment
     return Result.pipe(
       ensurePage(this.mainPage),
       Result.andThen(page => comment(page, elementFinder, message, pinTop)),
+    )
+  }
+
+  async scanPopupGoodsIds() {
+    return Result.pipe(
+      ensurePage(this.mainPage),
+      Result.andThen(page => getAllGoodsIdsFromScroller(page, elementFinder)),
     )
   }
 

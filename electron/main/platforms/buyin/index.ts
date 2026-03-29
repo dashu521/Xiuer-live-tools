@@ -5,7 +5,13 @@ import { DouyinPlatform } from '../douyin'
 import { CompassListener, ControlListener } from '../douyin/commentListener'
 // 百应和抖店共用
 import { connect, ensurePage, openUrlByElement } from '../helper'
-import type { ICommentListener, IPerformComment, IPerformPopup, IPlatform } from '../IPlatform'
+import type {
+  ICommentListener,
+  IPerformComment,
+  IPerformPopup,
+  IPlatform,
+  IPopupGoodsScanner,
+} from '../IPlatform'
 import { REGEXPS, SELECTORS, URLS } from './constant'
 
 const PLATFORM_NAME = '巨量百应' as const
@@ -13,10 +19,13 @@ const PLATFORM_NAME = '巨量百应' as const
 /**
  * 巨量百应
  */
-export class BuyinPlatform implements IPlatform, IPerformPopup, IPerformComment, ICommentListener {
+export class BuyinPlatform
+  implements IPlatform, IPerformPopup, IPerformComment, ICommentListener, IPopupGoodsScanner
+{
   readonly _isPerformComment = true
   readonly _isPerformPopup = true
   readonly _isCommentListener = true
+  readonly _isPopupGoodsScanner = true
 
   private mainPage: Page | null = null
   private commentListener: ICommentListener | null = null
@@ -76,6 +85,10 @@ export class BuyinPlatform implements IPlatform, IPerformPopup, IPerformComment,
 
   async performComment(message: string, pinTop: boolean) {
     return await DouyinPlatform.prototype.performComment.call(this, message, pinTop)
+  }
+
+  async scanPopupGoodsIds() {
+    return await DouyinPlatform.prototype.scanPopupGoodsIds.call(this)
   }
 
   startCommentListener(onComment: (comment: LiveMessage) => void, source: 'control' | 'compass') {

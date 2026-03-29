@@ -3,16 +3,26 @@ import type { Page } from 'playwright'
 import { ElementContentMismatchedError, PageNotFoundError } from '#/errors/PlatformError'
 import type { BrowserSession } from '#/managers/BrowserSessionManager'
 import { sleep } from '#/utils'
-import { comment, connect, ensurePage, getAccountName, getItemFromVirtualScroller } from '../helper'
-import type { IPerformComment, IPerformPopup, IPlatform } from '../IPlatform'
+import {
+  comment,
+  connect,
+  ensurePage,
+  getAccountName,
+  getAllGoodsIdsFromScroller,
+  getItemFromVirtualScroller,
+} from '../helper'
+import type { IPerformComment, IPerformPopup, IPlatform, IPopupGoodsScanner } from '../IPlatform'
 import { REGEXPS, SELECTORS, URLS } from './constant'
 import { kuaishouElementFinder as elementFinder } from './element-finder'
 
 const PLATFORM_NAME = '快手小店' as const
 
-export class KuaishouPlatform implements IPlatform, IPerformPopup, IPerformComment {
+export class KuaishouPlatform
+  implements IPlatform, IPerformPopup, IPerformComment, IPopupGoodsScanner
+{
   readonly _isPerformPopup = true
   readonly _isPerformComment = true
+  readonly _isPopupGoodsScanner = true
   private mainPage: Page | null = null
 
   async connect(browserSession: BrowserSession): Promise<boolean> {
@@ -143,6 +153,13 @@ export class KuaishouPlatform implements IPlatform, IPerformPopup, IPerformComme
       newButton.value.dispatchEvent('click')
     }
     return Result.succeed()
+  }
+
+  async scanPopupGoodsIds() {
+    return Result.pipe(
+      ensurePage(this.mainPage),
+      Result.andThen(page => getAllGoodsIdsFromScroller(page, elementFinder)),
+    )
   }
 
   getPopupPage() {

@@ -49,6 +49,8 @@ interface AutoPopUpContext {
   config: AutoPopUpConfig
   shortcuts?: ShortcutMapping[]
   isGlobalShortcut?: boolean
+  goodsAutoFillAttempted?: boolean
+  goodsAutoFillLocked?: boolean
 }
 
 const defaultContext = (): AutoPopUpContext => ({
@@ -61,6 +63,8 @@ const defaultContext = (): AutoPopUpContext => ({
     random: false,
   },
   shortcuts: [],
+  goodsAutoFillAttempted: false,
+  goodsAutoFillLocked: false,
 })
 
 interface AutoPopUpStore {
@@ -70,6 +74,10 @@ interface AutoPopUpStore {
   setConfig: (accountId: string, config: Partial<AutoPopUpConfig>) => void
   setShortcuts: (accountId: string, shortcuts: ShortcutMapping[]) => void
   setGlobalShortcut: (accountId: string, globalShortcut: boolean) => void
+  setGoodsAutoFillState: (
+    accountId: string,
+    state: Partial<Pick<AutoPopUpContext, 'goodsAutoFillAttempted' | 'goodsAutoFillLocked'>>,
+  ) => void
   loadUserContexts: (userId: string) => void
   resetAllContexts: () => void
 }
@@ -152,6 +160,16 @@ export const useAutoPopUpStore = create<AutoPopUpStore>()(
           saveToStorage(accountId, context)
         }),
 
+      setGoodsAutoFillState: (accountId, autoFillState) =>
+        set(state => {
+          const context = ensureContext(state, accountId)
+          context.goodsAutoFillAttempted =
+            autoFillState.goodsAutoFillAttempted ?? context.goodsAutoFillAttempted
+          context.goodsAutoFillLocked =
+            autoFillState.goodsAutoFillLocked ?? context.goodsAutoFillLocked
+          saveToStorage(accountId, context)
+        }),
+
       loadUserContexts: (userId: string) => {
         const loadContexts = () => {
           set(state => {
@@ -166,6 +184,8 @@ export const useAutoPopUpStore = create<AutoPopUpStore>()(
                     ...savedContext.config,
                   },
                   isRunning: false,
+                  goodsAutoFillAttempted: savedContext.goodsAutoFillAttempted ?? false,
+                  goodsAutoFillLocked: savedContext.goodsAutoFillLocked ?? false,
                 }
                 if (
                   nextContext.config.goodsIds &&
@@ -209,6 +229,7 @@ export const useAutoPopUpActions = () => {
   const setConfig = useAutoPopUpStore(state => state.setConfig)
   const setShortcuts = useAutoPopUpStore(state => state.setShortcuts)
   const setGlobalShortcut = useAutoPopUpStore(state => state.setGlobalShortcut)
+  const setGoodsAutoFillState = useAutoPopUpStore(state => state.setGoodsAutoFillState)
   const currentAccountId = useAccounts(state => state.currentAccountId)
   const updateConfig = useMemoizedFn((newConfig: Partial<AutoPopUpConfig>) => {
     setConfig(currentAccountId, newConfig)
@@ -250,8 +271,22 @@ export const useAutoPopUpActions = () => {
       setGlobalShortcut: (value: boolean) => {
         setGlobalShortcut(currentAccountId, value)
       },
+      setGoodsAutoFillState: (
+        autoFillState: Partial<
+          Pick<AutoPopUpContext, 'goodsAutoFillAttempted' | 'goodsAutoFillLocked'>
+        >,
+      ) => {
+        setGoodsAutoFillState(currentAccountId, autoFillState)
+      },
     }),
-    [currentAccountId, setIsRunning, updateConfig, setShortcuts, setGlobalShortcut],
+    [
+      currentAccountId,
+      setIsRunning,
+      updateConfig,
+      setShortcuts,
+      setGlobalShortcut,
+      setGoodsAutoFillState,
+    ],
   )
 }
 
