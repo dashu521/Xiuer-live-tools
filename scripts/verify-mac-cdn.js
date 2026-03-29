@@ -132,7 +132,7 @@ function verifyUrl(item) {
     const output = exec(`curl -sI "${item.url}" 2>&1`);
     
     // 检查 HTTP 状态码
-    const statusMatch = output.match(/HTTP\/\d\.\d\s+(\d+)/);
+    const statusMatch = output.match(/HTTP\/(?:\d+(?:\.\d+)?)\s+(\d+)/i);
     if (!statusMatch) {
       log(`  ❌ 无法获取 HTTP 状态码`, 'error');
       return { success: false, item, error: '无法获取 HTTP 状态码' };
