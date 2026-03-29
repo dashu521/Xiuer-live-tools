@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 import React from 'react'
+import { WECHAT_QR_IMAGE_PATH } from '@/constants/helpSupport'
 import { cn } from '@/lib/utils'
 
 /**
@@ -65,10 +66,24 @@ export const WechatQRDialog = React.memo(({ isOpen, onClose }: WechatQRDialogPro
         <div className="flex justify-center mb-5">
           <div className="p-3 bg-white rounded-xl">
             <img
-              src="/support-wechat-qr.png"
+              src={WECHAT_QR_IMAGE_PATH}
               alt="开发者微信二维码"
               className="w-[200px] h-[200px] object-contain"
+              onError={event => {
+                const target = event.currentTarget
+                target.style.display = 'none'
+                const fallback = target.nextElementSibling as HTMLElement | null
+                if (fallback) fallback.hidden = false
+              }}
             />
+            <p
+              className="w-[200px] h-[200px] flex items-center justify-center text-center text-xs text-slate-500"
+              hidden
+            >
+              二维码图片未找到
+              <br />
+              请确认资源文件已打包
+            </p>
           </div>
         </div>
 
