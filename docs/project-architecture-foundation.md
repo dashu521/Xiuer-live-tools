@@ -298,6 +298,26 @@
 - 本地持久化节流后，必须补充回归测试覆盖“恢复启动”“切用户”“切账号”的最终状态
 - 调整 shared 契约或持久化字段时，必须同步审查云端配置契约是否受影响
 
+### 3.8 账号状态展示与应用级 IPC 装配
+
+当前原则：
+
+- 账号状态展示优先由连接状态与任务状态的现有事件 / store 变化驱动，不应再依赖全量轮询作为主路径
+- `useAppIpcBootstrap` 只负责应用级 IPC 装配与最小同步，不承担新的业务真相源
+- 高频 IPC 正常路径默认不保留 `console.log` 噪音，异常与关键告警通过 `warn/error` 保留
+
+主文件：
+
+- `/Users/xiuer/TRAE-CN/Xiuer-live-tools/src/hooks/useAppIpcBootstrap.ts`
+- `/Users/xiuer/TRAE-CN/Xiuer-live-tools/src/hooks/useAccountStatus.ts`
+- `/Users/xiuer/TRAE-CN/Xiuer-live-tools/src/components/account/AccountStatusDock.tsx`
+
+约束：
+
+- 账号状态栏如需继续演进，应优先补事件源而不是重新提高轮询频率
+- 应用级 IPC 装配文件可以做状态映射，但不应演变成新的业务状态机
+- 对这条链路的改动必须补回归测试，至少覆盖任务停止、连接断开和账号隔离
+
 ---
 
 ## 4. 模块依赖规则
