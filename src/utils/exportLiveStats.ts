@@ -1,6 +1,6 @@
 /**
  * 直播数据导出工具
- * 将监控数据导出为 Excel 文件
+ * 默认导出 CSV，按需导出 Excel。
  */
 
 import { IPC_CHANNELS } from 'shared/ipcChannels'
@@ -28,18 +28,27 @@ export interface LiveStatsExportData {
   events: LiveEvent[]
 }
 
+export type LiveStatsExportFormat = 'csv' | 'excel'
+
 /**
  * 导出直播监控数据
  * @param data 导出数据
+ * @param format 导出格式，默认 csv
  * @returns 导出结果
  */
-export async function exportLiveStats(data: LiveStatsExportData): Promise<{
+export async function exportLiveStats(
+  data: LiveStatsExportData,
+  format: LiveStatsExportFormat = 'csv',
+): Promise<{
   success: boolean
   filePath?: string
   error?: string
 }> {
   try {
-    const result = await window.ipcRenderer.invoke(IPC_CHANNELS.liveStats.exportData, data)
+    const result = await window.ipcRenderer.invoke(IPC_CHANNELS.liveStats.exportData, {
+      data,
+      format,
+    })
     return result
   } catch (error) {
     console.error('[ExportLiveStats] Failed to export:', error)

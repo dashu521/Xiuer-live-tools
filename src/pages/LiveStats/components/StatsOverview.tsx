@@ -1,5 +1,7 @@
 import {
+  ChevronDown,
   Download,
+  FileSpreadsheet,
   FolderOpen,
   Heart,
   MessageSquare,
@@ -13,6 +15,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { GateButton } from '@/components/GateButton'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import type { useLiveFeatureGate } from '@/hooks/useLiveFeatureGate'
 import { formatCount, formatDuration, type MessageStats } from '@/hooks/useLiveStats'
@@ -58,7 +61,8 @@ interface StatsOverviewProps {
   onStart: () => void
   onStop: () => void
   onReset: () => void
-  onExport: () => void
+  onExportCsv: () => void
+  onExportExcel: () => void
   onOpenFolder: () => void
   isExporting?: boolean
   gate: ReturnType<typeof useLiveFeatureGate>
@@ -76,7 +80,8 @@ const StatsOverview = memo(function StatsOverview({
   onStart,
   onStop,
   onReset,
-  onExport,
+  onExportCsv,
+  onExportExcel,
   onOpenFolder,
   isExporting = false,
   gate,
@@ -154,23 +159,66 @@ const StatsOverview = memo(function StatsOverview({
             </GateButton>
           )}
           <TooltipProvider>
-            {/* 导出数据按钮 */}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  aria-label="导出数据"
-                  onClick={onExport}
+                  aria-label="导出 CSV"
+                  onClick={onExportCsv}
                   disabled={isExporting || stats.commentCount === 0}
+                  className="gap-2"
                 >
                   <Download className="h-4 w-4" />
+                  <span>导出 CSV</span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>导出数据</p>
+                <p>默认导出格式，轻量、打开更快</p>
               </TooltipContent>
             </Tooltip>
+
+            <Popover>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label="更多导出格式"
+                      disabled={isExporting || stats.commentCount === 0}
+                      className="gap-1"
+                    >
+                      <FileSpreadsheet className="h-4 w-4" />
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </Button>
+                  </PopoverTrigger>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>更多导出格式</p>
+                </TooltipContent>
+              </Tooltip>
+              <PopoverContent align="end" className="w-72 p-3">
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <div className="text-sm font-medium">导出为 Excel</div>
+                    <p className="text-xs leading-5 text-muted-foreground">
+                      包含多工作表的详细分析，适合复盘和交付，但导出更慢、文件更大。
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-start gap-2"
+                    onClick={onExportExcel}
+                    disabled={isExporting || stats.commentCount === 0}
+                  >
+                    <FileSpreadsheet className="h-4 w-4" />
+                    导出 Excel
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
 
             {/* 打开导出目录按钮 */}
             <Tooltip>
@@ -199,6 +247,11 @@ const StatsOverview = memo(function StatsOverview({
             )}
           </TooltipProvider>
         </div>
+      </div>
+
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Download className="h-3.5 w-3.5" />
+        <span>默认导出 CSV；停止监控时也会自动保存一份 CSV。</span>
       </div>
 
       {/* 统计卡片网格 */}

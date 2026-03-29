@@ -121,39 +121,45 @@ export default function LiveStats() {
     }
   }
 
-  // 导出数据
-  const handleExport = async () => {
+  const runExport = async (format: 'csv' | 'excel') => {
     if (isExporting) return
 
     setIsExporting(true)
     try {
       const data = buildExportData()
-      const result = await exportLiveStats(data)
+      const result = await exportLiveStats(data, format)
 
       if (result.success) {
         toast.success({
           title: '导出完成',
-          description: '监控数据已导出，可点击“打开导出目录”查看文件。',
-          dedupeKey: `live-stats-export:${currentAccountId}`,
+          description:
+            format === 'csv'
+              ? '监控数据已导出为 CSV，可点击“打开导出目录”查看文件。'
+              : '监控数据已导出为 Excel，可点击“打开导出目录”查看文件。',
+          dedupeKey: `live-stats-export:${format}:${currentAccountId}`,
         })
       } else {
         toast.error({
           title: '导出失败',
           description: result.error || '数据导出失败，请稍后重试。',
-          dedupeKey: `live-stats-export-failed:${currentAccountId}`,
+          dedupeKey: `live-stats-export-failed:${format}:${currentAccountId}`,
         })
       }
     } catch (error) {
       toast.error({
         title: '导出失败',
         description: '数据导出失败，请稍后重试。',
-        dedupeKey: `live-stats-export-error:${currentAccountId}`,
+        dedupeKey: `live-stats-export-error:${format}:${currentAccountId}`,
       })
       console.error('[LiveStats] Export failed:', error)
     } finally {
       setIsExporting(false)
     }
   }
+
+  const handleExportCsv = () => runExport('csv')
+
+  const handleExportExcel = () => runExport('excel')
 
   // 打开导出目录
   const handleOpenFolder = () => {
@@ -166,7 +172,7 @@ export default function LiveStats() {
     if (stats.commentCount > 0 || stats.likeCount > 0 || stats.enterCount > 0) {
       try {
         const data = buildExportData()
-        const result = await exportLiveStats(data)
+        const result = await exportLiveStats(data, 'csv')
         if (result.success) {
           console.log('[LiveStats] Auto save success:', result.filePath)
         }
@@ -191,7 +197,8 @@ export default function LiveStats() {
               onStart={startListening}
               onStop={doStopListening}
               onReset={handleReset}
-              onExport={handleExport}
+              onExportCsv={handleExportCsv}
+              onExportExcel={handleExportExcel}
               onOpenFolder={handleOpenFolder}
               isExporting={isExporting}
               gate={gate}

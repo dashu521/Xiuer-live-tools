@@ -53,6 +53,8 @@ interface LiveStatsExportData {
   }>
 }
 
+type LiveStatsExportFormat = 'csv' | 'excel'
+
 // 获取导出目录
 function getExportFolder(): string {
   const documentsPath = app.getPath('documents')
@@ -91,21 +93,6 @@ function sanitizeFileName(input: string): string {
   const truncated = sanitized.slice(0, 100)
   // 防止空文件名
   return truncated || 'unknown'
-}
-
-// 格式化时长文本
-function _formatDuration(seconds: number): string {
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  const secs = seconds % 60
-
-  if (hours > 0) {
-    return `${hours}小时${minutes}分${secs}秒`
-  }
-  if (minutes > 0) {
-    return `${minutes}分${secs}秒`
-  }
-  return `${secs}秒`
 }
 
 const COMMENT_TYPES = new Set([
@@ -183,15 +170,6 @@ function buildUserBehaviorRows(events: LiveStatsExportData['events']): UserBehav
   }))
 }
 
-// 安全的文件名清理函数
-function _sanitizeFilename(name: string): string {
-  // 替换 Windows 非法字符和路径遍历
-  return name
-    .replace(/[<>"/\\|?*]/g, '_') // Windows 非法字符
-    .replace(/\.{2,}/g, '_') // 路径遍历 ..
-    .replace(/^\.+/, '_') // 隐藏文件 .
-}
-
 // 验证文件路径是否在目标目录内
 function validateFilePath(filePath: string, baseDir: string): void {
   const resolvedFilePath = path.resolve(filePath)
@@ -199,6 +177,84 @@ function validateFilePath(filePath: string, baseDir: string): void {
   if (!resolvedFilePath.startsWith(resolvedBaseDir + path.sep)) {
     throw new Error('Invalid file path: path traversal detected')
   }
+}
+
+function toCsvCell(value: string | number | boolean | null | undefined): string {
+  const normalized = value == null ? '' : String(value)
+  const escaped = normalized.replace(/"/g, '""')
+  return `"${escaped}"`
+}
+
+function buildCsvRow(values: Array<string | number | boolean | null | undefined>): string {
+  return values.map(toCsvCell).join(',')
+}
+
+async function exportToCsv(data: LiveStatsExportData): Promise<string> {
+  const exportFolder = getExportFolder()
+  const dateTimeStr = formatDateTime(data.endTime)
+  const safeAccountName = sanitizeFileName(data.accountName || '未知账号')
+  const fileName = `直播数据_${safeAccountName}_${dateTimeStr}.csv`
+  const pathValidation = resolveSafePath(exportFolder, fileName)
+  if (!pathValidation.valid) {
+    throw new Error(`Invalid file path: ${pathValidation.error}`)
+  }
+  const filePath = pathValidation.fullPath!
+  validateFilePath(filePath, exportFolder)
+
+  const rows: string[] = []
+  rows.push('\uFEFF')
+
+  rows.push('概览')
+  rows.push(buildCsvRow(['账号', data.accountName]))
+  rows.push(
+    buildCsvRow([
+      '开始时间',
+      data.startTime ? new Date(data.startTime).toLocaleString('zh-CN') : '',
+    ]),
+  )
+  rows.push(buildCsvRow(['结束时间', new Date(data.endTime).toLocaleString('zh-CN')]))
+  rows.push(buildCsvRow(['监控时长(秒)', data.duration]))
+  rows.push(buildCsvRow(['点赞', data.stats.likeCount]))
+  rows.push(buildCsvRow(['弹幕', data.stats.commentCount]))
+  rows.push(buildCsvRow(['进入直播间', data.stats.enterCount]))
+  rows.push(buildCsvRow(['新增关注', data.stats.followCount]))
+  rows.push(buildCsvRow(['粉丝团', data.stats.fansClubCount]))
+  rows.push(buildCsvRow(['品牌会员', data.stats.brandVipCount]))
+  rows.push(buildCsvRow(['订单', data.stats.orderCount]))
+  rows.push(buildCsvRow(['已付款订单', data.stats.paidOrderCount]))
+  rows.push('')
+
+  rows.push('弹幕明细')
+  rows.push(buildCsvRow(['时间', '昵称', '内容']))
+  for (const item of data.danmuList) {
+    rows.push(buildCsvRow([item.time, item.nickName, item.content]))
+  }
+  rows.push('')
+
+  rows.push('粉丝团变化')
+  rows.push(buildCsvRow(['时间', '昵称', '用户ID', '内容']))
+  for (const item of data.fansClubChanges) {
+    rows.push(buildCsvRow([item.time, item.nickName, item.userId, item.content]))
+  }
+  rows.push('')
+
+  rows.push('事件时间线')
+  rows.push(buildCsvRow(['时间', '事件类型', '昵称', '用户ID', '内容', '附加信息']))
+  for (const item of data.events) {
+    rows.push(
+      buildCsvRow([
+        item.time,
+        item.type,
+        item.nickName,
+        item.userId,
+        item.content,
+        item.extra ? JSON.stringify(item.extra) : '',
+      ]),
+    )
+  }
+
+  fs.writeFileSync(filePath, rows.join('\n'), 'utf8')
+  return filePath
 }
 
 // 导出数据到 Excel
@@ -383,18 +439,23 @@ async function exportToExcel(data: LiveStatsExportData): Promise<string> {
 
 export function setupLiveStatsIpcHandlers() {
   // 导出数据
-  typedIpcMainHandle(IPC_CHANNELS.liveStats.exportData, async (_, data: LiveStatsExportData) => {
-    try {
-      const filePath = await exportToExcel(data)
-      return { success: true, filePath }
-    } catch (error) {
-      console.error('[LiveStats] Export failed:', error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : '导出失败',
+  typedIpcMainHandle(
+    IPC_CHANNELS.liveStats.exportData,
+    async (_, payload: { data: LiveStatsExportData; format?: LiveStatsExportFormat }) => {
+      const format = payload.format || 'csv'
+      const data = payload.data
+      try {
+        const filePath = format === 'excel' ? await exportToExcel(data) : await exportToCsv(data)
+        return { success: true, filePath }
+      } catch (error) {
+        console.error('[LiveStats] Export failed:', error)
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : '导出失败',
+        }
       }
-    }
-  })
+    },
+  )
 
   // 打开导出目录
   typedIpcMainHandle(IPC_CHANNELS.liveStats.openExportFolder, () => {
