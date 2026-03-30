@@ -58,6 +58,21 @@ export function CoreConfigCard() {
   const { toast } = useToast()
   const edgeFirstId = useId()
 
+  const getBrowserDetectErrorMessage = (error: unknown) => {
+    const rawMessage =
+      error instanceof Error ? error.message : typeof error === 'string' ? error : ''
+
+    if (rawMessage.includes('is not allowed')) {
+      return '当前安装包缺少浏览器检测通道，请升级到最新版本或重新安装应用。'
+    }
+
+    if (rawMessage.includes('No handler registered')) {
+      return '浏览器检测服务未完成初始化，请重启应用后重试。'
+    }
+
+    return '浏览器检测失败，请稍后重试。'
+  }
+
   const refreshBrowsers = useMemoizedFn(async (silent = false) => {
     try {
       setIsRefreshingBrowsers(true)
@@ -77,11 +92,12 @@ export function CoreConfigCard() {
           dedupeKey: 'browser-list-refreshed',
         })
       }
-    } catch {
+    } catch (error) {
+      console.error('[CoreConfigCard] Failed to refresh browser list:', error)
       if (!silent) {
         toast.error({
           title: '检测失败',
-          description: '浏览器检测失败，请稍后重试。',
+          description: getBrowserDetectErrorMessage(error),
           dedupeKey: 'browser-list-refresh-failed',
         })
       }

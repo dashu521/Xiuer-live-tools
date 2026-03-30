@@ -35,9 +35,9 @@ const REQUIRED_PREFIXES = [
 ]
 
 function extractChannelsFromSource(content: string): { statik: string[], dynamic: string[] } {
-  // 使用正则匹配所有 'xxx:yyy:zzz' 形式的通道字符串
+  // 使用正则匹配所有 IPC 通道字符串，兼容 'log' 这类单段通道
   // 匹配单引号或双引号包裹的字符串字面量
-  const channelRegex = /['"]([a-z][a-z0-9-]*:[a-z][a-z0-9-]*(:[a-z0-9-]+)*)['"]/gi
+  const channelRegex = /['"]([a-z][a-z0-9-]*(?::[a-z0-9-]+)*)['"]/gi
   
   const foundChannels = new Set<string>()
   let match
@@ -110,14 +110,14 @@ export function isChannelAllowed(channel: string): boolean {
   if (ALLOWED_STATIC_CHANNELS.includes(channel)) {
     return true
   }
-  
+
   // 再检查动态通道前缀
   for (const prefix of ALLOWED_DYNAMIC_PREFIXES) {
     if (channel.startsWith(prefix)) {
       return true
     }
   }
-  
+
   return false
 }
 
