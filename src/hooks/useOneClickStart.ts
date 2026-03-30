@@ -174,10 +174,10 @@ export function useOneClickStart(): {
       'manual',
       true,
       message => {
-        if (result.stoppedTasks.length > 0) {
-          toast.success('已停止当前账号的自动任务')
-        } else if (result.alreadyStopped.length > 0) {
+        if (message === '当前无运行中的任务') {
           toast.info(message)
+        } else {
+          toast.success('已停止当前账号的自动任务')
         }
       },
     )

@@ -1,7 +1,9 @@
 import { useEffect } from 'react'
+import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { useAuthStore } from '@/stores/authStore'
+import { useCommentListenerRuntimeStore } from '@/utils/commentListenerRuntime'
 import { flushAllPersists, flushPersist, schedulePersist } from '@/utils/debouncedPersist'
 import { EVENTS, eventEmitter } from '@/utils/events'
 import type { StringFilterConfig } from '@/utils/filter'
@@ -211,6 +213,20 @@ export const useAutoReplyConfigStore = create<AutoReplyConfigStore>()(
           const newConfig = mergeWithoutArray(context.config, configUpdates)
           context.config = newConfig
           saveToStorage(accountId, context)
+
+          const commentListenerStatus =
+            useCommentListenerRuntimeStore.getState().contexts[accountId]?.status
+          if (commentListenerStatus === 'listening' && window.ipcRenderer) {
+            const listenerConfig: CommentListenerConfig = {
+              source: newConfig.entry,
+              ws: newConfig.ws?.enable ? { port: newConfig.ws.port } : undefined,
+            }
+            window.ipcRenderer
+              .invoke(IPC_CHANNELS.tasks.commentListener.start, accountId, listenerConfig)
+              .catch((err: Error) =>
+                console.error('[AutoReplyConfig] 同步评论监听配置到主进程失败:', err),
+              )
+          }
         }),
 
       loadUserContexts: (userId: string) => {

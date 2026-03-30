@@ -134,6 +134,14 @@ export const useAutoPopUpStore = create<AutoPopUpStore>()(
 
           // 【P1-2 运行时配置热更新】如果任务正在运行，同步更新到主进程
           if (context.isRunning) {
+            if (context.config.goods.length === 0) {
+              context.isRunning = false
+              window.ipcRenderer
+                .invoke(IPC_CHANNELS.tasks.autoPopUp.stop, accountId)
+                .catch((err: Error) => console.error('[AutoPopUp] 停止主进程任务失败:', err))
+              return
+            }
+
             // 【P1-3】同步到主进程时，确保使用新的 goods 格式
             const ipcConfig = {
               ...config,
@@ -327,7 +335,7 @@ export const useShortcutListener = () => {
     )
 
     return () => {
-      window.ipcRenderer.invoke(IPC_CHANNELS.tasks.autoPopUp.unregisterShortcuts)
+      window.ipcRenderer.invoke(IPC_CHANNELS.tasks.autoPopUp.unregisterShortcuts, accountId)
     }
   }, [isGlobalShortcut, shortcuts, isRunning, accountId])
 

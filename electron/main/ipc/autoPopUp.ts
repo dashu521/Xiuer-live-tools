@@ -8,6 +8,19 @@ import { typedIpcMainHandle } from '#/utils'
 
 const TASK_NAME = '自动弹窗'
 const TASK_TYPE = 'auto-popup'
+const registeredShortcutMap = new Map<string, string[]>()
+
+function unregisterAccountShortcuts(accountId: string) {
+  const accelerators = registeredShortcutMap.get(accountId)
+  if (!accelerators) {
+    return
+  }
+
+  for (const accelerator of accelerators) {
+    globalShortcut.unregister(accelerator)
+  }
+  registeredShortcutMap.delete(accountId)
+}
 
 // IPC 处理程序
 function setupIpcHandlers() {
@@ -76,8 +89,11 @@ function setupIpcHandlers() {
 
   typedIpcMainHandle(IPC_CHANNELS.tasks.autoPopUp.registerShortcuts, (_, accountId, shortcuts) => {
     const logger = createLogger(`@${accountManager.getAccountName(accountId)}`).scope('快捷键弹窗')
+    unregisterAccountShortcuts(accountId)
+
+    const registeredAccelerators: string[] = []
     for (const sc of shortcuts) {
-      globalShortcut.register(
+      const registered = globalShortcut.register(
         sc.accelerator,
         throttle(
           () => {
@@ -96,11 +112,20 @@ function setupIpcHandlers() {
           { trailing: false },
         ),
       )
+      if (registered) {
+        registeredAccelerators.push(sc.accelerator)
+      } else {
+        logger.warn(`快捷键注册失败，可能已被占用: ${sc.accelerator}`)
+      }
+    }
+
+    if (registeredAccelerators.length > 0) {
+      registeredShortcutMap.set(accountId, registeredAccelerators)
     }
   })
 
-  typedIpcMainHandle(IPC_CHANNELS.tasks.autoPopUp.unregisterShortcuts, () => {
-    globalShortcut.unregisterAll()
+  typedIpcMainHandle(IPC_CHANNELS.tasks.autoPopUp.unregisterShortcuts, (_, accountId) => {
+    unregisterAccountShortcuts(accountId)
   })
 }
 

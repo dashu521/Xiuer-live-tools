@@ -70,6 +70,20 @@ function hasAnyActiveConsumer(accountId: string): boolean {
   return Boolean(context?.consumers.autoReply || context?.consumers.liveStats)
 }
 
+async function syncCommentListener(
+  accountId: string,
+  config: CommentListenerConfig,
+  ipcInvoke: IpcInvoke,
+): Promise<boolean> {
+  const ok = await ipcInvoke(IPC_CHANNELS.tasks.commentListener.start, accountId, config)
+  const runtimeStore = useCommentListenerRuntimeStore.getState()
+  runtimeStore.setStatus(accountId, ok ? 'listening' : 'error')
+  if (!ok) {
+    runtimeStore.clearConsumers(accountId)
+  }
+  return ok
+}
+
 export async function acquireCommentListener(
   accountId: string,
   consumer: CommentListenerConsumer,
@@ -82,7 +96,7 @@ export async function acquireCommentListener(
   store.setConsumerActive(accountId, consumer, true)
 
   if (context?.status === 'listening') {
-    return true
+    return syncCommentListener(accountId, config, ipcInvoke)
   }
 
   const pending = startPromises.get(accountId)
@@ -90,8 +104,9 @@ export async function acquireCommentListener(
     const ok = await pending
     if (!ok) {
       useCommentListenerRuntimeStore.getState().setConsumerActive(accountId, consumer, false)
+      return ok
     }
-    return ok
+    return syncCommentListener(accountId, config, ipcInvoke)
   }
 
   store.setStatus(accountId, 'starting')

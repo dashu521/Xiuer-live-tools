@@ -205,7 +205,7 @@ export interface IpcChannels {
     accountId: string,
     shortcuts: { accelerator: string; goodsIds: number[] }[],
   ) => void
-  [IPC_CHANNELS.tasks.autoPopUp.unregisterShortcuts]: () => void
+  [IPC_CHANNELS.tasks.autoPopUp.unregisterShortcuts]: (accountId: string) => void
 
   // CommentListener
   [IPC_CHANNELS.tasks.commentListener.start]: (

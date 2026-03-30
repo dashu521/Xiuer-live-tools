@@ -133,6 +133,14 @@ export const useAutoMessageStore = create<AutoMessageStore>()(
 
           // 【P1-2 运行时配置热更新】如果任务正在运行，同步更新到主进程
           if (context.isRunning) {
+            if (config.messages && getEffectiveAutoMessages(context.config.messages).length === 0) {
+              context.isRunning = false
+              window.ipcRenderer
+                .invoke(IPC_CHANNELS.tasks.autoMessage.stop, accountId)
+                .catch((err: Error) => console.error('[AutoMessage] 停止主进程任务失败:', err))
+              return
+            }
+
             const runtimeConfig: Partial<AutoCommentConfig> = {}
 
             if (config.scheduler) {
