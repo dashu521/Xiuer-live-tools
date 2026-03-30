@@ -202,6 +202,7 @@ const GoodsListCard = React.memo(() => {
 
   // 【测试模式检查】仅在测试平台或开发模式下启用 Mock 数据
   const isTestMode = shouldUseMockGoods(platform)
+  const showSampleAction = import.meta.env.DEV || platform === 'dev'
 
   // 【自动注入测试商品】仅在测试模式下执行
   React.useEffect(() => {
@@ -431,10 +432,17 @@ const GoodsListCard = React.memo(() => {
                         )}
                         自动填充
                       </Button>
-                      <Button variant="outline" size="sm" className="h-8" onClick={handleAddSample}>
-                        <Plus className="mr-1.5 h-3.5 w-3.5" />
-                        添加示例
-                      </Button>
+                      {showSampleAction && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8"
+                          onClick={handleAddSample}
+                        >
+                          <Plus className="mr-1.5 h-3.5 w-3.5" />
+                          添加示例
+                        </Button>
+                      )}
                       {goods.length > 0 && (
                         <Button variant="subtle" size="sm" className="h-8" onClick={handleClear}>
                           <Trash2 className="mr-1.5 h-3.5 w-3.5" />
