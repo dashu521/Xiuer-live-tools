@@ -123,6 +123,36 @@ function createBoxedString(lines: string[]) {
   return `\n${horizontalLine}\n${content}\n${horizontalLine}`
 }
 
+function buildRendererErrorScript(
+  title: string,
+  entries: Array<[label: string, value: unknown]>,
+): string {
+  const payload = JSON.stringify({
+    title,
+    entries: entries.map(([label, value]) => [label, String(value)]),
+  })
+
+  return `
+    (() => {
+      const payload = ${payload};
+      const container = document.createElement('div');
+      container.style.cssText = 'padding:20px;font-family:sans-serif;';
+
+      const heading = document.createElement('h1');
+      heading.textContent = payload.title;
+      container.appendChild(heading);
+
+      for (const [label, value] of payload.entries) {
+        const line = document.createElement('p');
+        line.textContent = \`\${label}: \${value}\`;
+        container.appendChild(line);
+      }
+
+      document.body.replaceChildren(container);
+    })();
+  `
+}
+
 function logStartupInfo() {
   const appInfo = [
     `App Name:     ${app.getName()}`,
@@ -652,16 +682,15 @@ async function createWindow() {
         if (app.isPackaged && win && !win.isDestroyed()) {
           debugStartupLog('加载失败，尝试显示错误信息')
           win.webContents
-            .executeJavaScript(`
-          document.body.innerHTML = '<div style="padding:20px;font-family:sans-serif;">' +
-            '<h1>页面加载失败</h1>' +
-            '<p>错误码: ${errorCode}</p>' +
-            '<p>错误描述: ${errorDescription}</p>' +
-            '<p>URL: ${validatedURL}</p>' +
-            '<p>主框架: ${isMainFrame}</p>' +
-            '<p>时间: ${new Date().toISOString()}</p>' +
-            '</div>';
-        `)
+            .executeJavaScript(
+              buildRendererErrorScript('页面加载失败', [
+                ['错误码', errorCode],
+                ['错误描述', errorDescription],
+                ['URL', validatedURL],
+                ['主框架', isMainFrame],
+                ['时间', new Date().toISOString()],
+              ]),
+            )
             .catch(() => {})
           win.show()
         }
@@ -681,14 +710,13 @@ async function createWindow() {
         debugStartupLog('渲染进程崩溃，尝试显示错误信息')
         try {
           win.webContents
-            .executeJavaScript(`
-            document.body.innerHTML = '<div style="padding:20px;font-family:sans-serif;">' +
-              '<h1>渲染进程崩溃</h1>' +
-              '<p>原因: ${details.reason}</p>' +
-              '<p>退出码: ${details.exitCode}</p>' +
-              '<p>时间: ${new Date().toISOString()}</p>' +
-              '</div>';
-          `)
+            .executeJavaScript(
+              buildRendererErrorScript('渲染进程崩溃', [
+                ['原因', details.reason],
+                ['退出码', details.exitCode],
+                ['时间', new Date().toISOString()],
+              ]),
+            )
             .catch(() => {})
           win.show()
         } catch (e) {

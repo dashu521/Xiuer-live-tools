@@ -69,6 +69,35 @@ function isKickedOutError(error?: ProxyRequestError): boolean {
   return error?.code === 'kicked_out' || !!error?.message?.includes('其他设备')
 }
 
+const PUBLIC_REQUEST_TIMEOUT_MS = 15000
+const PUBLIC_REQUEST_RETRY_DELAY_MS = 1500
+
+function shouldRetryPublicRequest(error: unknown): boolean {
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return true
+  }
+  if (error instanceof TypeError) {
+    return true
+  }
+
+  const message = error instanceof Error ? error.message : String(error)
+  return /fetch|network|failed to fetch|econnrefused|aborted/i.test(message)
+}
+
+async function fetchPublicWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController()
+  const timeout = window.setTimeout(() => controller.abort(), PUBLIC_REQUEST_TIMEOUT_MS)
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+    })
+  } finally {
+    window.clearTimeout(timeout)
+  }
+}
+
 async function requestPublic<T>(
   method: string,
   path: string,
@@ -76,13 +105,25 @@ async function requestPublic<T>(
 ): Promise<ApiResult<T>> {
   const url = normalizeApiUrl(path)
   try {
-    const res = await fetch(url, {
+    const requestInit: RequestInit = {
       method,
       headers: {
         'Content-Type': 'application/json',
       },
       body: body ? JSON.stringify(body) : undefined,
-    })
+    }
+
+    let res: Response
+    try {
+      res = await fetchPublicWithTimeout(url, requestInit)
+    } catch (firstErr) {
+      if (!shouldRetryPublicRequest(firstErr)) {
+        throw firstErr
+      }
+      await new Promise(resolve => window.setTimeout(resolve, PUBLIC_REQUEST_RETRY_DELAY_MS))
+      res = await fetchPublicWithTimeout(url, requestInit)
+    }
+
     const text = await res.text()
     let json: T | { detail?: unknown } | null = null
     try {
@@ -99,8 +140,17 @@ async function requestPublic<T>(
     }
     return { ok: true, data: json as T, status: res.status }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    return { ok: false, status: 0, error: { code: 'network_error', message } }
+    const isTimeout = err instanceof DOMException && err.name === 'AbortError'
+    const message = isTimeout
+      ? '请求超时，请检查网络后重试'
+      : err instanceof Error
+        ? err.message
+        : String(err)
+    return {
+      ok: false,
+      status: 0,
+      error: { code: isTimeout ? 'network_timeout' : 'network_error', message },
+    }
   }
 }
 
