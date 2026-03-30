@@ -112,6 +112,8 @@ function upsertToast(state: State, nextToast: ToasterToast): State {
                 id: duplicate.id,
                 createdAt: toast.createdAt,
                 open: true,
+                // Keep the original close handler bound to the active toast id.
+                onOpenChange: toast.onOpenChange,
               }
             : toast,
         ),
