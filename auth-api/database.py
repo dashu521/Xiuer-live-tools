@@ -4,7 +4,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from config import settings
-from models import Base
+from config import settings
+from models import AITrialSettings, Base
 
 _url = settings.DATABASE_URL.strip().lower()
 
@@ -62,6 +63,30 @@ def create_tables():
     _ensure_subscriptions_table()
     _ensure_audit_logs_table()
     _ensure_gift_cards_tables()
+    _ensure_ai_trial_settings()
+
+
+def _ensure_ai_trial_settings():
+    with SessionLocal() as db:
+        exists = db.query(AITrialSettings).first()
+        if exists:
+            return
+
+        db.add(
+            AITrialSettings(
+                trial_enabled=True,
+                token_version=1,
+                token_expires_in_seconds=43200,
+                chat_daily_limit=100,
+                auto_reply_daily_limit=500,
+                knowledge_draft_daily_limit=50,
+                default_chat_model=settings.AI_TRIAL_DEFAULT_CHAT_MODEL,
+                default_auto_reply_model=settings.AI_TRIAL_DEFAULT_AUTO_REPLY_MODEL,
+                default_knowledge_model=settings.AI_TRIAL_DEFAULT_KNOWLEDGE_MODEL,
+                auto_send_default=True,
+            )
+        )
+        db.commit()
 
 
 def _ensure_sms_codes_table():

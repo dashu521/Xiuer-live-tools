@@ -97,6 +97,14 @@ export class XiaohongshuPgyPlatform
     return await XiaohongshuPlatform.prototype.scanPopupGoodsIds.call(this)
   }
 
+  async scanPopupGoodsMeta() {
+    return await XiaohongshuPlatform.prototype.scanPopupGoodsMeta.call(this)
+  }
+
+  async scanPopupGoodsKnowledge(goodsId: number) {
+    return await XiaohongshuPlatform.prototype.scanPopupGoodsKnowledge.call(this, goodsId)
+  }
+
   async performComment(message: string) {
     return XiaohongshuPlatform.prototype.performComment.call(this, message)
   }

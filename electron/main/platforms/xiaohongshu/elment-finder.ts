@@ -46,6 +46,13 @@ export const xiaohongshuElementFinder: IElementFinder = {
     return commonElementFinder.getIdFromGoodsItem(item, SELECTORS.GOODS_ITEM_INNER.ID)
   },
 
+  async getTitleFromGoodsItem(item: ElementHandle<SVGElement | HTMLElement>) {
+    return commonElementFinder.getTitleFromGoodsItem(
+      item,
+      SELECTORS.GOODS_ITEM_INNER.TITLE_CANDIDATES,
+    )
+  },
+
   async getCurrentGoodsItemsList(page: Page) {
     return commonElementFinder.getCurrentGoodsItemsList(page, SELECTORS.GOODS_ITEM)
   },

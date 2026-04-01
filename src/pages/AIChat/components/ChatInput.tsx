@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { useAIChatStore } from '@/hooks/useAIChat'
+import { useAITrialStore } from '@/hooks/useAITrial'
 import { useToast } from '@/hooks/useToast'
 import { messagesToContext } from '@/lib/utils'
 
@@ -18,12 +19,16 @@ export default function ChatInput({
   const messages = useAIChatStore(state => state.messages)
   const provider = useAIChatStore(state => state.config.provider)
   const apiKeys = useAIChatStore(state => state.apiKeys)
+  const ensureTrialSession = useAITrialStore(state => state.ensureSession)
   const { toast } = useToast()
 
   const handleSubmit = useMemoizedFn(async () => {
     if (!apiKeys[provider]) {
-      toast.error('请先配置 API Key')
-      return
+      const trialSession = await ensureTrialSession('chat')
+      if (!trialSession) {
+        toast.error('请先配置 API Key 或启用体验模式')
+        return
+      }
     }
     if (!input.trim() || status !== 'ready') return
 

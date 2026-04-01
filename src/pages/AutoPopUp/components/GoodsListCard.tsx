@@ -24,6 +24,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAccounts } from '@/hooks/useAccounts'
 import { useAIChatStore } from '@/hooks/useAIChat'
+import { getEffectiveAICredentials, useAITrialStore } from '@/hooks/useAITrial'
 import {
   type GoodsItemConfig,
   useAutoPopUpActions,
@@ -644,6 +645,8 @@ const GoodsListCard = React.memo(
     const model = useAIChatStore(state => state.config.model)
     const apiKeys = useAIChatStore(state => state.apiKeys)
     const customBaseURL = useAIChatStore(state => state.customBaseURL)
+    const ensureTrialSession = useAITrialStore(state => state.ensureSession)
+    const reportTrialUse = useAITrialStore(state => state.reportUse)
     const [inputValue, setInputValue] = useState('')
     const [isEditing, setIsEditing] = useState(false)
     const [editingItem, setEditingItem] = useState<GoodsItemConfig | null>(null)
@@ -823,8 +826,19 @@ const GoodsListCard = React.memo(
         return null
       }
 
-      const apiKey = apiKeys[provider]
-      if (!apiKey) {
+      if (!apiKeys[provider]) {
+        await ensureTrialSession('knowledge_draft')
+      }
+
+      const credentials = getEffectiveAICredentials({
+        feature: 'knowledge_draft',
+        userProvider: provider,
+        userModel: model,
+        userApiKey: apiKeys[provider],
+        userCustomBaseURL: customBaseURL,
+      })
+
+      if (!credentials) {
         const fallbackDraft = {
           title: scanResult.data.title,
           priceText: scanResult.data.priceText,
@@ -840,10 +854,10 @@ const GoodsListCard = React.memo(
             content: buildKnowledgeDraftPrompt(scanResult.data),
           },
         ],
-        provider,
-        model,
-        apiKey,
-        customBaseURL,
+        provider: credentials.provider,
+        model: credentials.model,
+        apiKey: credentials.apiKey,
+        customBaseURL: credentials.customBaseURL,
       })
 
       if (typeof rawDraft !== 'string') {
@@ -858,6 +872,9 @@ const GoodsListCard = React.memo(
       }
 
       toast.success('已生成商品知识候选内容，请确认后保存')
+      if (credentials.credentialMode === 'trial') {
+        await reportTrialUse({ feature: 'knowledge_draft', model: credentials.model })
+      }
       const draftWithFallbackFaq = {
         ...parsed,
         faq: parsed.faq?.length ? parsed.faq : buildFallbackFaqFromKnowledgeDraft(parsed),

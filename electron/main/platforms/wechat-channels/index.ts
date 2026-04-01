@@ -7,7 +7,9 @@ import {
   ensurePage,
   getAccountName,
   getAllGoodsIdsFromScroller,
+  getAllGoodsMetaFromScroller,
   getItemFromVirtualScroller,
+  scanGoodsKnowledgeFromItem,
   toggleButton,
 } from '../helper'
 import type {
@@ -152,6 +154,26 @@ export class WechatChannelPlatform
     return Result.pipe(
       ensurePage(this.productsPage),
       Result.andThen(page => getAllGoodsIdsFromScroller(page, elementFinder)),
+    )
+  }
+
+  async scanPopupGoodsMeta() {
+    return Result.pipe(
+      ensurePage(this.productsPage),
+      Result.andThen(page => getAllGoodsMetaFromScroller(page, elementFinder)),
+    )
+  }
+
+  async scanPopupGoodsKnowledge(goodsId: number) {
+    return Result.pipe(
+      ensurePage(this.productsPage),
+      Result.andThen(async page => {
+        const itemResult = await getItemFromVirtualScroller(page, elementFinder, goodsId)
+        if (Result.isFailure(itemResult)) {
+          return itemResult
+        }
+        return await scanGoodsKnowledgeFromItem(page, itemResult.value, elementFinder, goodsId)
+      }),
     )
   }
 

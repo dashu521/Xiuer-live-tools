@@ -43,6 +43,13 @@ export const SELECTORS = {
     OPERATION_ITEM: '.operation-item',
     POPUP_BUTTON_DISABLED: 'disabled-btn',
     ID: 'td:first-child input',
+    TITLE_CANDIDATES: [
+      'td:nth-child(2)',
+      'td:nth-child(3)',
+      '[class*="title"]',
+      '[class*="name"]',
+      '[class*="goods"]',
+    ],
   },
 } as const
 

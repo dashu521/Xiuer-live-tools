@@ -34,6 +34,12 @@ export const SELECTORS = {
     ID: 'div.list-item-img-index',
     ID_ALTER: 'input[data-tblalog-id="sort_input"]',
     POPUP_BUTTON: 'button[data-tblalog-id="tanPin"]', // button[data-tblalog-id="jiangJie"]
+    TITLE_CANDIDATES: [
+      '.list-item-title',
+      '[class*="title"]',
+      '[class*="name"]',
+      '.list-item-info',
+    ],
   },
   overlays: {
     DRIVER: '#driver-highlighted-element-stage-overlay',

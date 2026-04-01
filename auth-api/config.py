@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     SMS_CODE_EXPIRE_MINUTES: int = 5
     SMS_CODE_MAX_ATTEMPTS_PER_HOUR: int = 10
     SMS_CODE_RATE_LIMIT_MINUTES: int = 60
+    # AI Trial（推广期体验凭证）
+    AI_TRIAL_JWT_SECRET: str = ""
+    AI_TRIAL_PROVIDER: str = "deepseek"
+    AI_TRIAL_BASE_URL: str = "https://api.deepseek.com"
+    AI_TRIAL_SHARED_API_KEY: str = ""
+    AI_TRIAL_DEFAULT_CHAT_MODEL: str = "deepseek-chat"
+    AI_TRIAL_DEFAULT_AUTO_REPLY_MODEL: str = "deepseek-chat"
+    AI_TRIAL_DEFAULT_KNOWLEDGE_MODEL: str = "deepseek-chat"
 
     class Config:
         env_file = ".env"
@@ -47,6 +55,20 @@ if os.getenv("ADMIN_PASSWORD"):
     settings.ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 if os.getenv("ADMIN_JWT_SECRET"):
     settings.ADMIN_JWT_SECRET = os.getenv("ADMIN_JWT_SECRET")
+if os.getenv("AI_TRIAL_JWT_SECRET"):
+    settings.AI_TRIAL_JWT_SECRET = os.getenv("AI_TRIAL_JWT_SECRET")
+if os.getenv("AI_TRIAL_PROVIDER"):
+    settings.AI_TRIAL_PROVIDER = os.getenv("AI_TRIAL_PROVIDER")
+if os.getenv("AI_TRIAL_BASE_URL"):
+    settings.AI_TRIAL_BASE_URL = os.getenv("AI_TRIAL_BASE_URL")
+if os.getenv("AI_TRIAL_SHARED_API_KEY"):
+    settings.AI_TRIAL_SHARED_API_KEY = os.getenv("AI_TRIAL_SHARED_API_KEY")
+if os.getenv("AI_TRIAL_DEFAULT_CHAT_MODEL"):
+    settings.AI_TRIAL_DEFAULT_CHAT_MODEL = os.getenv("AI_TRIAL_DEFAULT_CHAT_MODEL")
+if os.getenv("AI_TRIAL_DEFAULT_AUTO_REPLY_MODEL"):
+    settings.AI_TRIAL_DEFAULT_AUTO_REPLY_MODEL = os.getenv("AI_TRIAL_DEFAULT_AUTO_REPLY_MODEL")
+if os.getenv("AI_TRIAL_DEFAULT_KNOWLEDGE_MODEL"):
+    settings.AI_TRIAL_DEFAULT_KNOWLEDGE_MODEL = os.getenv("AI_TRIAL_DEFAULT_KNOWLEDGE_MODEL")
 
 # [SECURITY] 生产环境强制检查 SMS_MODE，禁止 fallback 到 dev 模式
 ENV = os.getenv("ENV", "development").lower()

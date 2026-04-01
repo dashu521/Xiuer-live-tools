@@ -19,7 +19,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from config import settings
 from database import check_database_health, create_tables
-from routers import admin, auth, config, feedback, gift_card, me, messages, sms, subscription
+from routers import ai_trial, admin, auth, config, feedback, gift_card, me, messages, sms, subscription
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -64,6 +64,7 @@ app.include_router(messages.admin_router)
 app.include_router(subscription.router)
 app.include_router(gift_card.router)
 app.include_router(feedback.router)
+app.include_router(ai_trial.router)
 
 
 @app.get("/health")

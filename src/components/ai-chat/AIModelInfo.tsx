@@ -1,9 +1,11 @@
 import { providers } from 'shared/providers'
 import { useAIChatStore } from '@/hooks/useAIChat'
+import { useAITrialStore } from '@/hooks/useAITrial'
 import { Badge } from '../ui/badge'
 
 export default function AIModelInfo() {
   const aiConfig = useAIChatStore(context => context.config)
+  const trialSession = useAITrialStore(state => state.session)
   return (
     <div className="flex items-center gap-2">
       <Badge variant="dark" className="gap-1">
@@ -14,6 +16,11 @@ export default function AIModelInfo() {
         <span className="text-xs font-medium">模型:</span>
         <span className="font-mono">{aiConfig.model}</span>
       </Badge>
+      {trialSession ? (
+        <Badge variant="outline" className="gap-1 border-emerald-500/30 text-emerald-400">
+          <span className="text-xs font-medium">体验模式</span>
+        </Badge>
+      ) : null}
     </div>
   )
 }

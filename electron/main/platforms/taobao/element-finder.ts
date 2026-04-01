@@ -43,6 +43,10 @@ export const taobaoElementFinder: IElementFinder = {
     return Result.succeed(id)
   },
 
+  async getTitleFromGoodsItem(item: ElementHandle<SVGElement | HTMLElement>) {
+    return commonElementFinder.getTitleFromGoodsItem(item, SELECTORS.goodsItem.TITLE_CANDIDATES)
+  },
+
   async getCurrentGoodsItemsList(page: Page) {
     return commonElementFinder.getCurrentGoodsItemsList(page, SELECTORS.GOODS_ITEM)
   },
