@@ -19,6 +19,10 @@ export interface IElementFinder {
     item: ElementHandle<SVGElement | HTMLElement>,
   ): Result.ResultAsync<number, PlatformError>
 
+  getTitleFromGoodsItem?(
+    item: ElementHandle<SVGElement | HTMLElement>,
+  ): Result.ResultAsync<string | undefined, PlatformError>
+
   /** 能保证商品列表不为空 */
   getCurrentGoodsItemsList(
     page: Page,
@@ -125,5 +129,34 @@ export const commonElementFinder = {
 
   async getEmptyPinTopLabel() {
     return Result.fail(new ElementNotFoundError({ elementName: '置顶选项' }))
+  },
+
+  async getTitleFromGoodsItem(
+    item: ElementHandle<SVGElement | HTMLElement>,
+    selectors?: readonly string[],
+  ): Promise<Result.Result<string | undefined, PlatformError>> {
+    if (selectors?.length) {
+      for (const selector of selectors) {
+        const element = await item.$(selector)
+        const text = (await element?.textContent())?.trim()
+        if (text) {
+          return Result.succeed(text)
+        }
+      }
+    }
+
+    const rawText = await item.evaluate(el => (el as HTMLElement).innerText || '')
+    const lines = rawText
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .filter(
+        line =>
+          !/^(讲解|取消讲解|结束讲解|更多|编辑|删除|上架|下架)$/.test(line) &&
+          !/^#?\d+$/.test(line) &&
+          line.length >= 2,
+      )
+
+    return Result.succeed(lines[0] || undefined)
   },
 }

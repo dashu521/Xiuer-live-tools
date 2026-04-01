@@ -199,6 +199,21 @@ export interface IpcChannels {
   [IPC_CHANNELS.tasks.autoPopUp.fetchGoodsIds]: (accountId: string) => Promise<{
     success: boolean
     goodsIds?: number[]
+    goods?: GoodsScanItem[]
+    error?: string
+  }>
+  [IPC_CHANNELS.tasks.autoPopUp.scanGoodsKnowledge]: (
+    accountId: string,
+    goodsId: number,
+  ) => Promise<{
+    success: boolean
+    data?: {
+      id: number
+      title?: string
+      priceText?: string
+      detailText?: string
+      source: 'detail-page' | 'list-item'
+    }
     error?: string
   }>
   [IPC_CHANNELS.tasks.autoPopUp.registerShortcuts]: (

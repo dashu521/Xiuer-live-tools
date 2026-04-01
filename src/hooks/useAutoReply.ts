@@ -5,10 +5,22 @@ import { providers } from 'shared/providers'
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { AUTO_REPLY } from '@/constants'
+import {
+  buildAutoReplyConversation,
+  buildAutoReplySystemPrompt,
+  sanitizeAutoReplyResponse,
+  shouldSkipDuplicateReply,
+} from '@/lib/autoReply'
+import {
+  buildProductKnowledgePolishPrompt,
+  tryProductKnowledgeReply,
+  type ViewerProductSession,
+} from '@/lib/productKnowledge'
 import { EVENTS, eventEmitter } from '@/utils/events'
 import { matchObject } from '@/utils/filter'
 import { useAccounts } from './useAccounts'
-import { type AIProvider, type ChatMessage, useAIChatStore } from './useAIChat'
+import { type AIProvider, useAIChatStore } from './useAIChat'
+import { useAutoPopUpStore } from './useAutoPopUp'
 import { type AutoReplyConfig, useAutoReplyConfig } from './useAutoReplyConfig'
 import { useErrorHandler } from './useErrorHandler'
 import { useCurrentLiveControl, useLiveControlStore } from './useLiveControl'
@@ -20,6 +32,19 @@ interface ReplyPreview {
   replyContent: string
   replyFor: string
   time: string
+  isSent: boolean
+  source: 'ai' | 'product-kb'
+  matchedSlotIndex?: number
+  matchedTitle?: string
+  questionType?: 'price' | 'stock' | 'usage' | 'general'
+  matchedFields?: string[]
+  knowledgeMissReason?:
+    | 'no-items'
+    | 'not-product-query'
+    | 'slot-not-found'
+    | 'reference-expired'
+    | 'keyword-not-found'
+  wasDeduplicated?: boolean
 }
 
 export type Message = LiveMessage
@@ -52,7 +77,26 @@ interface AutoReplyAction {
   setIsRunning: (accountId: string, isRunning: boolean) => void
   setIsListening: (accountId: string, isListening: ListeningStatus) => void
   addComment: (accountId: string, comment: Message) => void
-  addReply: (accountId: string, commentId: string, nickname: string, content: string) => void
+  addReply: (
+    accountId: string,
+    commentId: string,
+    nickname: string,
+    content: string,
+    metadata?: Partial<
+      Pick<
+        ReplyPreview,
+        | 'source'
+        | 'matchedSlotIndex'
+        | 'matchedTitle'
+        | 'questionType'
+        | 'matchedFields'
+        | 'knowledgeMissReason'
+        | 'wasDeduplicated'
+      >
+    >,
+    isSent?: boolean,
+  ) => void
+  markReplySent: (accountId: string, commentId: string) => void
   removeReply: (accountId: string, commentId: string) => void
 }
 
@@ -97,7 +141,7 @@ export const useAutoReplyStore = create<AutoReplyState & AutoReplyAction>()(
           // 限制评论数量，防止内存无限增长
           context.comments = [{ ...comment }, ...context.comments].slice(0, AUTO_REPLY.MAX_COMMENTS)
         }),
-      addReply: (accountId, commentId, nickname, content) =>
+      addReply: (accountId, commentId, nickname, content, metadata, isSent = false) =>
         set(state => {
           const context = ensureContext(state, accountId)
           context.replies = [
@@ -107,9 +151,28 @@ export const useAutoReplyStore = create<AutoReplyState & AutoReplyAction>()(
               replyContent: content,
               replyFor: nickname,
               time: new Date().toISOString(),
+              isSent,
+              source: metadata?.source ?? 'ai',
+              matchedSlotIndex: metadata?.matchedSlotIndex,
+              matchedTitle: metadata?.matchedTitle,
+              questionType: metadata?.questionType,
+              matchedFields: metadata?.matchedFields,
+              knowledgeMissReason: metadata?.knowledgeMissReason,
+              wasDeduplicated: metadata?.wasDeduplicated,
             },
-            ...context.replies,
+            ...context.replies.filter(
+              reply =>
+                reply.commentId !== commentId && !(!reply.isSent && reply.replyFor === nickname),
+            ),
           ].slice(0, AUTO_REPLY.MAX_REPLIES)
+        }),
+      markReplySent: (accountId, commentId) =>
+        set(state => {
+          const context = ensureContext(state, accountId)
+          const reply = context.replies.find(item => item.commentId === commentId)
+          if (reply) {
+            reply.isSent = true
+          }
         }),
       removeReply: (accountId, commentId) =>
         set(state => {
@@ -119,65 +182,6 @@ export const useAutoReplyStore = create<AutoReplyState & AutoReplyAction>()(
     }
   }),
 )
-
-function generateAIMessages(
-  comments: CommentMessage[],
-  replies: ReplyPreview[],
-): Omit<ChatMessage, 'id' | 'timestamp'>[] {
-  // 1. 按时间排序混合评论和回复
-  const sortedItems = [
-    ...comments.map(c => ({ type: 'comment' as const, time: c.time, data: c })),
-    ...replies.map(r => ({ type: 'reply' as const, time: r.time, data: r })),
-  ].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
-
-  // 2. 转换为 AI 消息格式
-  const rawMessages: Omit<ChatMessage, 'id' | 'timestamp'>[] = sortedItems.map(item => {
-    if (item.type === 'comment') {
-      return {
-        role: 'user',
-        // 发送给 AI 的格式，包含昵称和内容
-        content: JSON.stringify({
-          nickname: item.data.nick_name,
-          content: item.data.content ?? '', // 确保 content 是字符串
-        }),
-      }
-    }
-    // item.type === 'reply'
-    return {
-      role: 'assistant',
-      content: item.data.replyContent,
-    }
-  })
-
-  // 3. 合并连续的同角色消息
-  if (rawMessages.length === 0) {
-    return []
-  }
-
-  const mergedMessages: Omit<ChatMessage, 'id' | 'timestamp'>[] = []
-  let currentMessage = { ...rawMessages[0], content: [rawMessages[0].content] } // 初始化第一个消息
-
-  for (let i = 1; i < rawMessages.length; i++) {
-    if (rawMessages[i].role === currentMessage.role) {
-      currentMessage.content.push(rawMessages[i].content) // 追加内容
-    } else {
-      // 角色变化，保存之前的消息，开始新消息
-      mergedMessages.push({
-        role: currentMessage.role,
-        content: currentMessage.content.join('\n'), // 用换行符合并内容
-      })
-      currentMessage = { ...rawMessages[i], content: [rawMessages[i].content] }
-    }
-  }
-
-  // 添加最后一条消息
-  mergedMessages.push({
-    role: currentMessage.role,
-    content: currentMessage.content.join('\n'),
-  })
-
-  return mergedMessages
-}
 
 function sendConfiguredReply(
   accountId: string,
@@ -215,12 +219,14 @@ async function sendMessage(
   accountId: string,
   content: string,
   errorHandler: ReturnType<typeof useErrorHandler>['handleError'],
-) {
-  if (!content) return
+): Promise<boolean> {
+  if (!content) return false
   try {
     await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.autoReply.sendReply, accountId, content)
+    return true
   } catch (err) {
     errorHandler(err, '自动发送回复失败')
+    return false
   }
 }
 
@@ -285,12 +291,8 @@ function getAISharedConfig() {
     // 系统提示词
     systemPrompt: store.systemPrompt || '你是一个 helpful assistant',
 
-    // 最近3轮对话上下文（只读）
-    // 取最后6条消息（3轮对话 = 3 user + 3 assistant）
-    recentMessages: store.messages.slice(-6).map(m => ({
-      role: m.role,
-      content: m.content,
-    })),
+    // 自动回复不复用 AI 助手聊天历史，避免任务边界被污染
+    recentMessages: [],
   }
 }
 
@@ -320,7 +322,7 @@ const handleAIReply = async (
     apiKey: string
     customBaseURL: string
   },
-  onReply: (content: string) => void,
+  onReply: (content: string, isSent?: boolean) => void,
   errorHandler: ReturnType<typeof useErrorHandler>['handleError'],
 ) => {
   if (!config.comment.aiReply.enable) return
@@ -371,28 +373,23 @@ const handleAIReply = async (
   const userReplies = allReplies.filter(reply => reply.replyFor === comment.nick_name)
 
   // 生成 AI 请求的消息体
-  const plainMessages = generateAIMessages(userComments, userReplies)
+  const plainMessages = buildAutoReplyConversation(comment, userComments, userReplies)
 
   // 构造系统提示
-  const systemPrompt =
-    useSharedConfig && aiConfig.systemPrompt
-      ? `${aiConfig.systemPrompt}\n\n你将接收到一个或多个 JSON 字符串，每个字符串代表用户的评论，格式为 {"nickname": "用户昵称", "content": "评论内容"}。请分析所有评论，并根据以下要求生成一个回复：\n${prompt}`
-      : `你将接收到一个或多个 JSON 字符串，每个字符串代表用户的评论，格式为 {"nickname": "用户昵称", "content": "评论内容"}。请分析所有评论，并根据以下要求生成一个回复：\n${prompt}`
+  const systemPrompt = buildAutoReplySystemPrompt(
+    prompt,
+    useSharedConfig ? aiConfig.systemPrompt : undefined,
+  )
 
   // 构建消息列表
   const messages: Array<{ role: string; content: string }> = [
     { role: 'system', content: systemPrompt },
   ]
 
-  // 【P1-1】如果使用共享配置，添加最近3轮 AI 对话上下文
-  if (useSharedConfig && aiConfig.recentMessages && aiConfig.recentMessages.length > 0) {
-    messages.push(...aiConfig.recentMessages)
-  }
-
   messages.push(...plainMessages)
 
   try {
-    const replyContent = await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.aiChat.normalChat, {
+    const rawReplyContent = await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.aiChat.normalChat, {
       messages,
       provider: aiConfig.provider,
       model: aiConfig.model,
@@ -400,15 +397,73 @@ const handleAIReply = async (
       customBaseURL: aiConfig.customBaseURL,
     })
 
-    if (replyContent && typeof replyContent === 'string') {
-      onReply(replyContent)
+    if (rawReplyContent && typeof rawReplyContent === 'string') {
+      const replyContent = sanitizeAutoReplyResponse(rawReplyContent)
+      if (!replyContent) {
+        console.warn('[AutoReply] Discarded invalid AI reply:', rawReplyContent)
+        return
+      }
+
+      let isSent = false
       // 自动发送
       if (autoSend) {
-        sendMessage(accountId, replyContent, errorHandler)
+        isSent = await sendMessage(accountId, replyContent, errorHandler)
       }
+      onReply(replyContent, isSent)
     }
   } catch (err) {
     errorHandler(err, 'AI 生成回复失败')
+  }
+}
+
+const maybePolishProductKnowledgeReply = async ({
+  comment,
+  templateReply,
+  knowledgeItem,
+  config,
+  provider,
+  model,
+  apiKey,
+  customBaseURL,
+}: {
+  comment: CommentMessage
+  templateReply: string
+  knowledgeItem: NonNullable<ReturnType<typeof tryProductKnowledgeReply>['item']>
+  config: AutoReplyConfig
+  provider: AIProvider
+  model: string
+  apiKey: string
+  customBaseURL: string
+}) => {
+  if (!config.comment.aiReply.enable || !apiKey) {
+    return templateReply
+  }
+
+  try {
+    const polished = await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.aiChat.normalChat, {
+      messages: [
+        {
+          role: 'system',
+          content: buildProductKnowledgePolishPrompt({
+            comment: comment.content,
+            templateReply,
+            item: knowledgeItem,
+          }),
+        },
+      ],
+      provider,
+      model,
+      apiKey,
+      customBaseURL,
+    })
+
+    if (typeof polished !== 'string' || !polished.trim()) {
+      return templateReply
+    }
+
+    return sanitizeAutoReplyResponse(polished) ?? templateReply
+  } catch {
+    return templateReply
   }
 }
 
@@ -421,6 +476,7 @@ export function useAutoReply() {
   )
   const addComment = useAutoReplyStore(state => state.addComment)
   const addReply = useAutoReplyStore(state => state.addReply)
+  const markReplySent = useAutoReplyStore(state => state.markReplySent)
   const setIsRunning = useAutoReplyStore(state => state.setIsRunning)
   const setIsListening = useAutoReplyStore(state => state.setIsListening)
   const removeReply = useAutoReplyStore(state => state.removeReply)
@@ -432,6 +488,9 @@ export function useAutoReply() {
   const { handleError } = useErrorHandler()
 
   const { isListening, comments, replies } = context
+  const latestAiRequestVersionRef = useRef<Record<string, number>>({})
+  const viewerProductSessionRef = useRef<Record<string, ViewerProductSession>>({})
+  const recentReplyCacheRef = useRef<Record<string, { content: string; at: number }>>({})
 
   const handleComment = useMemoizedFn((comment: Message, accountId: string) => {
     // const context = contexts[accountId] || createDefaultContext()
@@ -479,7 +538,7 @@ export function useAutoReply() {
       return
     }
 
-    ;(function handleReply() {
+    void (async function handleReply() {
       if (
         // 如果是主播评论就跳过
         comment.nick_name === accountName ||
@@ -497,7 +556,109 @@ export function useAutoReply() {
           const keywordReplied = handleKeywordReply(comment, config, accountId, handleError)
           // 如果关键字未回复，且 AI 回复已启用，则尝试 AI 回复
           if (!keywordReplied && config.comment.aiReply.enable) {
+            const productKnowledgeItems =
+              useAutoPopUpStore.getState().contexts[accountId]?.config.goods ?? []
+            const viewerSessionKey = `${accountId}:${comment.nick_name}`
+            const productKnowledgeHit = tryProductKnowledgeReply({
+              comment: comment.content,
+              items: productKnowledgeItems,
+              viewerSession: viewerProductSessionRef.current[viewerSessionKey],
+            })
+
+            if (productKnowledgeHit.hit) {
+              const templateReply = productKnowledgeHit.reply
+              const matchedKnowledgeItem = productKnowledgeHit.item
+
+              if (productKnowledgeHit.shouldUpdateSession && productKnowledgeHit.slotIndex) {
+                viewerProductSessionRef.current[viewerSessionKey] = {
+                  slotIndex: productKnowledgeHit.slotIndex,
+                  updatedAt: Date.now(),
+                }
+              }
+
+              if (templateReply) {
+                const shouldSkipPolish =
+                  productKnowledgeHit.questionType === 'price' ||
+                  productKnowledgeHit.questionType === 'stock'
+
+                const finalReply =
+                  matchedKnowledgeItem && !shouldSkipPolish
+                    ? await maybePolishProductKnowledgeReply({
+                        comment,
+                        templateReply,
+                        knowledgeItem: matchedKnowledgeItem,
+                        config,
+                        provider,
+                        model,
+                        apiKey: apiKeys[provider],
+                        customBaseURL,
+                      })
+                    : templateReply
+
+                const recentReplyKey = `${accountId}:${comment.nick_name}`
+                const lastReply = recentReplyCacheRef.current[recentReplyKey]
+                if (
+                  shouldSkipDuplicateReply({
+                    replyContent: finalReply,
+                    lastReplyContent: lastReply?.content,
+                    lastReplyAt: lastReply?.at,
+                  })
+                ) {
+                  addReply(
+                    accountId,
+                    comment.msg_id,
+                    comment.nick_name,
+                    finalReply,
+                    {
+                      source: 'product-kb',
+                      matchedSlotIndex: productKnowledgeHit.slotIndex,
+                      matchedTitle: productKnowledgeHit.item?.title,
+                      questionType: productKnowledgeHit.questionType,
+                      matchedFields: productKnowledgeHit.matchedFields,
+                      wasDeduplicated: true,
+                    },
+                    false,
+                  )
+                  return
+                }
+
+                let isSent = false
+                if (config.comment.aiReply.autoSend) {
+                  void sendMessage(accountId, finalReply, handleError).then(sent => {
+                    if (sent) {
+                      markReplySent(accountId, comment.msg_id)
+                    }
+                  })
+                  isSent = false
+                }
+
+                recentReplyCacheRef.current[recentReplyKey] = {
+                  content: finalReply,
+                  at: Date.now(),
+                }
+
+                addReply(
+                  accountId,
+                  comment.msg_id,
+                  comment.nick_name,
+                  finalReply,
+                  {
+                    source: 'product-kb',
+                    matchedSlotIndex: productKnowledgeHit.slotIndex,
+                    matchedTitle: productKnowledgeHit.item?.title,
+                    questionType: productKnowledgeHit.questionType,
+                    matchedFields: productKnowledgeHit.matchedFields,
+                  },
+                  isSent,
+                )
+                return
+              }
+            }
+
             const apiKey = apiKeys[provider]
+            const requestKey = `${accountId}:${comment.nick_name}`
+            const requestVersion = (latestAiRequestVersionRef.current[requestKey] ?? 0) + 1
+            latestAiRequestVersionRef.current[requestKey] = requestVersion
             handleAIReply(
               accountId,
               comment,
@@ -510,8 +671,63 @@ export function useAutoReply() {
                 apiKey,
                 customBaseURL,
               },
-              (replyContent: string) => {
-                addReply(accountId, comment.msg_id, comment.nick_name, replyContent)
+              (replyContent: string, isSent = false) => {
+                if (latestAiRequestVersionRef.current[requestKey] !== requestVersion) {
+                  return
+                }
+                const recentReplyKey = `${accountId}:${comment.nick_name}`
+                const lastReply = recentReplyCacheRef.current[recentReplyKey]
+                if (
+                  shouldSkipDuplicateReply({
+                    replyContent,
+                    lastReplyContent: lastReply?.content,
+                    lastReplyAt: lastReply?.at,
+                  })
+                ) {
+                  addReply(
+                    accountId,
+                    comment.msg_id,
+                    comment.nick_name,
+                    replyContent,
+                    {
+                      source: 'ai',
+                      matchedSlotIndex: productKnowledgeHit.slotIndex,
+                      knowledgeMissReason: productKnowledgeHit.missReason,
+                      wasDeduplicated: true,
+                    },
+                    false,
+                  )
+                  return
+                }
+                const viewerSessionKey = `${accountId}:${comment.nick_name}`
+                recentReplyCacheRef.current[recentReplyKey] = {
+                  content: replyContent,
+                  at: Date.now(),
+                }
+                addReply(
+                  accountId,
+                  comment.msg_id,
+                  comment.nick_name,
+                  replyContent,
+                  {
+                    source: 'ai',
+                    matchedSlotIndex: productKnowledgeHit.slotIndex,
+                    knowledgeMissReason: productKnowledgeHit.missReason,
+                  },
+                  isSent,
+                )
+                if (isSent) {
+                  const knowledgeHit = tryProductKnowledgeReply({
+                    comment: comment.content,
+                    items: useAutoPopUpStore.getState().contexts[accountId]?.config.goods ?? [],
+                  })
+                  if (knowledgeHit.hit && knowledgeHit.slotIndex) {
+                    viewerProductSessionRef.current[viewerSessionKey] = {
+                      slotIndex: knowledgeHit.slotIndex,
+                      updatedAt: Date.now(),
+                    }
+                  }
+                }
               },
               handleError,
             )
@@ -565,6 +781,7 @@ export function useAutoReply() {
     // 【Phase 2A】内部状态设置保持原样，供任务内部使用
     setIsRunning: (running: boolean) => setIsRunning(currentAccountId, running),
     setIsListening: (listening: ListeningStatus) => setIsListening(currentAccountId, listening),
+    markReplySent: (commentId: string) => markReplySent(currentAccountId, commentId),
     removeReply: (commentId: string) => removeReply(currentAccountId, commentId),
   }
 }

@@ -6,17 +6,45 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function messagesToContext(messages: ChatMessage[], userMessage: string) {
-  const newMessages = []
+type ContextMessage = Pick<ChatMessage, 'role' | 'content' | 'isError'>
+
+export function normalizeContextMessages(messages: ContextMessage[]) {
+  const normalizedMessages: Array<Pick<ChatMessage, 'role' | 'content'>> = []
+
   for (let i = 0; i < messages.length; i++) {
-    // 这里用户发出的消息返回错误了，也就是说用户的消息并未参与到实际的对话中
-    // 所以要跳过当前消息，当然同时也要跳过下一个错误消息
-    if (messages[i].role === 'user' && i < messages.length - 1 && messages[i + 1].isError) {
+    const currentMessage = messages[i]
+    const nextMessage = messages[i + 1]
+
+    // A failed round should not be sent upstream as part of the conversation history.
+    if (currentMessage.role === 'user' && nextMessage?.isError) {
       i++
       continue
     }
-    newMessages.push({ role: messages[i].role, content: messages[i].content })
+
+    if (currentMessage.isError) {
+      continue
+    }
+
+    if (!currentMessage.content.trim()) {
+      continue
+    }
+
+    const previousMessage = normalizedMessages[normalizedMessages.length - 1]
+    if (previousMessage?.role === currentMessage.role) {
+      previousMessage.content = `${previousMessage.content}\n\n${currentMessage.content}`
+      continue
+    }
+
+    normalizedMessages.push({
+      role: currentMessage.role,
+      content: currentMessage.content,
+    })
   }
+
+  return normalizedMessages
+}
+
+export function messagesToContext(messages: ChatMessage[], userMessage: string) {
   // 64k token 限制
-  return [...newMessages.slice(-100), { role: 'user', content: userMessage }]
+  return [...normalizeContextMessages(messages).slice(-100), { role: 'user', content: userMessage }]
 }

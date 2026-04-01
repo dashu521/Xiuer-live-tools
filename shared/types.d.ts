@@ -24,6 +24,17 @@ declare type LiveControlPlatform =
 declare type GoodsItemConfig = {
   id: number
   interval?: [number, number] // 可选：单独设置间隔（毫秒），未设置则使用全局默认值
+  title?: string
+  shortTitle?: string
+  priceText?: string
+  promoText?: string
+  stockText?: string
+  highlights?: string[]
+  aliases?: string[]
+  faq?: Array<{
+    q: string
+    a: string
+  }>
 }
 
 declare type AutoPopupConfig = {

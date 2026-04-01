@@ -84,6 +84,10 @@ export const douyinElementFinder: IElementFinder = {
     return commonElementFinder.getIdFromGoodsItem(item, SELECTORS.goodsItem.ID)
   },
 
+  async getTitleFromGoodsItem(item: ElementHandle<SVGElement | HTMLElement>) {
+    return commonElementFinder.getTitleFromGoodsItem(item, SELECTORS.goodsItem.TITLE_CANDIDATES)
+  },
+
   async getCommentTextarea(page: Page) {
     return commonElementFinder.getCommentTextarea(page, SELECTORS.commentInput.TEXTAREA)
   },

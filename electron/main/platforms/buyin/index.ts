@@ -91,6 +91,14 @@ export class BuyinPlatform
     return await DouyinPlatform.prototype.scanPopupGoodsIds.call(this)
   }
 
+  async scanPopupGoodsMeta() {
+    return await DouyinPlatform.prototype.scanPopupGoodsMeta.call(this)
+  }
+
+  async scanPopupGoodsKnowledge(goodsId: number) {
+    return await DouyinPlatform.prototype.scanPopupGoodsKnowledge.call(this, goodsId)
+  }
+
   startCommentListener(onComment: (comment: LiveMessage) => void, source: 'control' | 'compass') {
     const pageResult = ensurePage(this.mainPage)
     if (Result.isFailure(pageResult)) {

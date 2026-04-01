@@ -80,12 +80,48 @@ function setupIpcHandlers() {
       }
     }
 
+    const goodsMetaResult = await accountSession.value.fetchAutoPopupGoodsMeta()
+    const goodsMeta = Result.isSuccess(goodsMetaResult) ? goodsMetaResult.value : undefined
+
     logger.info(`成功读取商品序号，共 ${goodsIdsResult.value.length} 个`)
     return {
       success: true,
       goodsIds: goodsIdsResult.value,
+      goods: goodsMeta,
     }
   })
+
+  typedIpcMainHandle(
+    IPC_CHANNELS.tasks.autoPopUp.scanGoodsKnowledge,
+    async (_, accountId, goodsId) => {
+      const logger = createLogger(`@${accountManager.getAccountName(accountId)}`).scope(TASK_NAME)
+      const accountSession = accountManager.getSession(accountId)
+      if (Result.isFailure(accountSession)) {
+        logger.error('扫描商品知识失败：', accountSession.error)
+        return {
+          success: false,
+          error:
+            accountSession.error instanceof Error
+              ? accountSession.error.message
+              : '扫描商品知识失败',
+        }
+      }
+
+      const scanResult = await accountSession.value.scanAutoPopupGoodsKnowledge(goodsId)
+      if (Result.isFailure(scanResult)) {
+        logger.error('扫描商品知识失败：', scanResult.error)
+        return {
+          success: false,
+          error: scanResult.error instanceof Error ? scanResult.error.message : '扫描商品知识失败',
+        }
+      }
+
+      return {
+        success: true,
+        data: scanResult.value,
+      }
+    },
+  )
 
   typedIpcMainHandle(IPC_CHANNELS.tasks.autoPopUp.registerShortcuts, (_, accountId, shortcuts) => {
     const logger = createLogger(`@${accountManager.getAccountName(accountId)}`).scope('快捷键弹窗')

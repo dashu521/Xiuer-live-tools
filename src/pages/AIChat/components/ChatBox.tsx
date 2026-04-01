@@ -16,7 +16,7 @@ interface ContextMessage {
 const useChatMessaging = () => {
   const status = useAIChatStore(state => state.status)
   const setStatus = useAIChatStore(state => state.setStatus)
-  const addMessage = useAIChatStore(state => state.addMessage)
+  const markLastAssistantAsError = useAIChatStore(state => state.markLastAssistantAsError)
   const appendToChat = useAIChatStore(state => state.appendToChat)
   const appendToReasoning = useAIChatStore(state => state.appendToReasoning)
   const tryToHandleEmptyMessage = useAIChatStore(state => state.tryToHandleEmptyMessage)
@@ -94,7 +94,7 @@ const useChatMessaging = () => {
         })
     })
       .catch(error => {
-        addMessage({ role: 'assistant', content: error, isError: true })
+        markLastAssistantAsError(String(error))
       })
       .finally(() => {
         tryToHandleEmptyMessage('可能是网络请求超时，也可能是接收到了空数据')

@@ -9,6 +9,7 @@ import { storageManager } from '@/utils/storage/StorageManager'
 interface Account {
   id: string
   name: string
+  platform?: LiveControlPlatform
 }
 
 export function normalizeAccountSelection<T extends { id: string }>(

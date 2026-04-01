@@ -734,6 +734,42 @@ export class AccountSession {
     return await this.platform.scanPopupGoodsIds()
   }
 
+  public async fetchAutoPopupGoodsMeta(): Result.ResultAsync<
+    Array<{ id: number; title?: string }>,
+    Error
+  > {
+    if (!isPerformPopup(this.platform)) {
+      return Result.fail(new TaskNotSupportedError({ taskName: 'auto-popup' }))
+    }
+
+    if (!isPopupGoodsScanner(this.platform) || !this.platform.scanPopupGoodsMeta) {
+      return Result.fail(new TaskNotSupportedError({ taskName: 'scan-auto-popup-goods-meta' }))
+    }
+
+    return await this.platform.scanPopupGoodsMeta()
+  }
+
+  public async scanAutoPopupGoodsKnowledge(goodsId: number): Result.ResultAsync<
+    {
+      id: number
+      title?: string
+      priceText?: string
+      detailText?: string
+      source: 'detail-page' | 'list-item'
+    },
+    Error
+  > {
+    if (!isPerformPopup(this.platform)) {
+      return Result.fail(new TaskNotSupportedError({ taskName: 'auto-popup' }))
+    }
+
+    if (!isPopupGoodsScanner(this.platform) || !this.platform.scanPopupGoodsKnowledge) {
+      return Result.fail(new TaskNotSupportedError({ taskName: 'scan-auto-popup-goods-knowledge' }))
+    }
+
+    return await this.platform.scanPopupGoodsKnowledge(goodsId)
+  }
+
   /**
    * 获取当前页面 URL
    * 用于小号互动功能自动获取直播间链接

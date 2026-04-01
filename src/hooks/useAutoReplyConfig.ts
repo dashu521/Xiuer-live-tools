@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
+import { abilities } from '@/abilities'
 import { useAuthStore } from '@/stores/authStore'
 import { useCommentListenerRuntimeStore } from '@/utils/commentListenerRuntime'
 import { flushAllPersists, flushPersist, schedulePersist } from '@/utils/debouncedPersist'
@@ -63,9 +64,49 @@ export type AutoReplyConfig = AutoReplyBaseConfig & CompassExtraConfig & WechatC
 const defaultPrompt =
   '你是一个直播间的助手，负责回复观众的评论。请用简短友好的语气回复，不要超过50个字。'
 
-export const createDefaultConfig = (): AutoReplyConfig => {
+function getDefaultEntryForPlatform(platform?: LiveControlPlatform): AutoReplyConfig['entry'] {
+  switch (platform) {
+    case 'douyin':
+    case 'buyin':
+    case 'eos':
+      return 'compass'
+    case 'wxchannel':
+      return 'wechat-channel'
+    case 'xiaohongshu':
+    case 'pgy':
+      return 'xiaohongshu'
+    case 'taobao':
+      return 'taobao'
+    default:
+      return 'control'
+  }
+}
+
+function normalizeEntryForPlatform(
+  entry: AutoReplyConfig['entry'],
+  platform?: LiveControlPlatform,
+): AutoReplyConfig['entry'] {
+  if (!platform) return entry
+  const supported = abilities[platform]?.autoReply?.source ?? []
+  if (supported.includes(entry)) {
+    return entry
+  }
+  return getDefaultEntryForPlatform(platform)
+}
+
+function normalizeConfigForPlatform(
+  config: AutoReplyConfig,
+  platform?: LiveControlPlatform,
+): AutoReplyConfig {
   return {
-    entry: 'control',
+    ...config,
+    entry: normalizeEntryForPlatform(config.entry, platform),
+  }
+}
+
+export const createDefaultConfig = (platform?: LiveControlPlatform): AutoReplyConfig => {
+  return {
+    entry: getDefaultEntryForPlatform(platform),
     hideUsername: false,
     comment: {
       keywordReply: {
@@ -132,8 +173,8 @@ interface AutoReplyContext {
   config: AutoReplyConfig
 }
 
-const defaultContext = (): AutoReplyContext => ({
-  config: createDefaultConfig(),
+const defaultContext = (platform?: LiveControlPlatform): AutoReplyContext => ({
+  config: createDefaultConfig(platform),
 })
 
 interface AutoReplyConfigStore {
@@ -166,7 +207,10 @@ export const useAutoReplyConfigStore = create<AutoReplyConfigStore>()(
 
     const ensureContext = (state: AutoReplyConfigStore, accountId: string) => {
       if (!state.contexts[accountId]) {
-        state.contexts[accountId] = defaultContext()
+        const platform = useAccounts
+          .getState()
+          .accounts.find(account => account.id === accountId)?.platform
+        state.contexts[accountId] = defaultContext(platform)
       }
       return state.contexts[accountId]
     }
@@ -210,7 +254,13 @@ export const useAutoReplyConfigStore = create<AutoReplyConfigStore>()(
       updateConfig: (accountId, configUpdates) =>
         set(state => {
           const context = ensureContext(state, accountId)
-          const newConfig = mergeWithoutArray(context.config, configUpdates)
+          const platform = useAccounts
+            .getState()
+            .accounts.find(account => account.id === accountId)?.platform
+          const newConfig = normalizeConfigForPlatform(
+            mergeWithoutArray(context.config, configUpdates),
+            platform,
+          )
           context.config = newConfig
           saveToStorage(accountId, context)
 
@@ -248,7 +298,10 @@ export const useAutoReplyConfigStore = create<AutoReplyConfigStore>()(
                 accountId: account.id,
               })
               if (savedContext) {
-                state.contexts[account.id] = savedContext
+                state.contexts[account.id] = {
+                  ...savedContext,
+                  config: normalizeConfigForPlatform(savedContext.config, account.platform),
+                }
               }
             })
           })
@@ -292,9 +345,15 @@ export const useAutoReplyConfigStore = create<AutoReplyConfigStore>()(
 export const useAutoReplyConfig = () => {
   const store = useAutoReplyConfigStore()
   const currentAccountId = useAccounts(ctx => ctx.currentAccountId)
+  const currentPlatform = useAccounts(
+    state => state.accounts.find(account => account.id === currentAccountId)?.platform,
+  )
   const config = mergeWithoutArray(
-    createDefaultConfig(),
-    store.contexts[currentAccountId]?.config ?? {},
+    createDefaultConfig(currentPlatform),
+    normalizeConfigForPlatform(
+      store.contexts[currentAccountId]?.config ?? createDefaultConfig(currentPlatform),
+      currentPlatform,
+    ),
   )
 
   return {
