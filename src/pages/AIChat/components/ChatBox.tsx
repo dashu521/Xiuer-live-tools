@@ -5,6 +5,7 @@ import { LoadingIcon } from '@/components/icons/loading'
 import { Card, CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { type ChatMessage, useAIChatStore } from '@/hooks/useAIChat'
+import { getEffectiveAICredentials, useAITrialStore } from '@/hooks/useAITrial'
 import ChatInput from './ChatInput'
 import { Message } from './Message'
 
@@ -24,6 +25,7 @@ const useChatMessaging = () => {
   const model = useAIChatStore(state => state.config.model)
   const apiKeys = useAIChatStore(state => state.apiKeys)
   const customBaseURL = useAIChatStore(state => state.customBaseURL)
+  const reportTrialUse = useAITrialStore(state => state.reportUse)
   const autoScroll = useAIChatStore(state => state.autoScroll)
   const setAutoScroll = useAIChatStore(state => state.setAutoScroll)
 
@@ -52,6 +54,7 @@ const useChatMessaging = () => {
 
   const sendMessage = useMemoizedFn(async (messages: ContextMessage[]) => {
     setAutoScroll(true)
+    let requestSucceeded = false
     return new Promise<void>((resolve, reject) => {
       setStatus('waiting')
 
@@ -59,6 +62,7 @@ const useChatMessaging = () => {
         IPC_CHANNELS.tasks.aiChat.stream,
         result => {
           if ('done' in result && result.done) {
+            requestSucceeded = true
             cleanup()
             resolve()
           } else if ('chunk' in result && result.chunk) {
@@ -80,13 +84,27 @@ const useChatMessaging = () => {
         removeErrorHandler()
       }
 
+      const credentials = getEffectiveAICredentials({
+        feature: 'chat',
+        userProvider: provider,
+        userModel: model,
+        userApiKey: apiKeys[provider],
+        userCustomBaseURL: customBaseURL,
+      })
+
+      if (!credentials) {
+        cleanup()
+        reject('请先配置 API Key 或启用体验模式')
+        return
+      }
+
       window.ipcRenderer
         .invoke(IPC_CHANNELS.tasks.aiChat.chat, {
           messages,
-          apiKey: apiKeys[provider],
-          provider,
-          model,
-          customBaseURL: customBaseURL,
+          apiKey: credentials.apiKey,
+          provider: credentials.provider,
+          model: credentials.model,
+          customBaseURL: credentials.customBaseURL,
         })
         .catch(error => {
           cleanup()
@@ -95,6 +113,21 @@ const useChatMessaging = () => {
     })
       .catch(error => {
         markLastAssistantAsError(String(error))
+      })
+      .then(async () => {
+        if (!requestSucceeded) {
+          return
+        }
+        const credentials = getEffectiveAICredentials({
+          feature: 'chat',
+          userProvider: provider,
+          userModel: model,
+          userApiKey: apiKeys[provider],
+          userCustomBaseURL: customBaseURL,
+        })
+        if (credentials?.credentialMode === 'trial') {
+          await reportTrialUse({ feature: 'chat', model: credentials.model })
+        }
       })
       .finally(() => {
         tryToHandleEmptyMessage('可能是网络请求超时，也可能是接收到了空数据')

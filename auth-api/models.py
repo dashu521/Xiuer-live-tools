@@ -154,6 +154,49 @@ class UserConfig(Base):
     user = relationship("User", backref="config")
 
 
+class AITrialSettings(Base):
+    __tablename__ = "ai_trial_settings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    trial_enabled = Column(Boolean, default=True, nullable=False)
+    token_version = Column(Integer, default=1, nullable=False)
+    token_expires_in_seconds = Column(Integer, default=43200, nullable=False)
+
+    chat_daily_limit = Column(Integer, default=100, nullable=False)
+    auto_reply_daily_limit = Column(Integer, default=500, nullable=False)
+    knowledge_draft_daily_limit = Column(Integer, default=50, nullable=False)
+
+    default_chat_model = Column(String(100), nullable=False)
+    default_auto_reply_model = Column(String(100), nullable=False)
+    default_knowledge_model = Column(String(100), nullable=False)
+
+    auto_send_default = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class AITrialUserUsage(Base):
+    __tablename__ = "ai_trial_user_usage"
+    __table_args__ = (
+        UniqueConstraint("user_id", "feature", name="uq_ai_trial_user_feature"),
+        Index("idx_ai_trial_usage_last_used", "last_used_at"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    device_id = Column(String(128), nullable=True)
+    feature = Column(String(32), nullable=False, index=True)
+    first_used_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_used_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    use_count = Column(Integer, default=1, nullable=False)
+    last_model = Column(String(100), nullable=True)
+    last_client_version = Column(String(64), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = relationship("User", backref="ai_trial_usage")
+
+
 class Feedback(Base):
     """用户反馈表"""
     __tablename__ = "feedbacks"

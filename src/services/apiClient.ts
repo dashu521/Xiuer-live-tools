@@ -277,6 +277,47 @@ export interface TrialStatusResponse {
   end_ts?: number
 }
 
+export interface AITrialModels {
+  chat: string
+  auto_reply: string
+  knowledge_draft: string
+}
+
+export interface AITrialSessionResponse {
+  ok: boolean
+  mode: 'trial'
+  token: string
+  expires_in: number
+  token_type: 'Bearer'
+  models: AITrialModels
+  limits: {
+    chat_remaining: number
+    auto_reply_remaining: number
+    knowledge_draft_remaining: number
+  }
+  auto_send_default: boolean
+  credential: {
+    provider: string
+    base_url: string
+    api_key: string
+  }
+}
+
+export interface AITrialStatusResponse {
+  ok: boolean
+  trial_enabled: boolean
+  mode: 'trial'
+  expires_in: number
+  auto_send_default: boolean
+  models: AITrialModels
+  provider: string
+  base_url: string
+}
+
+export interface AITrialReportUseResponse {
+  ok: boolean
+}
+
 /**
  * POST /trial/start：开启 3 天试用。必须带 Authorization: Bearer <token>，Body 必须包含 { username }。
  * 从当前登录状态读取 username，不允许空 body。
@@ -325,6 +366,36 @@ export async function getServerTime(): Promise<number | null> {
   }
   console.warn('[apiClient] getServerTime failed:', result.status, result.ok ? '' : result.error)
   return null
+}
+
+export async function createAITrialSession(params: {
+  deviceId: string
+  clientVersion?: string
+  features?: Array<'chat' | 'auto_reply' | 'knowledge_draft'>
+}): Promise<ApiResult<AITrialSessionResponse>> {
+  return requestWithRefresh<AITrialSessionResponse>('POST', '/ai/trial/session', {
+    device_id: params.deviceId,
+    client_version: params.clientVersion,
+    features: params.features ?? ['chat', 'auto_reply', 'knowledge_draft'],
+  })
+}
+
+export async function getAITrialStatus(): Promise<ApiResult<AITrialStatusResponse>> {
+  return requestWithRefresh<AITrialStatusResponse>('GET', '/ai/trial/status')
+}
+
+export async function reportAITrialUse(params: {
+  feature: 'chat' | 'auto_reply' | 'knowledge_draft'
+  deviceId?: string
+  model?: string
+  clientVersion?: string
+}): Promise<ApiResult<AITrialReportUseResponse>> {
+  return requestWithRefresh<AITrialReportUseResponse>('POST', '/ai/trial/report-use', {
+    feature: params.feature,
+    device_id: params.deviceId,
+    model: params.model,
+    client_version: params.clientVersion,
+  })
 }
 
 /** 后端 POST /login 返回（账号密码登录） */

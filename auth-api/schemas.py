@@ -119,6 +119,64 @@ class UserStatusResponse(BaseModel):
     capabilities: Optional[UserCapabilitiesOut] = None
 
 
+class AITrialSessionBody(BaseModel):
+    device_id: str = Field(..., min_length=1, max_length=128)
+    client_version: Optional[str] = Field(default=None, max_length=64)
+    features: List[str] = Field(default_factory=list)
+
+
+class AITrialModelsOut(BaseModel):
+    chat: str
+    auto_reply: str
+    knowledge_draft: str
+
+
+class AITrialCredentialOut(BaseModel):
+    provider: str
+    base_url: str
+    api_key: str
+
+
+class AITrialLimitsOut(BaseModel):
+    chat_remaining: int
+    auto_reply_remaining: int
+    knowledge_draft_remaining: int
+
+
+class AITrialSessionResponse(BaseModel):
+    ok: bool = True
+    mode: str = "trial"
+    token: str
+    expires_in: int
+    token_type: str = "Bearer"
+    models: AITrialModelsOut
+    limits: AITrialLimitsOut
+    auto_send_default: bool
+    credential: AITrialCredentialOut
+
+
+class AITrialReportUseBody(BaseModel):
+    feature: str = Field(..., min_length=1, max_length=32)
+    device_id: Optional[str] = Field(default=None, max_length=128)
+    model: Optional[str] = Field(default=None, max_length=100)
+    client_version: Optional[str] = Field(default=None, max_length=64)
+
+
+class AITrialReportUseResponse(BaseModel):
+    ok: bool = True
+
+
+class AITrialStatusResponse(BaseModel):
+    ok: bool = True
+    trial_enabled: bool
+    mode: str = "trial"
+    expires_in: int
+    auto_send_default: bool
+    models: AITrialModelsOut
+    provider: str
+    base_url: str
+
+
 # ----- 错误规范 -----
 class ErrorDetail(BaseModel):
     code: str

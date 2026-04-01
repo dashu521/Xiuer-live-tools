@@ -20,6 +20,7 @@ import { EVENTS, eventEmitter } from '@/utils/events'
 import { matchObject } from '@/utils/filter'
 import { useAccounts } from './useAccounts'
 import { type AIProvider, useAIChatStore } from './useAIChat'
+import { getEffectiveAICredentials, useAITrialStore } from './useAITrial'
 import { useAutoPopUpStore } from './useAutoPopUp'
 import { type AutoReplyConfig, useAutoReplyConfig } from './useAutoReplyConfig'
 import { useErrorHandler } from './useErrorHandler'
@@ -484,6 +485,8 @@ export function useAutoReply() {
   const model = useAIChatStore(state => state.config.model)
   const apiKeys = useAIChatStore(state => state.apiKeys)
   const customBaseURL = useAIChatStore(state => state.customBaseURL)
+  const ensureTrialSession = useAITrialStore(state => state.ensureSession)
+  const reportTrialUse = useAITrialStore(state => state.reportUse)
   const { config } = useAutoReplyConfig()
   const { handleError } = useErrorHandler()
 
@@ -556,6 +559,10 @@ export function useAutoReply() {
           const keywordReplied = handleKeywordReply(comment, config, accountId, handleError)
           // 如果关键字未回复，且 AI 回复已启用，则尝试 AI 回复
           if (!keywordReplied && config.comment.aiReply.enable) {
+            if (!apiKeys[provider]) {
+              await ensureTrialSession('auto_reply')
+            }
+
             const productKnowledgeItems =
               useAutoPopUpStore.getState().contexts[accountId]?.config.goods ?? []
             const viewerSessionKey = `${accountId}:${comment.nick_name}`
@@ -655,7 +662,16 @@ export function useAutoReply() {
               }
             }
 
-            const apiKey = apiKeys[provider]
+            const credentials = getEffectiveAICredentials({
+              feature: 'auto_reply',
+              userProvider: provider,
+              userModel: model,
+              userApiKey: apiKeys[provider],
+              userCustomBaseURL: customBaseURL,
+            })
+            if (!credentials) {
+              return
+            }
             const requestKey = `${accountId}:${comment.nick_name}`
             const requestVersion = (latestAiRequestVersionRef.current[requestKey] ?? 0) + 1
             latestAiRequestVersionRef.current[requestKey] = requestVersion
@@ -666,10 +682,10 @@ export function useAutoReply() {
               allReplies,
               config,
               {
-                provider,
-                model,
-                apiKey,
-                customBaseURL,
+                provider: credentials.provider,
+                model: credentials.model,
+                apiKey: credentials.apiKey,
+                customBaseURL: credentials.customBaseURL,
               },
               (replyContent: string, isSent = false) => {
                 if (latestAiRequestVersionRef.current[requestKey] !== requestVersion) {
@@ -731,6 +747,9 @@ export function useAutoReply() {
               },
               handleError,
             )
+            if (credentials.credentialMode === 'trial') {
+              await reportTrialUse({ feature: 'auto_reply', model: credentials.model })
+            }
           }
           break
         }
