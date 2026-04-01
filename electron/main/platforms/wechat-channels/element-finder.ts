@@ -33,6 +33,10 @@ export const wechatChannelElementFinder: WechatChannelElementFinder = {
     return commonElementFinder.getIdFromGoodsItem(item, SELECTORS.goodsItem.ID, true)
   },
 
+  async getTitleFromGoodsItem(item: ElementHandle<SVGElement | HTMLElement>) {
+    return commonElementFinder.getTitleFromGoodsItem(item, SELECTORS.goodsItem.TITLE_CANDIDATES)
+  },
+
   async getCurrentGoodsItemsList(page: Page) {
     const itemsList = await commonElementFinder.getCurrentGoodsItemsList(page, SELECTORS.GOODS_ITEM)
     if (Result.isFailure(itemsList)) {

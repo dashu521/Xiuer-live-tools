@@ -47,6 +47,14 @@ export const SELECTORS = {
   goodsItem: {
     POPUP_BUTTON: '.promoting-wrap .action-link span[class*="promoting"]',
     ID: 'input + span',
+    TITLE_CANDIDATES: [
+      '.commodity-info__name',
+      '.table-cell:first-child .commodity-name',
+      '.table-cell:first-child .name',
+      '[class*="commodity-name"]',
+      '[class*="goods-name"]',
+      '[class*="title"]',
+    ],
   },
   /** 评论输入框（与 commentInput 同义，供 isLive 等使用） */
   COMMENT: {
