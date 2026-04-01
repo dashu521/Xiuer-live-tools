@@ -65,6 +65,7 @@ const ALLOWED_STATIC_CHANNELS: string[] = [
   'tasks:autoMessage:stoppedEvent',
   'tasks:autoMessage:updateConfig',
   'tasks:autoPopUp:fetchGoodsIds',
+  'tasks:autoPopUp:scanGoodsKnowledge',
   'tasks:autoPopUp:start',
   'tasks:autoPopUp:stop',
   'tasks:autoPopUp:stoppedEvent',

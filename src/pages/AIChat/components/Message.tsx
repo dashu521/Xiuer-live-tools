@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import type { ChatMessage } from '@/hooks/useAIChat'
 import { useAIChatStore } from '@/hooks/useAIChat'
+import { normalizeContextMessages } from '@/lib/utils'
 import { MessageContent } from './MessageContent'
 
 export function Message({
@@ -24,19 +25,39 @@ export function Message({
   const showRetry = useMemo(() => {
     if (role !== 'user') return false
     const index = messages.findIndex(m => m.id === id)
-    const nextMessage = messages[index + 1]
-    return nextMessage?.isError ?? false
+    if (index === -1) return false
+
+    for (let i = index + 1; i < messages.length; i++) {
+      if (messages[i].role === 'user') {
+        break
+      }
+      if (messages[i].isError) {
+        return true
+      }
+    }
+
+    return false
   }, [messages, id, role])
 
   const handleRetry = useCallback(async () => {
-    // 找到当前消息后的错误消息并移除
     const currentIndex = messages.findIndex(m => m.id === id)
     if (currentIndex === -1) return
-    // 移除错误消息
+
     const newMessages = [...messages]
-    newMessages.splice(currentIndex + 1, 1)
+    let deleteCount = 0
+
+    for (let i = currentIndex + 1; i < newMessages.length; i++) {
+      if (newMessages[i].role === 'user') {
+        break
+      }
+      deleteCount++
+    }
+
+    if (deleteCount === 0) return
+
+    newMessages.splice(currentIndex + 1, deleteCount)
     setMessages(newMessages)
-    onRetry(newMessages.map(m => ({ role: m.role, content: m.content })))
+    onRetry(normalizeContextMessages(newMessages))
   }, [messages, id, onRetry, setMessages])
 
   return role === 'user' ? (
@@ -110,7 +131,9 @@ function AssistantMessage({
     <div className="relative flex justify-start group">
       <div
         className={`max-w-[85%] rounded-lg px-4 py-2 break-words shadow-sm xl:max-w-[80%] ${
-          isError ? 'bg-destructive text-destructive-foreground' : 'bg-muted hover:bg-muted/80'
+          isError
+            ? 'bg-destructive text-destructive-foreground'
+            : 'bg-muted text-foreground hover:bg-muted/80'
         }`}
         style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}
       >

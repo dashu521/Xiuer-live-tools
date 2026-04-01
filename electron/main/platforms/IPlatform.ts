@@ -34,6 +34,17 @@ export interface IPopupGoodsScanner {
   _isPopupGoodsScanner: true
   /** 扫描当前直播中控台/商品页上的商品序号，用于自动填充 */
   scanPopupGoodsIds(): Result.ResultAsync<number[], Error>
+  scanPopupGoodsMeta?(): Result.ResultAsync<Array<{ id: number; title?: string }>, Error>
+  scanPopupGoodsKnowledge?(goodsId: number): Result.ResultAsync<
+    {
+      id: number
+      title?: string
+      priceText?: string
+      detailText?: string
+      source: 'detail-page' | 'list-item'
+    },
+    Error
+  >
 }
 
 export function isPopupGoodsScanner(

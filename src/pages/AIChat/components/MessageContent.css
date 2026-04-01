@@ -7,7 +7,7 @@
 .markdown-body {
   -ms-text-size-adjust: 100%;
   -webkit-text-size-adjust: 100%;
-  color: #333;
+  color: inherit;
   overflow: hidden;
   font-family: "Helvetica Neue", Helvetica, "Segoe UI", Arial, freesans, sans-serif;
   font-size: 16px;
@@ -101,7 +101,7 @@
 }
 
 .markdown-body a {
-  color: #4183c4;
+  color: hsl(var(--accent));
   text-decoration: none;
 }
 
@@ -117,7 +117,7 @@
   overflow: hidden;
   background: transparent;
   border: 0;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid hsl(var(--border));
 }
 
 .markdown-body hr:before {
@@ -222,12 +222,12 @@
 }
 
 .markdown-body kbd {
-  background-color: #e7e7e7;
-  background-image: linear-gradient(#fefefe, #e7e7e7);
+  background-color: hsl(var(--secondary));
+  background-image: linear-gradient(hsl(var(--secondary) / 0.95), hsl(var(--secondary) / 0.75));
   background-repeat: repeat-x;
   border-radius: 2px;
-  border: 1px solid #cfcfcf;
-  color: #000;
+  border: 1px solid hsl(var(--border));
+  color: inherit;
   padding: 3px 5px;
   font:
     11px Consolas,
@@ -282,7 +282,7 @@
 .markdown-body h5 .octicon-link,
 .markdown-body h6 .octicon-link {
   display: none;
-  color: #000;
+  color: inherit;
   vertical-align: middle;
 }
 
@@ -312,14 +312,14 @@
   padding-bottom: 0.3em;
   font-size: 2.25em;
   line-height: 1.2;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid hsl(var(--border));
 }
 
 .markdown-body h2 {
   padding-bottom: 0.3em;
   font-size: 1.75em;
   line-height: 1.225;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid hsl(var(--border));
 }
 
 .markdown-body h3 {
@@ -337,7 +337,7 @@
 
 .markdown-body h6 {
   font-size: 1em;
-  color: #777;
+  color: hsl(var(--muted-foreground));
 }
 
 .markdown-body p,
@@ -355,7 +355,7 @@
   height: 4px;
   padding: 0;
   margin: 16px 0;
-  background-color: #e7e7e7;
+  background-color: hsl(var(--border));
   border: 0 none;
 }
 
@@ -395,8 +395,8 @@
 
 .markdown-body blockquote {
   padding: 0 15px;
-  color: #777;
-  border-left: 4px solid #ddd;
+  color: hsl(var(--muted-foreground));
+  border-left: 4px solid hsl(var(--border));
 }
 
 .markdown-body blockquote > :first-child {
@@ -421,16 +421,16 @@
 .markdown-body table th,
 .markdown-body table td {
   padding: 6px 13px;
-  border: 1px solid #ddd;
+  border: 1px solid hsl(var(--border));
 }
 
 .markdown-body table tr {
-  background-color: #fff;
-  border-top: 1px solid #ccc;
+  background-color: transparent;
+  border-top: 1px solid hsl(var(--border));
 }
 
 .markdown-body table tr:nth-child(2n) {
-  background-color: #f8f8f8;
+  background-color: hsl(var(--secondary) / 0.35);
 }
 
 .markdown-body img {
@@ -445,7 +445,8 @@
   padding-bottom: 0.2em;
   margin: 0;
   font-size: 85%;
-  background-color: rgba(0, 0, 0, 0.04);
+  color: inherit;
+  background-color: hsl(var(--secondary) / 0.9);
   border-radius: 3px;
 }
 
@@ -475,7 +476,8 @@
   overflow: auto;
   font-size: 85%;
   line-height: 1.45;
-  background-color: #f7f7f7;
+  color: inherit;
+  background-color: hsl(var(--secondary) / 0.9);
   border-radius: 3px;
 }
 
@@ -506,7 +508,7 @@
 }
 
 .markdown-body .highlight {
-  background: #fff;
+  background: transparent;
 }
 
 .markdown-body .highlight .mf,
@@ -564,7 +566,7 @@
 }
 
 .markdown-body .highlight .n {
-  color: #333;
+  color: inherit;
 }
 
 .markdown-body .highlight .na,

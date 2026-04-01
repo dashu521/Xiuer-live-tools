@@ -30,6 +30,14 @@ export const SELECTORS = {
     ACTION: 'div[class^="goodsAction"]',
     POPUP_BUTTON: 'button',
     ID: 'div[class^="indexWrapper"] input',
+    TITLE_CANDIDATES: [
+      'div[class*="title"]',
+      'div[class*="Title"]',
+      'span[class*="title"]',
+      'span[class*="Title"]',
+      'div[class*="name"]',
+      'span[class*="name"]',
+    ],
   },
   commentInput: {
     TEXTAREA: '#input-comment-block-id textarea',

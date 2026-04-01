@@ -268,6 +268,132 @@ export async function getAllGoodsIdsFromScroller(
   return Result.succeed([...seenGoodsIds].sort((a, b) => a - b))
 }
 
+export async function getAllGoodsMetaFromScroller(
+  page: Page,
+  elementFinder: IElementFinder,
+  maxScrollPasses = 30,
+): Result.ResultAsync<Array<{ id: number; title?: string }>, PlatformError> {
+  const SCROLL_TOLERANCE = 10
+  const LOAD_WAIT_MS = 500
+  const seenGoods = new Map<number, { id: number; title?: string }>()
+  let lastScrollTop = Number.NaN
+
+  for (let pass = 0; pass < maxScrollPasses; pass++) {
+    const currentGoodsItems = await elementFinder.getCurrentGoodsItemsList(page)
+    if (Result.isFailure(currentGoodsItems)) {
+      return currentGoodsItems
+    }
+
+    for (const item of currentGoodsItems.value) {
+      const idResult = await elementFinder.getIdFromGoodsItem(item)
+      if (Result.isFailure(idResult)) continue
+
+      const titleResult = elementFinder.getTitleFromGoodsItem
+        ? await elementFinder.getTitleFromGoodsItem(item)
+        : Result.succeed(undefined)
+
+      const previous = seenGoods.get(idResult.value)
+      seenGoods.set(idResult.value, {
+        id: idResult.value,
+        title: (Result.isSuccess(titleResult) ? titleResult.value : undefined) || previous?.title,
+      })
+    }
+
+    const scrollContainer = await elementFinder.getGoodsItemsScrollContainer(page)
+    if (Result.isFailure(scrollContainer)) {
+      if (seenGoods.size > 0) {
+        return Result.succeed([...seenGoods.values()].sort((a, b) => a.id - b.id))
+      }
+      return scrollContainer
+    }
+
+    const lastItem = currentGoodsItems.value[currentGoodsItems.value.length - 1]
+    await lastItem.scrollIntoViewIfNeeded({ timeout: 5000 })
+    await sleep(LOAD_WAIT_MS)
+
+    const currentScrollTop = await scrollContainer.value.evaluate(el => el.scrollTop)
+    if (
+      !Number.isNaN(lastScrollTop) &&
+      Math.abs(lastScrollTop - currentScrollTop) <= SCROLL_TOLERANCE
+    ) {
+      break
+    }
+    lastScrollTop = currentScrollTop
+  }
+
+  if (seenGoods.size === 0) {
+    return Result.fail(
+      new ElementNotFoundError({
+        elementName: '商品列表',
+      }),
+    )
+  }
+
+  return Result.succeed([...seenGoods.values()].sort((a, b) => a.id - b.id))
+}
+
+export async function scanGoodsKnowledgeFromItem(
+  page: Page,
+  item: ElementHandle<SVGElement | HTMLElement>,
+  elementFinder: IElementFinder,
+  goodsId: number,
+): Result.ResultAsync<
+  {
+    id: number
+    title?: string
+    priceText?: string
+    detailText?: string
+    source: 'detail-page' | 'list-item'
+  },
+  PlatformError | Error
+> {
+  const titleResult = elementFinder.getTitleFromGoodsItem
+    ? await elementFinder.getTitleFromGoodsItem(item)
+    : Result.succeed(undefined)
+
+  const listText = await item.evaluate(el => (el as HTMLElement).innerText || '')
+  const fallbackTitle = Result.isSuccess(titleResult) ? titleResult.value : undefined
+  const fallbackPrice = listText.match(/[¥￥]\s*\d+(?:\.\d+)?/)?.[0]
+
+  const href = await item.evaluate(el => {
+    const anchor = el.querySelector('a[href]') as HTMLAnchorElement | null
+    return anchor?.href || null
+  })
+
+  if (!href) {
+    return Result.succeed({
+      id: goodsId,
+      title: fallbackTitle,
+      priceText: fallbackPrice,
+      detailText: listText.trim() || undefined,
+      source: 'list-item',
+    })
+  }
+
+  const context = page.context()
+  const detailPage = await context.newPage()
+  try {
+    await detailPage.goto(href, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    await sleep(1200)
+    const detailTitle = await detailPage.title().catch(() => '')
+    const detailText = await detailPage.evaluate(() => {
+      const text = document.body?.innerText ?? ''
+      return text.slice(0, 5000)
+    })
+    const detailPrice = detailText.match(/[¥￥]\s*\d+(?:\.\d+)?/)?.[0]
+
+    return Result.succeed({
+      id: goodsId,
+      title: detailTitle || fallbackTitle,
+      priceText: detailPrice || fallbackPrice,
+      detailText: detailText.trim() || listText.trim() || undefined,
+      source: 'detail-page',
+    })
+  } finally {
+    await detailPage.close().catch(() => {})
+  }
+}
+
 const TOGGLE_BUTTON_MAX_TRY_COUNT = 5
 export async function toggleButton(
   button: ElementHandle<SVGElement | HTMLElement>,

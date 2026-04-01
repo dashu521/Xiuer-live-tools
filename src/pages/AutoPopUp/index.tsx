@@ -1,4 +1,6 @@
 import { useMemoizedFn } from 'ahooks'
+import { useMemo } from 'react'
+import { useSearchParams } from 'react-router'
 import { Title } from '@/components/common/Title'
 import { useAccounts } from '@/hooks/useAccounts'
 import { useCurrentAutoPopUp, useShortcutListener } from '@/hooks/useAutoPopUp'
@@ -14,6 +16,13 @@ export default function AutoPopUp() {
   const { startTask, stopTask } = useTaskManager()
   const gate = useLiveFeatureGate()
   const currentAccountId = useAccounts(state => state.currentAccountId)
+  const [searchParams] = useSearchParams()
+  const editGoodsId = useMemo(() => {
+    const raw = searchParams.get('editGoodsId')
+    if (!raw) return null
+    const parsed = Number.parseInt(raw, 10)
+    return Number.isNaN(parsed) ? null : parsed
+  }, [searchParams])
 
   // 自动停机：当 Gate 条件不满足时，自动停止任务
   useAutoStopOnGateLoss({
@@ -51,7 +60,7 @@ export default function AutoPopUp() {
             />
 
             {/* 商品列表卡片 */}
-            <GoodsListCard />
+            <GoodsListCard initialEditingGoodsId={editGoodsId} />
           </div>
         </div>
       </div>

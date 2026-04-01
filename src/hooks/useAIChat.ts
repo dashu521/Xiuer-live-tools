@@ -108,6 +108,7 @@ interface AIChatStore {
   addMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void
   appendToChat: (chunk: string) => void
   appendToReasoning: (chunk: string) => void
+  markLastAssistantAsError: (message: string) => void
   tryToHandleEmptyMessage: (message: string) => void
   setMessages: (messages: ChatMessage[]) => void
   setStatus: (status: Status) => void
@@ -244,6 +245,27 @@ export const useAIChatStore = create<AIChatStore>()(
             } else {
               state.messages[state.messages.length - 1].reasoning_content += chunk
             }
+          })
+        },
+        markLastAssistantAsError: message => {
+          set(state => {
+            const lastMessage = state.messages[state.messages.length - 1]
+
+            if (lastMessage?.role === 'assistant') {
+              lastMessage.content = lastMessage.content
+                ? `${lastMessage.content}\n\n${message}`
+                : message
+              lastMessage.isError = true
+              return
+            }
+
+            state.messages.push({
+              role: 'assistant',
+              content: message,
+              id: crypto.randomUUID(),
+              timestamp: Date.now(),
+              isError: true,
+            })
           })
         },
         tryToHandleEmptyMessage: message => {

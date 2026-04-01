@@ -33,6 +33,17 @@ export interface ShortcutMapping {
 export interface GoodsItemConfig {
   id: number
   interval?: [number, number] // 可选：单独设置间隔（毫秒）
+  title?: string
+  shortTitle?: string
+  priceText?: string
+  promoText?: string
+  stockText?: string
+  highlights?: string[]
+  aliases?: string[]
+  faq?: Array<{
+    q: string
+    a: string
+  }>
 }
 
 export interface AutoPopUpConfig {
