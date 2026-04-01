@@ -38,6 +38,76 @@
 
 ## 🚀 安全版一键发布流程（推荐）
 
+## ✅ 发布改进清单（v1.6.1 后固化）
+
+以下清单用于避免再次出现“tag 已发出，但 CI 或 Windows 构建稍后才暴露问题”的情况。
+
+### 1. 合并策略
+
+- 大功能继续拆分后再合并到 `main`
+- 高风险能力不要和稳定性修复放在同一个发布包里
+- 发版前先确认 `main` 只包含本次计划发布内容
+
+### 2. 发版时序
+
+- 先推送 `main`
+- 等 `Quality Gate` 变绿
+- 再确认 Windows 工作流没有明显阻塞项
+- 最后再创建正式 tag
+- 不要再采用“先打 tag，再看 CI”的顺序
+
+### 3. 版本准备
+
+- 升版本号
+- 生成并人工润色 `release-notes`
+- 提交 `chore: prepare release vX.Y.Z`
+- 运行 `npm run release:guard`
+
+### 4. 本地验证
+
+- `npm run typecheck`
+- `npm test -- --run`
+- 必要时补一次关键页面 smoke test
+- 构建后确认生产 API 地址没有回退到 `localhost`
+
+### 5. CI 稳定性
+
+- 定期运行 `npm audit`
+- 依赖漏洞尽量在日常开发阶段处理，不要等到发版再暴露
+- Windows 构建工作流保持：
+  - `npm ci`
+  - npm cache
+  - 安装失败重试
+
+### 6. 脚本可靠性
+
+- 一键发布脚本的退出状态必须和真实结果一致
+- 发现“子检查通过但主脚本误判失败”时，应优先修复脚本，不要继续依赖人工判断
+
+### 7. Release 资产核对
+
+- 检查 GitHub Release 是否包含：
+  - `latest.yml`
+  - `latest-mac.yml`
+  - mac x64 dmg
+  - mac arm64 dmg
+  - Windows exe
+  - Windows zip
+  - 对应 blockmap
+- 再核对 `latest.yml` / `latest-mac.yml` 中的文件名和大小是否与 Release 资产一致
+
+### 8. 热修复原则
+
+- 已发布 tag 出现问题时，优先发 `x.y.z+1`
+- 不改写旧 tag
+- 热修复版本只包含最小必要改动
+
+### 最值得优先遵守的 3 条
+
+1. 先等 CI 绿，再打 tag
+2. 发版前固定执行 Release 资产完整性检查
+3. 把依赖审计问题前置到日常开发，而不是在发版当天修
+
 ### 三阶段发布流程
 
 ```
@@ -91,6 +161,7 @@ npm run publish:confirm
 **说明：**
 - 检查 git 工作区干净
 - 检查 tag 不存在
+- 先确认 `main` 已推送且 `Quality Gate` 已变绿
 - 创建并推送 tag
 - 触发 GitHub Actions Windows 构建
 - **这是不可撤销的操作**

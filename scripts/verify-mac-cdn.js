@@ -55,20 +55,21 @@ function getVersion() {
 // 构造验证地址列表
 function getVerifyUrls(version) {
   const baseUrl = 'https://download.xiuer.work/releases/latest';
+  const cacheBuster = `ts=${Date.now()}`;
   return [
     {
       name: 'latest-mac.yml',
-      url: `${baseUrl}/latest-mac.yml`,
+      url: `${baseUrl}/latest-mac.yml?${cacheBuster}`,
       type: 'yml'
     },
     {
       name: `Xiuer-Live-Assistant_${version}_macos_arm64.dmg`,
-      url: `${baseUrl}/Xiuer-Live-Assistant_${version}_macos_arm64.dmg`,
+      url: `${baseUrl}/Xiuer-Live-Assistant_${version}_macos_arm64.dmg?${cacheBuster}`,
       type: 'dmg'
     },
     {
       name: `Xiuer-Live-Assistant_${version}_macos_x64.dmg`,
-      url: `${baseUrl}/Xiuer-Live-Assistant_${version}_macos_x64.dmg`,
+      url: `${baseUrl}/Xiuer-Live-Assistant_${version}_macos_x64.dmg?${cacheBuster}`,
       type: 'dmg'
     }
   ];
@@ -191,7 +192,7 @@ function main() {
     log(`当前版本: v${version}`, 'success');
     
     // 2. 先校验 latest-mac.yml 元数据和当前版本一致
-    const latestMacUrl = 'https://download.xiuer.work/releases/latest/latest-mac.yml';
+    const latestMacUrl = `https://download.xiuer.work/releases/latest/latest-mac.yml?ts=${Date.now()}`;
     const latestMacContent = fetchText(latestMacUrl);
     const latestMacMetadata = parseLatestMacYml(latestMacContent);
     const { expectedArm64, expectedX64 } = validateLatestMacMetadata(version, latestMacMetadata);

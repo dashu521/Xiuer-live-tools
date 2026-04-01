@@ -10,7 +10,7 @@
  * 4. 执行 npm run release:guard
  * 5. 执行 npm run release（构建 macOS）
  * 6. 执行 npm run release:notes
- * 7. 执行 npm run release:upload:mac
+ * 7. 执行 npm run upload:mac
  * 8. 检查 GitHub Release 是否存在
  * 9. 输出下一步建议
  */
@@ -259,10 +259,10 @@ async function main() {
   }
 
   try {
-    execWithOutput('npm run release:upload:mac');
+    execWithOutput('npm run upload:mac');
     logPass('Mac 产物上传完成（或已准备就绪）');
   } catch (error) {
-    logWarn('Mac 产物上传遇到问题，可稍后手动执行 npm run release:upload:mac');
+    logWarn('Mac 产物上传遇到问题，可稍后手动执行 npm run upload:mac');
   }
 
   // Step 9: 检查 GitHub Release 状态

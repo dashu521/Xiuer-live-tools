@@ -181,8 +181,9 @@ async function main() {
 
   console.log(`${colors.yellow}⚠️  注意:${colors.reset}`);
   console.log('  - Windows 构建通常需要 5-10 分钟');
-  console.log('  - 构建完成后会自动上传到 GitHub Release');
-  console.log('  - 使用 publish:check 验证最终发布结果\n');
+  console.log('  - Windows 构建完成后会自动上传到 GitHub Release');
+  console.log('  - publish:check 会在需要时自动触发 Mac OSS/CDN 同步并复检');
+  console.log('  - 使用 publish:check 作为最终发布完成判定\n');
 }
 
 main().catch(err => {

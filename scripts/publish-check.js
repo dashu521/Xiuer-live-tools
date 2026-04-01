@@ -50,6 +50,14 @@ function exec(command, options = {}) {
   }
 }
 
+function execWithOutput(command, options = {}) {
+  try {
+    return execSync(command, { encoding: 'utf-8', stdio: 'inherit', ...options });
+  } catch (error) {
+    throw error;
+  }
+}
+
 function getRepoWebUrl() {
   const originUrl = exec('git remote get-url origin', { ignoreError: true });
   const matchedSlug = VALID_REPO_SLUGS.find(slug => originUrl.includes(slug)) || VALID_REPO_SLUGS[0];
@@ -149,6 +157,47 @@ function checkMacCdnSync() {
   }
 }
 
+function getLatestUploadMacOssRun() {
+  try {
+    const runsJson = exec('gh run list --workflow "Upload Mac to OSS" --limit 5 --json databaseId,status,conclusion,createdAt,url,event');
+    const runs = JSON.parse(runsJson);
+    return runs[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+function ensureMacOssSynced(version) {
+  const latestRun = getLatestUploadMacOssRun();
+
+  if (latestRun && latestRun.status === 'in_progress') {
+    logInfo(`检测到已有 Mac OSS 同步任务运行中: ${latestRun.url}`);
+    logInfo('等待现有同步任务完成...');
+    execWithOutput(`gh run watch ${latestRun.databaseId} --exit-status`);
+    return;
+  }
+
+  logInfo('检测到 mac CDN latest 未同步，自动触发 Upload Mac to OSS...');
+  exec(`gh workflow run "Upload Mac to OSS" -f version=${version}`);
+
+  let triggeredRun = null;
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < 30000) {
+    triggeredRun = getLatestUploadMacOssRun();
+    if (triggeredRun && (triggeredRun.status === 'queued' || triggeredRun.status === 'in_progress')) {
+      break;
+    }
+    exec('sleep 2');
+  }
+
+  if (!triggeredRun) {
+    throw new Error('已触发 Upload Mac to OSS，但未能在 30 秒内定位到 workflow run');
+  }
+
+  logInfo(`等待 Mac OSS 同步完成: ${triggeredRun.url}`);
+  execWithOutput(`gh run watch ${triggeredRun.databaseId} --exit-status`);
+}
+
 // 主流程
 async function main() {
   console.log(`${colors.bold}`);
@@ -236,12 +285,29 @@ async function main() {
 
   // 检查 3: mac CDN latest 指向当前版本
   console.log(`\n${colors.cyan}检查 3/3: mac CDN latest 与当前版本一致性${colors.reset}`);
-  const macCdnCheck = checkMacCdnSync();
+  let macCdnCheck = checkMacCdnSync();
   if (macCdnCheck.ok) {
     logPass('mac CDN latest 已同步到当前 package.json 版本');
   } else {
-    logFail('mac CDN latest 未同步到当前 package.json 版本');
+    logWarn('mac CDN latest 尚未同步到当前 package.json 版本');
     logInfo(macCdnCheck.error);
+
+    if (windowsComplete && macReleaseAssetsComplete) {
+      try {
+        ensureMacOssSynced(version);
+        macCdnCheck = checkMacCdnSync();
+        if (macCdnCheck.ok) {
+          logPass('自动同步后，mac CDN latest 已更新到当前版本');
+        } else {
+          logFail('自动同步完成，但 mac CDN latest 仍未更新到当前版本');
+          logInfo(macCdnCheck.error);
+        }
+      } catch (error) {
+        logFail(`自动触发 Mac OSS 同步失败: ${error.message}`);
+      }
+    } else {
+      logFail('mac CDN latest 未同步到当前 package.json 版本');
+    }
   }
 
   // 可选资产
@@ -281,10 +347,9 @@ async function main() {
     console.log(`  自动更新: ❌ 不完整\n`);
 
     console.log(`${colors.yellow}建议操作:${colors.reset}`);
-    console.log('  1. 本地构建 Mac: npm run release:mac');
-    console.log('  2. 上传 Mac: npm run upload:mac');
-    console.log('  3. 同步 OSS/CDN: npm run upload:mac:oss');
-    console.log('  3. 重新检查: npm run publish:check\n');
+    console.log('  1. 重新执行: npm run publish:check');
+    console.log('  2. 若自动同步仍失败，再手动执行 Upload Mac to OSS workflow');
+    console.log('  3. 最后再次执行: npm run publish:check\n');
   } else if (!windowsComplete && macComplete) {
     console.log(`${colors.yellow}${colors.bold}⚠️  发布部分完成${colors.reset}\n`);
 

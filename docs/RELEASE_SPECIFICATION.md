@@ -1,10 +1,11 @@
-# 秀儿直播助手 - 发布规范 v2.5
+# 秀儿直播助手 - 发布规范 v2.6
 
-> **当前正式版本**: v1.5.4  
+> **当前正式版本**: v1.6.1  
 > **当前正式 API 基线**: `http://121.41.179.197:8000`  
-> **最后更新**: 2026-03-28  
-> **版本主题**: v1.5.4 是 "Python 安全热修复版"，修复 auth-api 依赖漏洞 cryptography CVE-2026-34073  
+> **最后更新**: 2026-04-01  
+> **版本主题**: v1.6.1 是 "发布链路热修复版"，修复 npm audit 阻断并提升 Windows 构建依赖安装稳定性  
 > **历史版本**: 
+> - v1.6.0: 已发布但首次 Windows 构建失败，保留为历史记录
 > - v1.5.3: 已发布但 CI Python 安全门禁未全绿，保留为历史记录
 > - v1.5.2: 已发布但 CI npm audit 门禁未全绿，保留为历史记录
 > - v1.5.1: 上一稳定版本
@@ -79,32 +80,50 @@
 │                        标准发布流程                                       │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
-│  步骤 1: 本地 Mac 构建                                                    │
+│  步骤 1: 推送 main 并等待主线 CI 通过                                      │
+│  ├── git push origin main                                                │
+│  ├── 等待 Quality Gate 变绿                                               │
+│  └── 确认主线不存在阻塞性 CI 问题                                          │
+│                                                                         │
+│  步骤 2: 本地 Mac 构建                                                    │
 │  ├── export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>        │
 │  ├── npm run release:mac                                                 │
 │  └── 产物: release/<version>/*.dmg + latest-mac.yml                      │
 │                                                                         │
-│  步骤 2: 创建 GitHub Release + 上传 Mac 产物                              │
+│  步骤 3: 创建 GitHub Release + 上传 Mac 产物                              │
 │  ├── git tag v<version>                                                  │
 │  ├── git push origin v<version>                                          │
 │  ├── gh release create v<version> --draft                                │
 │  └── gh release upload v<version> release/<version>/*macos*              │
 │                                                                         │
-│  步骤 3: Windows 构建（自动触发）                                          │
+│  步骤 4: Windows 构建（自动触发）                                          │
 │  ├── 触发: build-windows.yml                                             │
 │  ├── 构建: .exe + .zip + latest.yml                                      │
 │  ├── 上传: GitHub Release                                                │
 │  └── 同步: OSS/CDN (Windows 产物)                                        │
 │                                                                         │
-│  步骤 4: Mac 产物同步 OSS（手动触发）                                       │
+│  步骤 5: Mac 产物同步 OSS（手动触发）                                       │
 │  ├── 触发: upload-mac-oss.yml                                            │
 │  └── 同步: OSS/CDN (macOS 产物)                                          │
 │                                                                         │
-│  步骤 5: 发布后验收                                                        │
-│  └── 验证: download.xiuer.work 所有资源可访问                              │
+│  步骤 6: 发布后验收                                                        │
+│  ├── 验证: download.xiuer.work 所有资源可访问                              │
+│  ├── 验证: latest.yml / latest-mac.yml 与 Release 资产一致                 │
+│  └── 验证: GitHub Release 资产完整                                         │
 │                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+### 发布时序强制要求
+
+为避免“tag 已推送，但主线 CI 或 Windows 构建问题稍后才暴露”的情况，正式发布必须遵守以下顺序：
+
+1. 先推送 `main`
+2. 等待 `Quality Gate` 变绿
+3. 确认没有阻塞性的主线 CI 问题
+4. 再创建并推送正式 tag
+
+禁止再采用“先打 tag，再观察主线 CI”的流程。
 
 ---
 
@@ -482,27 +501,29 @@ Release Guard (`scripts/release-guard.js`) 在发布前执行以下检查：
 #### 1. 前端 audit 通过不代表整体 CI 门禁全绿
 - **教训**: npm audit 通过（picomatch 已修复）但 pip-audit 失败（cryptography CVE-2026-34073）
 - **措施**: 发布前必须同时检查 npm audit 和 pip-audit，两者都通过才算安全门禁全绿
-- **当前**: v1.5.4 已修复 cryptography 到 46.0.6
+- **当前**: `security-audit` 仍是正式发布前必过项
 
 #### 2. Python 依赖安全检查必须纳入发布前门禁
 - **教训**: 之前只关注 npm audit，忽略了 Python 依赖的安全检查
 - **措施**: Quality Gate workflow 中的 `security-audit` job 已包含 pip-audit，必须全部通过
-- **当前**: v1.5.4 已把 Python 安全检查作为必过项
+- **当前**: Python 安全检查仍是正式发布前必过项
 
 #### 3. patch 版本用于安全热修复，不得重写旧 tag
-- **教训**: v1.5.2 和 v1.5.3 都因安全门禁问题需要修复，但均未重写 tag
-- **措施**: 发现安全门禁问题后，使用 patch 热修复版本（v1.5.3 → v1.5.4）推进
-- **当前**: v1.5.2 / v1.5.3 / v1.5.4 形成清晰的版本演进历史
+- **教训**: v1.5.2、v1.5.3、v1.6.0 都出现过“已发版但门禁或构建链路后补修复”的情况
+- **措施**: 发现安全门禁或发布链路问题后，使用 patch 热修复版本推进，不重写旧 tag
+- **当前**: v1.6.0 → v1.6.1 延续了这条规则
 
-#### 4. v1.5.2 / v1.5.3 / v1.5.4 版本演进关系
+#### 4. 近期版本演进关系
 - **v1.5.2**: "安全性与性能优化版" - 4 个核心优化文件，但 npm audit 未通过
 - **v1.5.3**: "picomatch 安全修复版" - 修复 npm audit HIGH 漏洞，但 pip-audit 未通过
-- **v1.5.4**: "Python 安全热修复版" - 修复 cryptography CVE-2026-34073，当前正式版本
+- **v1.5.4**: "Python 安全热修复版" - 修复 cryptography CVE-2026-34073
+- **v1.6.0**: "AI 体验与知识库增强版" - 功能完成，但首次 Windows 构建失败
+- **v1.6.1**: "发布链路热修复版" - 修复 npm audit 阻断并恢复 Windows 构建稳定性，当前正式版本
 
 #### 5. 当前正式版本判断标准
 - **原则**: 以"最新通过修复后的正式 tag"为准
-- **当前**: v1.5.4 是已通过所有安全门禁的最新正式版本
-- **对外**: 统一以 v1.5.4 作为当前正式对外版本
+- **当前**: v1.6.1 是已通过当前门禁和发布链路验证的最新正式版本
+- **对外**: 统一以 v1.6.1 作为当前正式对外版本
 
 ---
 
@@ -510,7 +531,9 @@ Release Guard (`scripts/release-guard.js`) 在发布前执行以下检查：
 
 | 版本 | API 基线 | 状态 | 说明 |
 |------|----------|------|------|
-| v1.5.4 | `http://121.41.179.197:8000` | ✅ 当前正式版本 | Python 安全热修复版，修复 cryptography CVE-2026-34073 |
+| v1.6.1 | `http://121.41.179.197:8000` | ✅ 当前正式版本 | 发布链路热修复版，修复 npm audit 阻断并恢复 Windows 构建稳定性 |
+| v1.6.0 | `http://121.41.179.197:8000` | 📋 历史记录 | 已发布但首次 Windows 构建失败，后续以 v1.6.1 热修复收口 |
+| v1.5.4 | `http://121.41.179.197:8000` | 📋 历史记录 | Python 安全热修复版，修复 cryptography CVE-2026-34073 |
 | v1.5.3 | `http://121.41.179.197:8000` | 📋 历史记录 | 已发布但 CI Python 安全门禁未全绿 |
 | v1.5.2 | `http://121.41.179.197:8000` | 📋 历史记录 | 已发布但 CI npm audit 门禁未全绿 |
 | v1.5.1 | `http://121.41.179.197:8000` | 📋 历史记录 | 切回 IP 基线，修复域名不可访问问题 |
