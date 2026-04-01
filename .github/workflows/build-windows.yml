@@ -52,6 +52,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 20
+          cache: 'npm'
 
       # 3. 检查环境
       - name: Check environment
@@ -64,7 +65,24 @@ jobs:
 
       # 4. 安装依赖
       - name: Install dependencies
-        run: npm install
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $maxAttempts = 3
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            try {
+              Write-Host "Install attempt $attempt/$maxAttempts"
+              npm ci --prefer-offline --no-audit
+              exit 0
+            } catch {
+              if ($attempt -eq $maxAttempts) {
+                throw
+              }
+              Write-Host "Install failed, retrying after cleanup..."
+              if (Test-Path node_modules) { Remove-Item node_modules -Recurse -Force -ErrorAction SilentlyContinue }
+              Start-Sleep -Seconds (5 * $attempt)
+            }
+          }
 
       # 5. 运行发布防事故检查
       - name: Release Guard Check
