@@ -14,6 +14,7 @@ import windowManager from '#/windowManager'
 const POLL_INTERVAL_LIVE_MS = 2000 // 直播中 2 秒
 const POLL_INTERVAL_OFFLINE_MS = 5000 // 未开播 5 秒，降低 CPU
 const STAGGER_MAX_MS = 1500 // 多账号错峰：按 accountId 哈希得到 0～1.5s 的初始延迟
+const OFFLINE_CONFIRMATION_THRESHOLD = 2 // 连续 2 次异常/离线才真正判定为离线
 
 /** 用 accountId 得到 0～maxMs 的稳定偏移，用于多账号错峰 */
 function staggerDelayMs(accountId: string, maxMs: number): number {
@@ -29,6 +30,7 @@ export class StreamStateDetector {
   private lastState: StreamStatus = 'unknown'
   private isPolling = false
   private onStreamEnded: ((reason: string) => void) | null = null
+  private consecutiveOfflineSignals = 0
 
   constructor(
     private platform: IPlatform,
@@ -107,7 +109,10 @@ export class StreamStateDetector {
   /** 根据当前状态决定下次轮询间隔并调度 */
   private scheduleCheck() {
     if (!this.isPolling) return
-    const intervalMs = this.lastState === 'live' ? POLL_INTERVAL_LIVE_MS : POLL_INTERVAL_OFFLINE_MS
+    const intervalMs =
+      this.lastState === 'live' || this.consecutiveOfflineSignals > 0
+        ? POLL_INTERVAL_LIVE_MS
+        : POLL_INTERVAL_OFFLINE_MS
     this.pollTimer = setTimeout(() => {
       this.pollTimer = null
       this.checkStreamState().then(() => {
@@ -146,68 +151,79 @@ export class StreamStateDetector {
 
     try {
       const isLive = await this.platform.isLive(this.browserSession)
-      const newState: StreamStatus = isLive ? 'live' : 'offline'
-
-      // 记录每次检测结果（用于调试）
       this.logger.debug(
-        `[stream] isLive=${isLive}, currentState=${this.lastState}, newState=${newState}`,
+        `[stream] isLive=${isLive}, currentState=${this.lastState}, consecutiveOfflineSignals=${this.consecutiveOfflineSignals}`,
       )
 
-      // 状态变化时发送事件
-      if (newState !== this.lastState) {
-        const prevState = this.lastState
-        this.logger.info(
-          `[stream] Stream state changed: ${prevState} -> ${newState} (isLive=${isLive})`,
-        )
-        this.lastState = newState
-        windowManager.send(
-          IPC_CHANNELS.tasks.liveControl.streamStateChanged,
-          this.accountId,
-          newState,
-        )
-
-        // 【核心修复】当检测到直播结束（从 live 变为 offline）时，自动触发断开连接
-        // 解决页面刷新/导航时不触发 page.on('close') 的问题
-        if (prevState === 'live' && newState === 'offline' && this.onStreamEnded) {
-          this.logger.info(
-            `[stream][${this.accountId}] Stream ended: ${prevState} -> ${newState}, triggering disconnect...`,
-          )
-          // 记录完整的证据链
-          this.logger.info(
-            `[stream][${this.accountId}] >>> calling onStreamEnded callback with reason: "直播已结束"`,
-          )
-          this.onStreamEnded('直播已结束')
-          this.logger.info(`[stream][${this.accountId}] >>> onStreamEnded callback completed`)
-        }
-      } else {
-        this.logger.debug(`[stream] Stream state unchanged: ${newState} (isLive=${isLive})`)
+      if (isLive) {
+        this.resetOfflineConfirmation()
+        this.updateState('live')
+        return
       }
+
+      this.handleOfflineSignal('isLive=false')
     } catch (error) {
       this.logger.error('[stream] Failed to check stream state:', error)
-      // 检测失败时，如果之前是 live，则设为 offline（保守策略）
-      if (this.lastState === 'live') {
-        const prevState = this.lastState
-        const newState: StreamStatus = 'offline'
-        this.logger.warn('[stream] Stream state set to offline due to detection error')
-        this.lastState = newState
-        windowManager.send(
-          IPC_CHANNELS.tasks.liveControl.streamStateChanged,
-          this.accountId,
-          newState,
-        )
-        // 【核心修复】检测出错导致状态变为 offline 时，也要触发断开
-        if (prevState === 'live' && newState === 'offline' && this.onStreamEnded) {
-          this.logger.info('[stream] Detection error triggered stream end, disconnecting...')
-          this.onStreamEnded('检测出错，直播可能已结束')
-        }
-      }
+      this.handleOfflineSignal('detection_error')
     }
+  }
+
+  private resetOfflineConfirmation() {
+    if (this.consecutiveOfflineSignals > 0) {
+      this.logger.info(
+        `[stream] Offline confirmation reset after live recovery (count=${this.consecutiveOfflineSignals})`,
+      )
+    }
+    this.consecutiveOfflineSignals = 0
+  }
+
+  private handleOfflineSignal(reason: 'isLive=false' | 'detection_error') {
+    const prevState = this.lastState
+
+    if (prevState === 'offline') {
+      this.logger.debug(`[stream] Stream state unchanged: offline (${reason})`)
+      return
+    }
+
+    this.consecutiveOfflineSignals += 1
+
+    if (this.consecutiveOfflineSignals < OFFLINE_CONFIRMATION_THRESHOLD) {
+      this.logger.warn(
+        `[stream] Pending offline confirmation ${this.consecutiveOfflineSignals}/${OFFLINE_CONFIRMATION_THRESHOLD}, state stays ${prevState}, reason=${reason}`,
+      )
+      return
+    }
+
+    this.resetOfflineConfirmation()
+    this.updateState('offline')
+
+    if (prevState === 'live' && this.onStreamEnded) {
+      const callbackReason =
+        reason === 'detection_error' ? '检测出错，直播可能已结束' : '直播已结束'
+      this.logger.info(
+        `[stream][${this.accountId}] Stream ended confirmed after ${OFFLINE_CONFIRMATION_THRESHOLD} checks, reason=${callbackReason}`,
+      )
+      this.onStreamEnded(callbackReason)
+    }
+  }
+
+  private updateState(newState: StreamStatus) {
+    if (newState === this.lastState) {
+      this.logger.debug(`[stream] Stream state unchanged: ${newState}`)
+      return
+    }
+
+    const prevState = this.lastState
+    this.logger.info(`[stream] Stream state changed: ${prevState} -> ${newState}`)
+    this.lastState = newState
+    windowManager.send(IPC_CHANNELS.tasks.liveControl.streamStateChanged, this.accountId, newState)
   }
 
   /**
    * 手动设置状态（用于断开连接时）
    */
   setState(state: StreamStatus) {
+    this.resetOfflineConfirmation()
     if (state !== this.lastState) {
       this.logger.info(`[stream] Stream state manually set: ${this.lastState} -> ${state}`)
       this.lastState = state

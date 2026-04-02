@@ -141,6 +141,8 @@ export class TaobaoPlatform
       if (!page) {
         return false
       }
+      // 同步当前有效页面，避免发送评论时仍使用过期的 mainPage
+      this.mainPage = page
       const commentTextareaSelector = elementFinder.commentInput?.TEXTAREA
       const commentTextarea = commentTextareaSelector
         ? await page.$(commentTextareaSelector).catch(() => null)

@@ -135,6 +135,7 @@ export default defineConfig(({ command }) => {
     resolve: {
       alias: {
         '@': path.join(__dirname, 'src'),
+        '#': path.join(__dirname, 'electron/main'),
         shared: path.join(__dirname, 'shared'),
       },
     },

@@ -70,6 +70,8 @@ export class KuaishouPlatform
       if (!page) {
         return false
       }
+      // 同步当前有效页面，避免评论仍发到失效页
+      this.mainPage = page
       const commentTextareaSelector = elementFinder.commentInput?.TEXTAREA
       const commentTextarea = commentTextareaSelector
         ? await page.$(commentTextareaSelector).catch(() => null)

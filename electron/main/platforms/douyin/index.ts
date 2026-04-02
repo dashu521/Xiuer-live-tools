@@ -79,6 +79,8 @@ export class DouyinPlatform
       if (!page) {
         return false
       }
+      // 同步当前有效页面，避免自动发言仍然使用旧的 mainPage
+      this.mainPage = page
       // 检测评论输入框是否存在且可用（开播时会有评论输入框）
       const commentTextarea = await page.$(SELECTORS.commentInput.TEXTAREA).catch(() => null)
       if (commentTextarea) {

@@ -62,6 +62,8 @@ export class DouyinEosPlatform
       if (!page) {
         return false
       }
+      // 同步当前有效页面，避免自动发言仍停留在旧页面实例
+      this.mainPage = page
       const commentTextareaSelector = elementFinder.commentInput?.TEXTAREA
       const commentTextarea = commentTextareaSelector
         ? await page.$(commentTextareaSelector).catch(() => null)

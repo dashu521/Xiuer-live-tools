@@ -111,6 +111,8 @@ export class WechatChannelPlatform
       if (!page) {
         return false
       }
+      // 同步当前有效页面，降低页面切换后评论仍发向旧页的概率
+      this.mainPage = page
       // 视频号：如果能访问中控台页面（不是首页），说明正在直播
       // 因为 connect() 中已经检查过，未开播会跳转到首页
       const currentUrl = page.url()
