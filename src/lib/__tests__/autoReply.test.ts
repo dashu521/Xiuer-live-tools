@@ -2,18 +2,29 @@ import { describe, expect, it } from 'vitest'
 import {
   buildAutoReplyConversation,
   buildAutoReplySystemPrompt,
+  enforceAutoReplyLength,
   sanitizeAutoReplyResponse,
   shouldSkipDuplicateReply,
 } from '@/lib/autoReply'
 
 describe('autoReply helpers', () => {
   it('adds strict output rules to the system prompt', () => {
-    const prompt = buildAutoReplySystemPrompt('请礼貌回复观众', '你是一个 helpful assistant')
+    const prompt = buildAutoReplySystemPrompt('语气更活泼一点', '你是一个 helpful assistant')
 
     expect(prompt).toContain('你只需要输出最终要发送给观众的一句话回复')
     expect(prompt).toContain('不要输出 JSON')
-    expect(prompt).toContain('回复要求：\n请礼貌回复观众')
+    expect(prompt).toContain('每次只回复一句')
+    expect(prompt).toContain('用户补充要求：\n语气更活泼一点')
     expect(prompt).toContain('你是一个 helpful assistant')
+  })
+
+  it('treats the legacy default prompt as empty user supplement', () => {
+    const prompt = buildAutoReplySystemPrompt(
+      '你是一个直播间的助手，负责回复观众的评论。请用简短友好的语气回复，不要超过50个字。',
+    )
+
+    expect(prompt).not.toContain('用户补充要求')
+    expect(prompt).toContain('你是直播间口播助手')
   })
 
   it('removes echoed comment JSON and keeps the final natural-language reply', () => {
@@ -34,6 +45,19 @@ describe('autoReply helpers', () => {
       '{"nickname":"秀儿","content":"主播好漂亮"} {"nickname":"秀儿","content":"看看三号链接"}'
 
     expect(sanitizeAutoReplyResponse(response)).toBeNull()
+  })
+
+  it('truncates overlong replies to the platform send limit', () => {
+    const reply =
+      '3号链接是豪园OVITEN 100%椰子水饮料清爽解腻电解质245ml*10袋运动补水，主打100%椰子水、清爽解腻、含电解质，现在¥29.90'
+
+    const trimmed = enforceAutoReplyLength(reply)
+
+    expect(trimmed.length).toBe(50)
+    expect(reply.startsWith(trimmed)).toBe(true)
+    expect(trimmed).toBe(
+      '3号链接是豪园OVITEN 100%椰子水饮料清爽解腻电解质245ml*10袋运动补水，主打100%',
+    )
   })
 
   it('builds context from the latest sent turn plus the current comment', () => {

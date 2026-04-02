@@ -25,8 +25,9 @@ export function buildProductKnowledgePolishPrompt(params: {
   comment: string
   templateReply: string
   item: GoodsItemConfig
+  userPrompt?: string
 }) {
-  const { comment, templateReply, item } = params
+  const { comment, templateReply, item, userPrompt } = params
   const facts = [
     `链接号：${item.id}`,
     item.title ? `商品标题：${item.title}` : '',
@@ -39,15 +40,23 @@ export function buildProductKnowledgePolishPrompt(params: {
     .join('\n')
 
   return [
-    '你是直播间商品回复润色助手。',
+    '你是直播间商品讲解助手，专门回复“几号链接”相关问题。',
     '你的任务是把已有回复模板润色得更自然、更口语化，但不能改变事实。',
-    '不要新增模板里没有的商品信息，不要编造价格、优惠、库存、功效。',
+    '回复要像主播口播，短、顺、接地气，不要像客服，不要像商品详情页。',
+    '每次只回复一句，18到30字优先，绝不要超过40字。',
+    '优先用“几号链接 + 短称呼 + 一个重点”来回答。',
+    '不要复述完整商品长标题，不要一条里塞太多信息。',
+    '最多只说一个卖点，必要时再补价格或库存，不要编造价格、优惠、库存、功效。',
+    '不要使用极限词、强刺激下单话术、抽奖返现等违规表达。',
     '只输出最终回复，不要解释。',
     `用户评论：${comment}`,
     `商品事实：\n${facts}`,
     `原始回复模板：${templateReply}`,
-    '请输出 20 到 50 个字的自然口语回复。',
-  ].join('\n\n')
+    userPrompt?.trim() ? `用户补充要求：\n${userPrompt.trim()}` : '',
+    '请输出简短、自然、可直接发送的最终回复。',
+  ]
+    .filter(Boolean)
+    .join('\n\n')
 }
 
 export function buildKnowledgeDraftPrompt(scanResult: {

@@ -36,7 +36,7 @@ import { taskRuntimeMonitor } from '#/services/TaskRuntimeMonitor'
 import { createAutoCommentTask } from '#/tasks/AutoCommentTask'
 import { createAutoPopupTask } from '#/tasks/AutoPopupTask'
 import { createCommentListenerTask } from '#/tasks/CommentListenerTask'
-import type { ITask } from '#/tasks/ITask'
+import { type ITask, TaskStopReason } from '#/tasks/ITask'
 import { createPinCommentTask } from '#/tasks/PinCommentTask'
 import { createSendBatchMessageTask } from '#/tasks/SendBatchMessageTask'
 import { createSubAccountInteractionTask } from '#/tasks/SubAccountInteractionTask'
@@ -655,6 +655,24 @@ export class AccountSession {
 
     // 【P0修复】显式确认任务真实运行中，才允许登记 activeTasks
     if (!newTask.value.isRunning()) {
+      const lastStop = newTask.value.getLastStopInfo()
+      if (lastStop.reason === TaskStopReason.COMPLETED) {
+        this.logger.info(
+          `[startTask][${this.account.id}] Task ${task.type} completed during startup, treating as success`,
+        )
+        return Result.succeed()
+      }
+      if (lastStop.reason === TaskStopReason.ERROR) {
+        const taskError =
+          lastStop.error instanceof Error
+            ? lastStop.error
+            : new Error(`任务 ${task.type} 启动失败：任务执行出错`)
+        this.logger.error(
+          `[startTask][${this.account.id}] Task ${task.type} failed during startup:`,
+          lastStop.error,
+        )
+        return Result.fail(taskError)
+      }
       this.logger.error(
         `[startTask][${this.account.id}] Task ${task.type} failed to start: isRunning() returned false after start()`,
       )

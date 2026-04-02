@@ -191,6 +191,7 @@ export function createAutoReplyConfigStorage(userId: string, accountId: string) 
         aiReply: {
           enable: false,
           prompt: '',
+          productPrompt: '',
           autoSend: false,
         },
       },

@@ -3,6 +3,7 @@ import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { abilities } from '@/abilities'
+import { AUTO_REPLY } from '@/constants'
 import { useAuthStore } from '@/stores/authStore'
 import { useCommentListenerRuntimeStore } from '@/utils/commentListenerRuntime'
 import { flushAllPersists, flushPersist, schedulePersist } from '@/utils/debouncedPersist'
@@ -27,6 +28,7 @@ interface AutoReplyBaseConfig {
     aiReply: {
       enable: boolean
       prompt: string
+      productPrompt?: string
       autoSend: boolean
       /** 【P1-1 AI联动】是否使用AI对话的共享配置 */
       useSharedConfig?: boolean
@@ -61,8 +63,16 @@ type WechatChannelExtraConfig = {
 
 export type AutoReplyConfig = AutoReplyBaseConfig & CompassExtraConfig & WechatChannelExtraConfig
 
-const defaultPrompt =
-  '你是一个直播间的助手，负责回复观众的评论。请用简短友好的语气回复，不要超过50个字。'
+function normalizeUserPrompt(prompt?: string) {
+  const normalized = prompt?.trim() ?? ''
+  if (!normalized) {
+    return AUTO_REPLY.DEFAULT_USER_PROMPT
+  }
+  if (normalized === AUTO_REPLY.LEGACY_USER_PROMPT.trim()) {
+    return AUTO_REPLY.DEFAULT_USER_PROMPT
+  }
+  return normalized
+}
 
 function getDefaultEntryForPlatform(platform?: LiveControlPlatform): AutoReplyConfig['entry'] {
   switch (platform) {
@@ -115,7 +125,8 @@ export const createDefaultConfig = (platform?: LiveControlPlatform): AutoReplyCo
       },
       aiReply: {
         enable: false,
-        prompt: defaultPrompt,
+        prompt: AUTO_REPLY.DEFAULT_USER_PROMPT,
+        productPrompt: AUTO_REPLY.DEFAULT_USER_PROMPT,
         autoSend: false,
       },
     },
@@ -355,6 +366,8 @@ export const useAutoReplyConfig = () => {
       currentPlatform,
     ),
   )
+  config.comment.aiReply.prompt = normalizeUserPrompt(config.comment.aiReply.prompt)
+  config.comment.aiReply.productPrompt = normalizeUserPrompt(config.comment.aiReply.productPrompt)
 
   return {
     config,

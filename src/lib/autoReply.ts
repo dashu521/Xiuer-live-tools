@@ -1,10 +1,26 @@
-const AUTO_REPLY_OUTPUT_RULES = [
+import { AUTO_REPLY } from '@/constants'
+
+const AUTO_REPLY_SYSTEM_DEFAULT_RULES = [
+  '你是直播间口播助手，只替主播回复观众评论。',
+  '每次只回复一句，15到28字优先，绝不要超过40字。',
+  '语气像真人主播接话，自然、顺口、有互动感，不要像客服，不要像AI助手。',
+  '闲聊、打招呼、夸主播时，先自然回应，不要强行带货。',
+  '问商品时，优先用“几号链接 + 短称呼 + 一个重点”回答。',
+  '不要复述完整商品长标题，不要连续堆多个卖点，不要像念详情页。',
+  '问价格先回价格，问介绍先回一个卖点，问库存先回库存状态。',
+  '用户问题不明确时，先短接话，不要输出大段介绍。',
+  '不要分点，不要解释分析过程，不要输出备注、前缀、括号说明。',
+  '不要反复说“点链接看看哦”“可以了解一下哦”。',
+  '禁止极限词、绝对化、承诺式表达，如：最、第一、全网最低、绝对、百分百、保证、永久、无敌、闭眼入。',
+  '禁止强刺激下单话术，如：赶紧拍、马上下单、不买就亏、错过就没了、最后几单、今天必须拍。',
+  '不要主动提抽奖、返现、红包、私下交易、加微信、私聊、刷单。',
+  '不要涉及医疗、保健、减肥、美白、治病、功效保证。',
+  '不要编造价格、库存、优惠、活动、销量。',
+  '一旦自然回复和平台合规冲突，优先保证合规。',
   '你只需要输出最终要发送给观众的一句话回复。',
-  '不要输出 JSON，不要复述输入，不要解释分析过程，不要添加“回复：”“建议回复：”“最终回复：”等前缀。',
+  '不要输出 JSON，不要复述输入，不要添加“回复：”“建议回复：”“最终回复：”等前缀。',
   '不要包含 nickname、content 等字段名，不要输出代码块。',
-  '回复要口语化、自然、简短，默认不超过 50 个字。',
   '只回答最后一条评论，前面的内容只作为参考，不要机械重复之前的话术。',
-  '如果最后一条评论是在夸主播、打招呼或闲聊，就自然回应，不要强行转成商品导购。',
 ].join('\n')
 
 const JSON_COMMENT_PATTERN =
@@ -112,11 +128,16 @@ export function buildAutoReplyConversation(
 }
 
 export function buildAutoReplySystemPrompt(prompt: string, sharedSystemPrompt?: string) {
+  const normalizedUserPrompt = prompt.trim()
+  const userSupplement =
+    normalizedUserPrompt && normalizedUserPrompt !== AUTO_REPLY.LEGACY_USER_PROMPT.trim()
+      ? normalizedUserPrompt
+      : ''
   const sections = [
     sharedSystemPrompt?.trim(),
     '你将接收到一个或多个 JSON 字符串，每个字符串代表用户评论，格式为 {"nickname": "用户昵称", "content": "评论内容"}。',
-    AUTO_REPLY_OUTPUT_RULES,
-    `回复要求：\n${prompt.trim()}`,
+    AUTO_REPLY_SYSTEM_DEFAULT_RULES,
+    userSupplement ? `用户补充要求：\n${userSupplement}` : '',
   ]
 
   return sections.filter(Boolean).join('\n\n')
@@ -148,7 +169,21 @@ export function sanitizeAutoReplyResponse(replyContent: string) {
     return null
   }
 
-  return finalReply
+  return enforceAutoReplyLength(finalReply)
+}
+
+export function enforceAutoReplyLength(
+  replyContent: string,
+  maxLength = AUTO_REPLY.MAX_SEND_LENGTH,
+) {
+  const normalized = replyContent.trim()
+  const chars = Array.from(normalized)
+
+  if (chars.length <= maxLength) {
+    return normalized
+  }
+
+  return chars.slice(0, maxLength).join('').trimEnd()
 }
 
 export function createReplyFingerprint(replyContent: string) {

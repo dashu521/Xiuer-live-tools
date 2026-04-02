@@ -42,12 +42,14 @@ const PreviewList = memo(function PreviewList({
   const handleSendReply = useCallback(
     async (replyContent: string, commentId: string) => {
       try {
-        await window.ipcRenderer.invoke(
+        const sent = await window.ipcRenderer.invoke(
           IPC_CHANNELS.tasks.autoReply.sendReply,
           currentAccountId,
           replyContent,
         )
-        markReplySent(commentId)
+        if (sent) {
+          markReplySent(commentId)
+        }
       } catch (error) {
         console.error('发送回复失败:', error)
       }

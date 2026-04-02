@@ -91,14 +91,27 @@ export function AIReplySetting() {
       </div>
       {aiReplyEnabled && (
         <div className="space-y-4">
-          <div className="flex items-center space-x-2">提示词配置</div>
-          <Textarea
-            placeholder="输入AI提示词..."
-            value={config.comment.aiReply.prompt}
-            onChange={e => updateAIReplySettings({ prompt: e.target.value })}
-            className="min-h-[7.5rem]"
-          />
-          <p className="text-xs text-muted-foreground">提示词将指导AI如何回复用户评论</p>
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">闲聊补充要求</div>
+            <Textarea
+              placeholder="补充你的闲聊回复风格，例如：更活泼一点，少一点带货感"
+              value={config.comment.aiReply.prompt}
+              onChange={e => updateAIReplySettings({ prompt: e.target.value })}
+              className="min-h-[6rem]"
+            />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2">商品补充要求</div>
+            <Textarea
+              placeholder="补充你的商品类回复风格，例如：更像口播，不要复述商品长标题"
+              value={config.comment.aiReply.productPrompt ?? ''}
+              onChange={e => updateAIReplySettings({ productPrompt: e.target.value })}
+              className="min-h-[6rem]"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            系统已内置默认口播风格、商品类回复规则和平台合规限制；这里用于补充你的个性化要求，不会覆盖系统规则。
+          </p>
           <div className="flex justify-between items-center space-x-2">
             <APIKeyDialog />
             <AIModelInfo />

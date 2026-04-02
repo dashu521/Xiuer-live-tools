@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildFallbackFaqFromKnowledgeDraft,
+  buildProductKnowledgePolishPrompt,
   tryProductKnowledgeReply,
 } from '@/lib/productKnowledge'
 
@@ -104,5 +105,21 @@ describe('productKnowledge', () => {
         expect.objectContaining({ q: '有什么亮点' }),
       ]),
     )
+  })
+
+  it('includes user supplement in product polish prompt', () => {
+    const prompt = buildProductKnowledgePolishPrompt({
+      comment: '介绍一下3号链接',
+      templateReply: '3号这款主打清爽补水',
+      item: {
+        id: 3,
+        title: '胶原修护面霜',
+        priceText: '99元',
+      },
+      userPrompt: '更像主播口播，不要太像客服',
+    })
+
+    expect(prompt).toContain('用户补充要求：')
+    expect(prompt).toContain('更像主播口播，不要太像客服')
   })
 })

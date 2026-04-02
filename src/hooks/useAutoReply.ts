@@ -8,6 +8,7 @@ import { AUTO_REPLY } from '@/constants'
 import {
   buildAutoReplyConversation,
   buildAutoReplySystemPrompt,
+  enforceAutoReplyLength,
   sanitizeAutoReplyResponse,
   shouldSkipDuplicateReply,
 } from '@/lib/autoReply'
@@ -223,8 +224,16 @@ async function sendMessage(
 ): Promise<boolean> {
   if (!content) return false
   try {
-    await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.autoReply.sendReply, accountId, content)
-    return true
+    const sent = await window.ipcRenderer.invoke(
+      IPC_CHANNELS.tasks.autoReply.sendReply,
+      accountId,
+      content,
+    )
+    if (!sent) {
+      errorHandler(new Error('send_reply_failed'), '自动发送回复失败')
+      return false
+    }
+    return sent
   } catch (err) {
     errorHandler(err, '自动发送回复失败')
     return false
@@ -274,17 +283,24 @@ const handleKeywordReply = (
  * 【P1-1 AI联动最小可用】获取 AI 对话的共享配置
  * 在渲染进程中直接读取 useAIChatStore 的状态
  */
-function getAISharedConfig() {
+export function getAISharedConfig(feature: 'chat' | 'auto_reply' | 'knowledge_draft' = 'chat') {
   const store = useAIChatStore.getState()
   const provider = store.config.provider
   const providerConfig = providers[provider]
+  const credentials = getEffectiveAICredentials({
+    feature,
+    userProvider: provider,
+    userModel: store.config.model,
+    userApiKey: store.apiKeys[provider] || '',
+    userCustomBaseURL: store.customBaseURL || providerConfig.baseURL,
+  })
 
   return {
     // 基础配置
-    provider,
-    model: store.config.model,
-    apiKey: store.apiKeys[provider] || '',
-    baseURL: store.customBaseURL || providerConfig.baseURL,
+    provider: credentials?.provider ?? provider,
+    model: credentials?.model ?? store.config.model,
+    apiKey: credentials?.apiKey ?? (store.apiKeys[provider] || ''),
+    baseURL: credentials?.customBaseURL ?? (store.customBaseURL || providerConfig.baseURL),
 
     // 生成参数
     temperature: store.config.temperature ?? 0.7,
@@ -345,7 +361,7 @@ const handleAIReply = async (
 
   if (useSharedConfig) {
     // 使用 AI 对话的共享配置
-    const sharedConfig = getAISharedConfig()
+    const sharedConfig = getAISharedConfig('auto_reply')
     aiConfig = {
       provider: sharedConfig.provider as AIProvider,
       model: sharedConfig.model,
@@ -363,6 +379,11 @@ const handleAIReply = async (
       apiKey,
       customBaseURL,
     }
+  }
+
+  if (!aiConfig.apiKey?.trim()) {
+    console.warn('[AutoReply] Missing effective AI credentials, skipping AI reply generation')
+    return
   }
 
   // 筛选与该用户相关的评论和回复
@@ -422,6 +443,7 @@ const maybePolishProductKnowledgeReply = async ({
   templateReply,
   knowledgeItem,
   config,
+  productPrompt,
   provider,
   model,
   apiKey,
@@ -431,6 +453,7 @@ const maybePolishProductKnowledgeReply = async ({
   templateReply: string
   knowledgeItem: NonNullable<ReturnType<typeof tryProductKnowledgeReply>['item']>
   config: AutoReplyConfig
+  productPrompt?: string
   provider: AIProvider
   model: string
   apiKey: string
@@ -449,6 +472,7 @@ const maybePolishProductKnowledgeReply = async ({
             comment: comment.content,
             templateReply,
             item: knowledgeItem,
+            userPrompt: productPrompt,
           }),
         },
       ],
@@ -595,6 +619,7 @@ export function useAutoReply() {
                         templateReply,
                         knowledgeItem: matchedKnowledgeItem,
                         config,
+                        productPrompt: config.comment.aiReply.productPrompt,
                         provider,
                         model,
                         apiKey: apiKeys[provider],
@@ -602,11 +627,12 @@ export function useAutoReply() {
                       })
                     : templateReply
 
+                const sendableReply = enforceAutoReplyLength(finalReply)
                 const recentReplyKey = `${accountId}:${comment.nick_name}`
                 const lastReply = recentReplyCacheRef.current[recentReplyKey]
                 if (
                   shouldSkipDuplicateReply({
-                    replyContent: finalReply,
+                    replyContent: sendableReply,
                     lastReplyContent: lastReply?.content,
                     lastReplyAt: lastReply?.at,
                   })
@@ -615,7 +641,7 @@ export function useAutoReply() {
                     accountId,
                     comment.msg_id,
                     comment.nick_name,
-                    finalReply,
+                    sendableReply,
                     {
                       source: 'product-kb',
                       matchedSlotIndex: productKnowledgeHit.slotIndex,
@@ -631,7 +657,7 @@ export function useAutoReply() {
 
                 let isSent = false
                 if (config.comment.aiReply.autoSend) {
-                  void sendMessage(accountId, finalReply, handleError).then(sent => {
+                  void sendMessage(accountId, sendableReply, handleError).then(sent => {
                     if (sent) {
                       markReplySent(accountId, comment.msg_id)
                     }
@@ -640,7 +666,7 @@ export function useAutoReply() {
                 }
 
                 recentReplyCacheRef.current[recentReplyKey] = {
-                  content: finalReply,
+                  content: sendableReply,
                   at: Date.now(),
                 }
 
@@ -648,7 +674,7 @@ export function useAutoReply() {
                   accountId,
                   comment.msg_id,
                   comment.nick_name,
-                  finalReply,
+                  sendableReply,
                   {
                     source: 'product-kb',
                     matchedSlotIndex: productKnowledgeHit.slotIndex,

@@ -15,10 +15,14 @@ export function createTask(
   const taskId = uniqueId(taskName)
   const stopListeners: TaskStopCallback[] = []
   let isRunning = false
+  let lastStopReason: TaskStopReason | null = null
+  let lastStopError: unknown
 
   async function start() {
     if (!isRunning) {
       isRunning = true
+      lastStopReason = null
+      lastStopError = undefined
       try {
         await hooks.onStart?.()
       } catch (err) {
@@ -32,6 +36,8 @@ export function createTask(
   async function stop(reason: TaskStopReason = TaskStopReason.MANUAL, err?: unknown) {
     if (!isRunning) return
     isRunning = false
+    lastStopReason = reason
+    lastStopError = err
     if (err) {
       logger.error('任务因错误中断：', err)
     } else {
@@ -50,6 +56,10 @@ export function createTask(
     addStopListener: (cb: TaskStopCallback) => {
       stopListeners.push(cb)
     },
+    getLastStopInfo: () => ({
+      reason: lastStopReason,
+      error: lastStopError,
+    }),
     isRunning: () => isRunning,
   }
 }

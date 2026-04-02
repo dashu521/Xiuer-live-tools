@@ -237,7 +237,7 @@ export interface IpcChannels {
   }) => void
 
   // AutoReply
-  [IPC_CHANNELS.tasks.autoReply.sendReply]: (accountId: string, replyContent: string) => void
+  [IPC_CHANNELS.tasks.autoReply.sendReply]: (accountId: string, replyContent: string) => boolean
 
   // AIChat
   [IPC_CHANNELS.tasks.aiChat.normalChat]: (params: {
