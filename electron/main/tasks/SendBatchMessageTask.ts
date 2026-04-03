@@ -54,8 +54,10 @@ export function createSendBatchMessageTask(
       logger,
     },
     {
-      onStart: async () => {
-        await execute()
+      onStart: () => {
+        // 后台执行批量发送，确保 start() 返回时任务仍处于 running，
+        // 外层才能正确登记 activeTasks 并感知真实运行态。
+        void execute()
       },
     },
   )

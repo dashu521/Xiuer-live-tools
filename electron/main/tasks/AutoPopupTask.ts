@@ -1,6 +1,11 @@
 import { Result } from '@praha/byethrow'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { AbortError } from '#/errors/AppError'
+import {
+  ElementDisabledError,
+  ElementNotFoundError,
+  MaxTryCountExceededError,
+} from '#/errors/PlatformError'
 import type { ScopedLogger } from '#/logger'
 import type { IPerformPopup } from '#/platforms/IPlatform'
 import { mergeWithoutArray, randomInt, takeScreenshot } from '#/utils'
@@ -13,6 +18,28 @@ const TASK_NAME = '自动弹窗'
 const retryOptions = {
   maxRetries: 3,
   retryDelay: 1000,
+}
+
+function isSkippableAutoPopupError(error: unknown): boolean {
+  if (error instanceof MaxTryCountExceededError) {
+    return (
+      (error as { taskName?: string }).taskName === '查找商品' || error.message.includes('查找商品')
+    )
+  }
+
+  if (error instanceof ElementNotFoundError || error instanceof ElementDisabledError) {
+    const elementName = (error as { elementName?: string }).elementName ?? ''
+    return (
+      elementName.includes('商品') ||
+      elementName.includes('讲解按钮') ||
+      elementName.includes('弹品按钮') ||
+      error.message.includes('商品') ||
+      error.message.includes('讲解按钮') ||
+      error.message.includes('弹品按钮')
+    )
+  }
+
+  return false
 }
 
 /**
@@ -42,16 +69,21 @@ export function createAutoPopupTask(
   const intervalTask = intervalTaskResult.value
 
   async function execute(signal: AbortSignal) {
+    if (signal.aborted) {
+      return Result.fail(new AbortError())
+    }
+
+    const { goodsId, interval } = getNextGoodsConfig()
+
+    // 【P1-3】设置下一次执行的间隔（如果该商品有单独配置）
+    if (interval) {
+      intervalTask.setNextInterval(interval)
+    }
+
     const result = await runWithRetry(
       async () => {
         if (signal.aborted) {
           return Result.fail(new AbortError())
-        }
-        const { goodsId, interval } = getNextGoodsConfig()
-
-        // 【P1-3】设置下一次执行的间隔（如果该商品有单独配置）
-        if (interval) {
-          intervalTask.setNextInterval(interval)
         }
 
         const result = await platform.performPopup(goodsId, signal)
@@ -64,12 +96,22 @@ export function createAutoPopupTask(
         ...retryOptions,
         logger,
         signal,
-        onRetryError: () => {
+        onRetryError: error => {
+          if (isSkippableAutoPopupError(error)) {
+            return
+          }
           const page = platform.getPopupPage()
           if (page) takeScreenshot(page, TASK_NAME, account.name)
         },
+        shouldRetry: error => !isSkippableAutoPopupError(error),
       },
     )
+
+    if (Result.isFailure(result) && isSkippableAutoPopupError(result.error)) {
+      logger.warn(`商品 ${goodsId} 当前无法定位或讲解，已跳过本轮：`, result.error)
+      return Result.succeed()
+    }
+
     return result
   }
 
