@@ -41,12 +41,15 @@ import { createPinCommentTask } from '#/tasks/PinCommentTask'
 import { createSendBatchMessageTask } from '#/tasks/SendBatchMessageTask'
 import { createSubAccountInteractionTask } from '#/tasks/SubAccountInteractionTask'
 import windowManager from '#/windowManager'
+import { getAuthExpiredLoginPatterns, matchesAuthExpiredLoginPage } from './authPlatform'
 
 const BROWSER_LAUNCH_TIMEOUT_MS = 30_000
 const LOGIN_TIMEOUT_MS = 180_000
 const SESSION_VERIFY_TIMEOUT_MS = 20_000
+const BROWSER_CLOSE_TIMEOUT_MS = 10_000
 
 export class AccountSession {
+  private readonly platformId: LiveControlPlatform
   private platform: IPlatform
   private browserSession: BrowserSession | null = null
   private activeTasks: Map<LiveControlTask['type'], ITask> = new Map()
@@ -61,6 +64,11 @@ export class AccountSession {
     private account: Account,
     private logger = createLogger(`@${account.name}`),
   ) {
+    this.platformId = platformName
+    this.account = {
+      ...account,
+      platform: platformName,
+    }
     this.platform = new platformFactory[platformName]()
     this.streamStateDetector = new StreamStateDetector(
       this.platform,
@@ -72,7 +80,7 @@ export class AccountSession {
     this.streamStateDetector.setOnStreamEndedCallback((reason: string) => {
       this.logger.info(`[StreamState] Stream ended callback triggered: ${reason}`)
       // 关播时只停止任务，不断开中控台，不关闭浏览器，不发送 disconnectedEvent
-      this.stopForStreamEnded(reason)
+      void this.stopForStreamEnded(reason)
     })
   }
 
@@ -324,62 +332,52 @@ export class AccountSession {
    * @param sendDisconnectEvent 是否发送 disconnectedEvent（关播时不发送，断开中控台时发送）
    * @param stopDetector 是否停止 StreamStateDetector（关播时 false，断开中控台时 true）
    */
-  private stopTasksAndUpdateState(
+  private async stopTasksAndUpdateState(
     reason: string,
     closeBrowser: boolean,
     sendDisconnectEvent: boolean,
     stopDetector = false,
-  ) {
+  ): Promise<void> {
     const accountId = this.account.id
 
-    try {
-      // 【关键修复】只有明确要求停止 detector 时才停止（断开中控台时）
-      // 关播时必须保持 detector 活跃，以支持后续再次开播检测
-      if (stopDetector) {
-        this.logger.info(
-          `[disconnect][${accountId}] >>> Step 1a: stopping streamStateDetector (stopDetector=true)`,
-        )
-        this.streamStateDetector.stop()
-      } else {
-        this.logger.info(
-          `[disconnect][${accountId}] >>> Step 1a: NOT stopping streamStateDetector (stopDetector=false), keeping for re-detection`,
-        )
-      }
-      // 只更新状态，不停止 detector
-      this.streamStateDetector.setState('offline')
-
-      // 关闭浏览器
-      if (closeBrowser && this.browserSession?.browser) {
-        this.logger.info(`[disconnect][${accountId}] >>> Step 2: closing browser`)
-        this.browserSession.browser.close().catch(e => this.logger.error('无法关闭浏览器：', e))
-        this.browserSession = null
-        this.streamStateDetector.updateBrowserSession(null)
-      } else {
-        this.logger.info(`[disconnect][${accountId}] >>> Step 2: NOT closing browser`)
-      }
-
-      // 关闭所有任务
+    // 【关键修复】只有明确要求停止 detector 时才停止（断开中控台时）
+    // 关播时必须保持 detector 活跃，以支持后续再次开播检测
+    if (stopDetector) {
       this.logger.info(
-        `[disconnect][${accountId}] >>> Step 3: stopping ${this.activeTasks.size} active tasks`,
+        `[disconnect][${accountId}] >>> Step 1a: stopping streamStateDetector (stopDetector=true)`,
       )
-      Array.from(this.activeTasks.values()).forEach((task, index) => {
-        const taskType = Array.from(this.activeTasks.keys())[index]
-        this.logger.info(
-          `[disconnect][${accountId}] >>> Stopping task ${index + 1}/${this.activeTasks.size}: ${taskType}`,
-        )
-        try {
-          task.stop()
-        } catch (e) {
-          this.logger.warn(
-            `[disconnect][${accountId}] >>> Task ${taskType} stop error (ignored):`,
-            e,
-          )
-        }
-      })
-      this.activeTasks.clear()
-      this.logger.info(`[disconnect][${accountId}] >>> Step 4: activeTasks cleared`)
-    } catch (error) {
-      this.logger.error(`[disconnect][${accountId}] error:`, error)
+      this.streamStateDetector.stop()
+    } else {
+      this.logger.info(
+        `[disconnect][${accountId}] >>> Step 1a: NOT stopping streamStateDetector (stopDetector=false), keeping for re-detection`,
+      )
+    }
+    // 只更新状态，不停止 detector
+    this.streamStateDetector.setState('offline')
+
+    // 先停止所有任务，再关闭浏览器，避免页面已销毁时任务清理反向报错
+    this.logger.info(
+      `[disconnect][${accountId}] >>> Step 2: stopping ${this.activeTasks.size} active tasks`,
+    )
+    const activeTaskEntries = Array.from(this.activeTasks.entries())
+    activeTaskEntries.forEach(([taskType, task], index) => {
+      this.logger.info(
+        `[disconnect][${accountId}] >>> Stopping task ${index + 1}/${activeTaskEntries.length}: ${taskType}`,
+      )
+      try {
+        task.stop()
+      } catch (e) {
+        this.logger.warn(`[disconnect][${accountId}] >>> Task ${taskType} stop error (ignored):`, e)
+      }
+    })
+    this.activeTasks.clear()
+    this.logger.info(`[disconnect][${accountId}] >>> Step 3: activeTasks cleared`)
+
+    if (closeBrowser) {
+      this.logger.info(`[disconnect][${accountId}] >>> Step 4: closing browser session`)
+      await this.closeBrowserSession()
+    } else {
+      this.logger.info(`[disconnect][${accountId}] >>> Step 4: NOT closing browser`)
     }
 
     // 同步到 RuntimeManager
@@ -420,7 +418,7 @@ export class AccountSession {
    * 【P0-1 防护机制】三重防护确保 StreamStateDetector 不被意外停止
    * 符合规范§4.4：关播不停止 StreamStateDetector
    */
-  stopForStreamEnded(reason: string) {
+  async stopForStreamEnded(reason: string): Promise<void> {
     const accountId = this.account.id
 
     // 【防护1】检查是否已在处理中，防止重复触发
@@ -444,7 +442,7 @@ export class AccountSession {
 
     // 【关键】关播时保持 detector 活跃，支持再次开播检测
     // 参数：reason, closeBrowser=false, sendDisconnectEvent=false, stopDetector=false
-    this.stopTasksAndUpdateState(reason, false, false, false)
+    await this.stopTasksAndUpdateState(reason, false, false, false)
 
     // 【防护3】后置检查：确认 detector 仍在运行
     if (!this.streamStateDetector.isRunning) {
@@ -464,7 +462,7 @@ export class AccountSession {
    * @param reason 断开原因
    * @param options.closeBrowser 是否关闭浏览器（默认 false，只有浏览器实际关闭时才传 true）
    */
-  disconnect(reason?: string, options?: { closeBrowser?: boolean }) {
+  async disconnect(reason?: string, options?: { closeBrowser?: boolean }): Promise<void> {
     const shouldCloseBrowser = options?.closeBrowser ?? false
     const accountId = this.account.id
 
@@ -488,7 +486,6 @@ export class AccountSession {
     }
 
     this.isDisconnecting = true
-    this.isDisconnected = true
     this.isWaitingForLogin = false
     const disconnectReason = reason || '与中控台断开连接'
 
@@ -497,11 +494,115 @@ export class AccountSession {
     )
     this.logger.warn(`[disconnect][${accountId}] activeTasks count: ${this.activeTasks.size}`)
 
-    // 断开中控台时停止 detector
-    this.stopTasksAndUpdateState(disconnectReason, shouldCloseBrowser, true, true)
+    try {
+      // 断开中控台时停止 detector
+      await this.stopTasksAndUpdateState(disconnectReason, shouldCloseBrowser, true, true)
+      this.isDisconnected = true
+      this.logger.warn(`[disconnect][${accountId}] END`)
+    } catch (error) {
+      this.logger.error(`[disconnect][${accountId}] FAILED`, error)
+      throw error
+    } finally {
+      this.isDisconnecting = false
+    }
+  }
 
-    this.isDisconnecting = false
-    this.logger.warn(`[disconnect][${accountId}] END`)
+  private async closeBrowserSession(): Promise<void> {
+    const session = this.browserSession
+    if (!session) {
+      this.logger.info('[disconnect] Browser session already cleared, skipping browser shutdown')
+      this.streamStateDetector.updateBrowserSession(null)
+      return
+    }
+
+    const { page, context, browser } = session
+    let closeError: unknown
+
+    try {
+      if (!page.isClosed()) {
+        await this.withTimeout(
+          page.close().catch(error => {
+            if (!this.isBenignCloseError(error)) {
+              throw error
+            }
+          }),
+          BROWSER_CLOSE_TIMEOUT_MS,
+          '关闭页面超时，请重试',
+        )
+      }
+    } catch (error) {
+      closeError = error
+      this.logger.warn('[disconnect] 关闭页面失败，将继续尝试关闭上下文/浏览器：', error)
+    }
+
+    try {
+      await this.withTimeout(
+        context.close().catch(error => {
+          if (!this.isBenignCloseError(error)) {
+            throw error
+          }
+        }),
+        BROWSER_CLOSE_TIMEOUT_MS,
+        '关闭浏览器上下文超时，请重试',
+      )
+    } catch (error) {
+      closeError = error
+      this.logger.warn('[disconnect] 关闭浏览器上下文失败，将继续尝试关闭浏览器：', error)
+    }
+
+    try {
+      if (browser.isConnected()) {
+        await this.withTimeout(
+          browser.close().catch(error => {
+            if (!this.isBenignCloseError(error)) {
+              throw error
+            }
+          }),
+          BROWSER_CLOSE_TIMEOUT_MS,
+          '关闭浏览器超时，请重试',
+        )
+      }
+    } catch (error) {
+      closeError = error
+      this.logger.error('[disconnect] 无法关闭浏览器：', error)
+    }
+
+    if (browser.isConnected()) {
+      const failure =
+        closeError instanceof Error
+          ? closeError
+          : new Error(
+              typeof closeError === 'string'
+                ? closeError
+                : '浏览器关闭失败：browser.close() 返回后浏览器仍处于连接状态',
+            )
+      throw failure
+    }
+
+    this.browserSession = null
+    this.streamStateDetector.updateBrowserSession(null)
+    this.logger.info('[disconnect] Browser session closed cleanly')
+  }
+
+  private isBenignCloseError(error: unknown): boolean {
+    if (!error) {
+      return false
+    }
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === 'string'
+          ? error
+          : JSON.stringify(error)
+
+    return (
+      message.includes('Target page, context or browser has been closed') ||
+      message.includes('Browser has been closed') ||
+      message.includes('browser has been closed') ||
+      message.includes('page has been closed') ||
+      message.includes('context has been closed')
+    )
   }
 
   private async ensureAuthenticated(
@@ -1086,55 +1187,15 @@ export class AccountSession {
    * @returns 是否已失效（跳转到登录页）
    */
   private isAuthExpired(url: string): boolean {
-    // 各平台登录页特征（基于 platformConfig.ts 中的配置）
-    const loginPatterns: Record<string, RegExp[]> = {
-      douyin: [
-        /passport\.jinritemai\.com/, // 抖音登录域名
-        /fxg\.jinritemai\.com\/login/, // 抖音小店登录页
-      ],
-      buyin: [
-        /passport\.jinritemai\.com/, // 巨量百应登录域名
-        /buyin\.jinritemai\.com\/login/, // 巨量百应登录页
-      ],
-      eos: [
-        /passport\.jinritemai\.com/, // 罗盘登录域名
-        /compass\.jinritemai\.com\/login/, // 罗盘登录页
-      ],
-      xiaohongshu: [
-        /www\.xiaohongshu\.com\/login/, // 小红书主站登录
-        /ark\.xiaohongshu\.com\/login/, // 千帆登录页
-      ],
-      pgy: [
-        /www\.xiaohongshu\.com\/login/, // 小红书主站登录
-        /pgy\.xiaohongshu\.com\/login/, // 蒲公英登录页
-      ],
-      wxchannel: [
-        /channels\.weixin\.qq\.com\/login/, // 视频号登录页
-        /mp\.weixin\.qq\.com\/login/, // 公众号登录页
-      ],
-      kuaishou: [
-        /passport\.kuaishou\.com/, // 快手登录域名
-        /live\.kuaishou\.com\/login/, // 快手直播登录页
-      ],
-      taobao: [
-        /login\.taobao\.com/, // 淘宝登录页
-        /login\.m\.taobao\.com/, // 淘宝移动端登录
-      ],
-    }
+    const platform = this.platformId
+    const patterns = getAuthExpiredLoginPatterns(platform)
 
-    const platform = this.account.platform
-    if (!platform) {
-      this.logger.warn(`[isAuthExpired] 账号 ${this.account.id} 未设置平台`)
-      return false
-    }
-    const patterns = loginPatterns[platform]
-
-    if (!patterns) {
+    if (patterns.length === 0) {
       this.logger.warn(`[isAuthExpired] 未知平台: ${platform}，无法检测登录态`)
       return false
     }
 
-    const isLoginPage = patterns.some((pattern: RegExp) => pattern.test(url))
+    const isLoginPage = matchesAuthExpiredLoginPage(platform, url)
 
     if (isLoginPage) {
       this.logger.info(`[isAuthExpired] 平台 ${platform} 匹配到登录页: ${url}`)

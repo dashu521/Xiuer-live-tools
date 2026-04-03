@@ -166,7 +166,7 @@ function setupIpcHandlers() {
             logger.info(
               `${logPrefix}[connect:browser-was-launched] session still exists, cleaning up and returning browserLaunched=true`,
             )
-            accountManager.closeSession(
+            await accountManager.closeSession(
               account.id,
               error instanceof Error ? error.message : 'browser has been closed',
               { closeBrowser: true },
@@ -223,8 +223,8 @@ function setupIpcHandlers() {
 
   typedIpcMainHandle(IPC_CHANNELS.tasks.liveControl.disconnect, async (_, accountId: string) => {
     try {
-      // 【修复】断开连接时不关闭浏览器，只断开控制关系
-      accountManager.closeSession(accountId, '用户主动断开', { closeBrowser: false })
+      // 用户主动断开时同步回收旧浏览器会话，避免下次连接复用残留页面
+      await accountManager.closeSession(accountId, '用户主动断开', { closeBrowser: true })
       return true
     } catch (error) {
       const logger = createLogger(`@${accountManager.getAccountName(accountId)}`).scope(TASK_NAME)
