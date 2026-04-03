@@ -236,8 +236,8 @@ npm run auth:check
 
 ## 技术支持
 
-- **官方网站**：https://xiuer.live
-- **技术支持**：support@xiuer.live
+- **官方网站**：https://xiuer.work
+- **技术支持**：support@xiuer.work
 - **用户手册**：详见应用内帮助文档
 
 ## AI Rules

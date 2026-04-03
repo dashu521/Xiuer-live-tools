@@ -620,8 +620,8 @@ A: 应用会自动检测更新。您也可以:
 **Q: 如何反馈问题或建议？**
 
 A: 您可以通过以下方式联系我们:
-- 邮箱: support@xiuer.live
-- 官网: https://xiuer.live
+- 邮箱: support@xiuer.work
+- 官网: https://xiuer.work
 
 ---
 
@@ -645,9 +645,9 @@ A: 您可以通过以下方式联系我们:
 
 ## 技术支持
 
-- **官方网站**: https://xiuer.live
+- **官方网站**: https://xiuer.work
 - **下载地址**: https://download.xiuer.work/
-- **技术支持**: support@xiuer.live
+- **技术支持**: support@xiuer.work
 - **用户社区**: 加入用户群获取更多帮助
 
 ---

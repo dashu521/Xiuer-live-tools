@@ -586,7 +586,7 @@ git commit -m "chore(release): 添加一键发布脚本"
 1. 查看详细日志：`npm run publish 2>&1 | tee publish.log`
 2. 检查 GitHub Actions 日志
 3. 运行检查命令：`npm run publish:check`
-4. 联系技术支持：support@xiuer.live
+4. 联系技术支持：support@xiuer.work
 
 ---
 

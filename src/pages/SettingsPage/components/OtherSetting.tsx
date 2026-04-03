@@ -184,11 +184,11 @@ export function OtherSetting() {
   }
 
   const handleOpenWebsite = async () => {
-    await window.ipcRenderer.invoke(IPC_CHANNELS.app.openExternal, 'https://xiuer.live')
+    await window.ipcRenderer.invoke(IPC_CHANNELS.app.openExternal, 'https://xiuer.work')
   }
 
   const handleOpenSupport = async () => {
-    await window.ipcRenderer.invoke(IPC_CHANNELS.app.openExternal, 'mailto:support@xiuer.live')
+    await window.ipcRenderer.invoke(IPC_CHANNELS.app.openExternal, 'mailto:support@xiuer.work')
   }
 
   const handleSyncToCloud = async () => {

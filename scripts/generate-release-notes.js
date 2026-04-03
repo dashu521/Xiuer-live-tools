@@ -182,8 +182,8 @@ ${generateCategorySections(categories)}
 
 ## 🔗 相关链接
 
-- 官方网站: https://xiuer.live
-- 技术支持: support@xiuer.live
+- 官方网站: https://xiuer.work
+- 技术支持: support@xiuer.work
 - GitHub: https://github.com/Xiuer-Chinese/Xiuer-live-tools
 
 ---
