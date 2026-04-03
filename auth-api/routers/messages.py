@@ -8,11 +8,12 @@ from typing import Iterable, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import and_, or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from database import SessionLocal, get_db
 from deps import auth_audit_log, get_current_admin, get_current_user
-from models import Announcement, AnnouncementReceipt, User
+from models import Announcement, AnnouncementReceipt, AnnouncementStreamState, User
 from schemas import MessageItem, MessageListResponse, MessageMarkReadResponse
 from schemas_admin import (
     AdminAnnouncementActionResponse,
@@ -26,31 +27,65 @@ admin_router = APIRouter(prefix="/admin/messages", tags=["admin-messages"])
 
 
 class AnnouncementStreamHub:
-    """进程内消息变更通知中心，用于 SSE 实时推送。"""
+    """基于共享数据库版本的消息变更通知中心，用于 SSE 实时推送。"""
 
-    def __init__(self) -> None:
-        self._version = 0
-        self._event = asyncio.Event()
+    _ROW_ID = 1
 
     @property
     def version(self) -> int:
-        return self._version
+        return self._get_shared_version()
+
+    def _get_or_create_state(self, db: Session) -> AnnouncementStreamState:
+        state = db.get(AnnouncementStreamState, self._ROW_ID)
+        if state:
+            return state
+
+        state = AnnouncementStreamState(id=self._ROW_ID, version=0, updated_at=_now())
+        db.add(state)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            state = db.get(AnnouncementStreamState, self._ROW_ID)
+            if state:
+                return state
+            raise
+        db.refresh(state)
+        return state
+
+    def _get_shared_version(self) -> int:
+        with SessionLocal() as db:
+            state = self._get_or_create_state(db)
+            return int(state.version or 0)
 
     def notify(self) -> None:
-        self._version += 1
-        self._event.set()
+        with SessionLocal() as db:
+            state = self._get_or_create_state(db)
+            state.version = int(state.version or 0) + 1
+            state.updated_at = _now()
+            db.commit()
 
-    async def wait_for_change(self, last_version: int, timeout: float = 15.0) -> int:
-        if self._version != last_version:
-            return self._version
+    async def wait_for_change(
+        self,
+        last_version: int,
+        timeout: float = 15.0,
+        poll_interval: float = 0.5,
+    ) -> int:
+        current_version = self._get_shared_version()
+        if current_version != last_version:
+            return current_version
 
-        try:
-            await asyncio.wait_for(self._event.wait(), timeout=timeout)
-        except TimeoutError:
-            return last_version
+        deadline = asyncio.get_running_loop().time() + timeout
 
-        self._event.clear()
-        return self._version
+        while True:
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                return last_version
+
+            await asyncio.sleep(min(poll_interval, remaining))
+            current_version = self._get_shared_version()
+            if current_version != last_version:
+                return current_version
 
 
 stream_hub = AnnouncementStreamHub()
@@ -258,6 +293,19 @@ def _emit_sse(event_name: str, payload: dict) -> str:
     return f"event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
+def _capture_stream_snapshot(user: User, limit: int = 20) -> tuple[dict, int]:
+    """
+    先记录构建前版本号，再查库生成快照。
+
+    这样若快照构建期间又发生了新变更，后续 wait_for_change(last_version)
+    仍能立刻感知并补发，不会把这次变更误判为“已同步”。
+    """
+    snapshot_version = stream_hub.version
+    with SessionLocal() as db:
+        payload = _build_message_payload(db, user, limit).model_dump(mode="json")
+    return payload, snapshot_version
+
+
 @router.get("", response_model=MessageListResponse)
 def list_messages(
     limit: int = 20,
@@ -279,10 +327,9 @@ async def stream_messages(
                 break
 
             if last_version < 0:
-                with SessionLocal() as db:
-                    payload = _build_message_payload(db, current_user, 20).model_dump(mode="json")
+                payload, snapshot_version = _capture_stream_snapshot(current_user, 20)
                 yield _emit_sse("snapshot", payload)
-                last_version = stream_hub.version
+                last_version = snapshot_version
                 continue
 
             next_version = await stream_hub.wait_for_change(last_version, timeout=15.0)
@@ -290,10 +337,9 @@ async def stream_messages(
                 yield ": heartbeat\n\n"
                 continue
 
-            last_version = next_version
-            with SessionLocal() as db:
-                payload = _build_message_payload(db, current_user, 20).model_dump(mode="json")
+            payload, snapshot_version = _capture_stream_snapshot(current_user, 20)
             yield _emit_sse("snapshot", payload)
+            last_version = snapshot_version
 
     headers = {
         "Cache-Control": "no-cache",

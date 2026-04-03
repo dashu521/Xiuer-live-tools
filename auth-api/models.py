@@ -262,3 +262,13 @@ class AnnouncementReceipt(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     announcement = relationship("Announcement", back_populates="receipts")
+
+
+class AnnouncementStreamState(Base):
+    """消息流共享状态，用于跨实例同步公告版本。"""
+
+    __tablename__ = "announcement_stream_state"
+
+    id = Column(Integer, primary_key=True)
+    version = Column(Integer, nullable=False, default=0)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
