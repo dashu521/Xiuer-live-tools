@@ -259,12 +259,13 @@ const handleKeywordReply = (
   accountId: string,
   errorHandler: ReturnType<typeof useErrorHandler>['handleError'],
 ): boolean => {
-  if (!config.comment.keywordReply.enable || !comment.content) {
+  const commentContent = typeof comment.content === 'string' ? comment.content.trim() : ''
+  if (!config.comment.keywordReply.enable || !commentContent) {
     return false
   }
 
   const rule = config.comment.keywordReply.rules.find(({ keywords }) =>
-    keywords.some(kw => comment.content?.includes(kw)),
+    keywords.some(kw => commentContent.includes(kw)),
   )
 
   if (rule && rule.contents.length > 0) {
@@ -439,7 +440,7 @@ const handleAIReply = async (
 }
 
 const maybePolishProductKnowledgeReply = async ({
-  comment,
+  commentText,
   templateReply,
   knowledgeItem,
   config,
@@ -449,7 +450,7 @@ const maybePolishProductKnowledgeReply = async ({
   apiKey,
   customBaseURL,
 }: {
-  comment: CommentMessage
+  commentText: string
   templateReply: string
   knowledgeItem: NonNullable<ReturnType<typeof tryProductKnowledgeReply>['item']>
   config: AutoReplyConfig
@@ -469,7 +470,7 @@ const maybePolishProductKnowledgeReply = async ({
         {
           role: 'system',
           content: buildProductKnowledgePolishPrompt({
-            comment: comment.content,
+            comment: commentText,
             templateReply,
             item: knowledgeItem,
             userPrompt: productPrompt,
@@ -523,6 +524,8 @@ export function useAutoReply() {
     // const context = contexts[accountId] || createDefaultContext()
     const currentContext =
       useAutoReplyStore.getState().contexts[accountId] || createDefaultContext()
+    const commentContent =
+      'content' in comment && typeof comment.content === 'string' ? comment.content.trim() : ''
     const {
       isRunning,
       isListening: autoReplyListening,
@@ -579,6 +582,9 @@ export function useAutoReply() {
         case 'xiaohongshu_comment':
         case 'wechat_channel_live_msg':
         case 'comment': {
+          if (!commentContent) {
+            return
+          }
           // 优先尝试关键字回复
           const keywordReplied = handleKeywordReply(comment, config, accountId, handleError)
           // 如果关键字未回复，且 AI 回复已启用，则尝试 AI 回复
@@ -591,7 +597,7 @@ export function useAutoReply() {
               useAutoPopUpStore.getState().contexts[accountId]?.config.goods ?? []
             const viewerSessionKey = `${accountId}:${comment.nick_name}`
             const productKnowledgeHit = tryProductKnowledgeReply({
-              comment: comment.content,
+              comment: commentContent,
               items: productKnowledgeItems,
               viewerSession: viewerProductSessionRef.current[viewerSessionKey],
             })
@@ -615,7 +621,7 @@ export function useAutoReply() {
                 const finalReply =
                   matchedKnowledgeItem && !shouldSkipPolish
                     ? await maybePolishProductKnowledgeReply({
-                        comment,
+                        commentText: commentContent,
                         templateReply,
                         knowledgeItem: matchedKnowledgeItem,
                         config,
@@ -760,7 +766,7 @@ export function useAutoReply() {
                 )
                 if (isSent) {
                   const knowledgeHit = tryProductKnowledgeReply({
-                    comment: comment.content,
+                    comment: commentContent,
                     items: useAutoPopUpStore.getState().contexts[accountId]?.config.goods ?? [],
                   })
                   if (knowledgeHit.hit && knowledgeHit.slotIndex) {
@@ -794,12 +800,15 @@ export function useAutoReply() {
     ;(function handlePinComment() {
       // 视频号上墙
       if (comment.msg_type === 'wechat_channel_live_msg' && config.pinComment.enable) {
+        if (!commentContent) {
+          return
+        }
         if (!config.pinComment.includeHost && comment.nick_name === accountName) {
           return
         }
         const { matchStr } = config.pinComment
         // 把平台表情去掉，表情为 [xx]
-        const pureTextContent = comment.content.replace(/\[[^\]]{1,3}\]/g, '')
+        const pureTextContent = commentContent.replace(/\[[^\]]{1,3}\]/g, '')
         if (matchStr.some(str => pureTextContent.includes(str))) {
           window.ipcRenderer.invoke(IPC_CHANNELS.tasks.pinComment, {
             accountId,

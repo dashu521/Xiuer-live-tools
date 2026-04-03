@@ -201,9 +201,22 @@ function chineseNumberToInt(text: string) {
   return map[text] ?? Number.NaN
 }
 
-function parseSlotIndex(comment: string) {
+function normalizeCommentText(comment: string | null | undefined) {
+  if (typeof comment !== 'string') {
+    return ''
+  }
+
+  return comment.trim()
+}
+
+function parseSlotIndex(comment: string | null | undefined) {
+  const normalizedComment = normalizeCommentText(comment)
+  if (!normalizedComment) {
+    return undefined
+  }
+
   for (const pattern of SLOT_PATTERNS) {
-    const match = comment.match(pattern)
+    const match = normalizedComment.match(pattern)
     if (!match?.[1]) continue
 
     const raw = match[1]
@@ -216,12 +229,16 @@ function parseSlotIndex(comment: string) {
   return undefined
 }
 
-function normalizeText(text: string) {
-  return text.trim().toLowerCase()
+function normalizeText(text: string | null | undefined) {
+  return normalizeCommentText(text).toLowerCase()
 }
 
-function matchByKeyword(comment: string, items: GoodsItemConfig[]) {
+function matchByKeyword(comment: string | null | undefined, items: GoodsItemConfig[]) {
   const normalizedComment = normalizeText(comment)
+  if (!normalizedComment) {
+    return undefined
+  }
+
   const scored = items
     .map(item => {
       const candidates = [
@@ -250,8 +267,12 @@ function matchByKeyword(comment: string, items: GoodsItemConfig[]) {
   return scored[0]?.item
 }
 
-function matchFaqAnswer(comment: string, item: GoodsItemConfig) {
+function matchFaqAnswer(comment: string | null | undefined, item: GoodsItemConfig) {
   const normalizedComment = normalizeText(comment)
+  if (!normalizedComment) {
+    return undefined
+  }
+
   return item.faq?.find(
     faq =>
       normalizeText(faq.q).includes(normalizedComment) ||
@@ -293,8 +314,13 @@ function inferMatchedFields(params: {
   return fields
 }
 
-function buildProductReply(comment: string, item: GoodsItemConfig) {
-  const faqAnswer = matchFaqAnswer(comment, item)
+function buildProductReply(comment: string | null | undefined, item: GoodsItemConfig) {
+  const normalizedComment = normalizeCommentText(comment)
+  if (!normalizedComment) {
+    return undefined
+  }
+
+  const faqAnswer = matchFaqAnswer(normalizedComment, item)
   if (faqAnswer) {
     return { reply: faqAnswer, questionType: 'usage' as const }
   }
@@ -302,7 +328,7 @@ function buildProductReply(comment: string, item: GoodsItemConfig) {
   const title = item.title || item.shortTitle || `${item.id}号链接这款`
   const featureSummary = buildFeatureSummary(item)
 
-  if (PRICE_RE.test(comment)) {
+  if (PRICE_RE.test(normalizedComment)) {
     if (item.priceText && item.promoText) {
       return {
         reply: `${item.id}号链接是${title}，现在${item.priceText}，${item.promoText}，点链接就能看详情哦`,
@@ -317,7 +343,7 @@ function buildProductReply(comment: string, item: GoodsItemConfig) {
     }
   }
 
-  if (STOCK_RE.test(comment)) {
+  if (STOCK_RE.test(normalizedComment)) {
     if (item.stockText) {
       return {
         reply: `${item.id}号链接${item.stockText}，喜欢的话可以点链接看看哦`,
@@ -330,7 +356,7 @@ function buildProductReply(comment: string, item: GoodsItemConfig) {
     }
   }
 
-  if (USAGE_RE.test(comment) || PRODUCT_QUERY_RE.test(comment)) {
+  if (USAGE_RE.test(normalizedComment) || PRODUCT_QUERY_RE.test(normalizedComment)) {
     if (featureSummary && item.priceText) {
       return {
         reply: `${item.id}号链接是${title}，主打${featureSummary}，现在${item.priceText}`,
@@ -359,18 +385,23 @@ function buildProductReply(comment: string, item: GoodsItemConfig) {
 }
 
 export function tryProductKnowledgeReply(params: {
-  comment: string
+  comment?: string | null
   items: GoodsItemConfig[]
   viewerSession?: ViewerProductSession
 }) {
   const { comment, items, viewerSession } = params
+  const normalizedComment = normalizeCommentText(comment)
 
   if (items.length === 0) {
     return { hit: false, missReason: 'no-items' } satisfies ProductKnowledgeHit
   }
 
-  const slotIndex = parseSlotIndex(comment)
-  const keywordMatchedItem = matchByKeyword(comment, items)
+  if (!normalizedComment) {
+    return { hit: false, missReason: 'not-product-query' } satisfies ProductKnowledgeHit
+  }
+
+  const slotIndex = parseSlotIndex(normalizedComment)
+  const keywordMatchedItem = matchByKeyword(normalizedComment, items)
   let item =
     (slotIndex ? items.find(candidate => candidate.id === slotIndex) : undefined) ??
     keywordMatchedItem
@@ -379,7 +410,7 @@ export function tryProductKnowledgeReply(params: {
 
   if (
     !item &&
-    REFERENCE_RE.test(comment) &&
+    REFERENCE_RE.test(normalizedComment) &&
     viewerSession &&
     Date.now() - viewerSession.updatedAt < 5 * 60 * 1000
   ) {
@@ -392,7 +423,7 @@ export function tryProductKnowledgeReply(params: {
 
   if (
     !item &&
-    REFERENCE_RE.test(comment) &&
+    REFERENCE_RE.test(normalizedComment) &&
     viewerSession &&
     Date.now() - viewerSession.updatedAt >= 5 * 60 * 1000
   ) {
@@ -407,14 +438,18 @@ export function tryProductKnowledgeReply(params: {
     } satisfies ProductKnowledgeHit
   }
 
-  if (!slotIndex && !PRODUCT_QUERY_RE.test(comment) && !REFERENCE_RE.test(comment)) {
+  if (
+    !slotIndex &&
+    !PRODUCT_QUERY_RE.test(normalizedComment) &&
+    !REFERENCE_RE.test(normalizedComment)
+  ) {
     return {
       hit: false,
       missReason: 'not-product-query',
     } satisfies ProductKnowledgeHit
   }
 
-  const productReply = buildProductReply(comment, item)
+  const productReply = buildProductReply(normalizedComment, item)
 
   const questionType = productReply?.questionType ?? 'general'
 

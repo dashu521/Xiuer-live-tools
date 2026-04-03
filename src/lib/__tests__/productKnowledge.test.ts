@@ -64,6 +64,16 @@ describe('productKnowledge', () => {
     expect(result.hit).toBe(false)
   })
 
+  it('returns a miss instead of throwing when comment content is missing', () => {
+    const result = tryProductKnowledgeReply({
+      comment: undefined,
+      items,
+    })
+
+    expect(result.hit).toBe(false)
+    expect(result.missReason).toBe('not-product-query')
+  })
+
   it('treats inventory questions as stock questions', () => {
     const result = tryProductKnowledgeReply({
       comment: '三号链接还有货吗',
