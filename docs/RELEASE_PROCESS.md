@@ -108,7 +108,7 @@
 2. 发版前固定执行 Release 资产完整性检查
 3. 把依赖审计问题前置到日常开发，而不是在发版当天修
 
-### 三阶段发布流程
+### 五阶段发布流程
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -117,22 +117,30 @@
 │                                                                 │
 │  第一阶段: npm run publish                                       │
 │  ├─ 执行 release:audit          [自动] 检查发布前置条件         │
-│  ├─ 检查环境变量                [自动] 确认 API 地址            │
 │  ├─ 执行 release:guard          [自动] 阻断检查                 │
-│  ├─ 执行 release                [自动] 构建 macOS 安装包        │
+│  ├─ 执行 release                [自动] 本地构建 macOS 安装包    │
 │  ├─ 执行 release:notes          [自动] 生成 Release Notes       │
-│  └─ 执行 upload:mac             [自动] 上传 Mac 产物            │
+│  └─ 校验本地 mac 产物            [自动] 不写 GitHub Release      │
 │                              ↓                                  │
 │  第二阶段: npm run publish:confirm                               │
-│  ├─ 检查 git 状态               [自动] 确认工作区干净           │
-│  ├─ 检查 tag 不存在             [自动] 确认 tag 可用            │
 │  ├─ 推送 main 分支              [自动]                          │
-│  ├─ 创建 tag                    [自动]                          │
-│  └─ 推送 tag                    [自动] 触发 Windows CI          │
+│  ├─ 创建 / 推送 tag             [自动]                          │
+│  └─ 创建 draft GitHub Release   [自动] 作为统一汇总点           │
 │                              ↓                                  │
-│  第三阶段: npm run publish:check                                 │
-│  ├─ 检查 GitHub Actions         [自动] Windows 构建状态         │
-│  └─ 检查 Release 资产           [自动] 验证发布完整性           │
+│  第三阶段: npm run publish:orchestrate                           │
+│  ├─ 上传本地 mac 产物           [自动/按需]                     │
+│  ├─ 触发 Mac OSS 同步           [自动/按需]                     │
+│  └─ 等待缺失动作收敛            [自动]                          │
+│                              ↓                                  │
+│  第四阶段: Windows CI                                             │
+│  ├─ 构建 Windows 安装包        [自动]                           │
+│  ├─ 上传到 draft Release       [自动]                           │
+│  └─ 同步 Windows 到 OSS/CDN    [自动]                           │
+│                              ↓                                  │
+│  第五阶段: npm run publish:verify                                │
+│  ├─ 纯检查 GitHub Actions      [自动]                           │
+│  ├─ 纯检查 Release 资产        [自动]                           │
+│  └─ 纯检查 CDN 与自动更新链路   [自动]                           │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -149,8 +157,8 @@ npm run publish
 **说明：**
 - 构建 macOS 安装包
 - 生成 Release Notes
-- 上传 Mac 产物
-- **不会**自动推 tag（安全确认点）
+- 校验本地 mac 产物
+- **不会**自动推 tag，也不会写 GitHub Release
 
 #### 第二阶段：确认发布
 
@@ -163,21 +171,34 @@ npm run publish:confirm
 - 检查 tag 不存在
 - 先确认 `main` 已推送且 `Quality Gate` 已变绿
 - 创建并推送 tag
+- 创建 / 更新 draft GitHub Release
 - 触发 GitHub Actions Windows 构建
 - **这是不可撤销的操作**
 
-#### 第三阶段：检查结果
+#### 第三阶段：编排并行动作
+
+```bash
+npm run publish:orchestrate
+```
+
+**说明：**
+- 若 Release 已存在且本地 mac 产物已就绪，则上传 mac 资产
+- 若 mac Release 资产已齐，但 CDN 未同步，则触发 `Upload Mac to OSS`
+- 这是编排脚本，不是最终验收脚本
+
+#### 第四阶段：纯验收检查
 
 等待 5-10 分钟后：
 
 ```bash
-npm run publish:check
+npm run publish:verify
 ```
 
 **说明：**
 - 检查 Windows CI 构建状态
 - 验证 Release 资产完整性
-- 输出最终发布结果
+- 验证 CDN 与自动更新链路
+- **不会触发任何写操作**
 
 ---
 

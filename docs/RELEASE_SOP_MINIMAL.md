@@ -59,52 +59,35 @@ npm run release:mac
 
 产物位置：`release/<version>/*.dmg + latest-mac.yml`
 
-### 步骤 2: 创建 Tag 并推送
+### 步骤 2: 创建 Tag、推送并打开 draft Release
 
 ```bash
-# 推送代码和 tag（npm version 已自动创建 tag）
-git push origin main
-git push origin --tags
+# 推送 main、创建 tag、推送 tag、创建 draft Release
+npm run publish:confirm
 ```
 
-### 步骤 3: 创建 GitHub Release 并上传 Mac 产物
+### 步骤 3: 并行编排平台资产
 
 ```bash
-# 创建 Release
-gh release create v<version> --title "v<version>" --notes-file CHANGELOG.md \
-  release/<version>/*macos*.dmg \
-  release/<version>/*macos*.dmg.blockmap \
-  release/<version>/latest-mac.yml
+# 根据当前状态自动补齐：
+# - 若本地 mac 产物已就绪，则上传到 draft Release
+# - 若 mac CDN 未同步，则触发 Upload Mac to OSS
+npm run publish:orchestrate
 ```
 
 ### 步骤 4: 等待 Windows CI 完成
 
 Windows CI 会自动：
 - 构建 `.exe` + `.zip` + `latest.yml`
-- 上传到 GitHub Release
+- 上传到 draft GitHub Release
 - 同步 Windows 产物到 OSS/CDN
 
 查看状态：https://github.com/Xiuer-Chinese/Xiuer-live-tools/actions
 
-### 步骤 5: 触发 Mac 产物同步 OSS
+### 步骤 5: 发布后纯验收
 
 ```bash
-# 手动触发 upload-mac-oss workflow
-gh workflow run "Upload Mac to OSS" -f version=<version>
-
-# 等待完成
-gh run watch --exit-status
-```
-
-### 步骤 6: 发布后验收
-
-```bash
-# 验证所有资源可访问
-curl -I https://download.xiuer.work/releases/latest/latest.yml
-curl -I https://download.xiuer.work/releases/latest/latest-mac.yml
-curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_<version>_win-x64.exe
-curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_<version>_macos_arm64.dmg
-curl -I https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_<version>_macos_x64.dmg
+npm run publish:verify
 ```
 
 ---
@@ -121,15 +104,14 @@ git merge <feature-branch>
 # 2. 提升版本号
 npm version patch  # 或 minor
 
-# 3. 推送
-git push origin main
-git push origin --tags
+# 3. 确认并推送
+npm run publish:confirm
 
-# 4. 等待 Windows CI 完成
-# 访问 https://github.com/Xiuer-Chinese/Xiuer-live-tools/actions
+# 4. 等待 Windows CI 完成并执行纯验收
+npm run publish:verify
 
-# 5. 验收
-curl -I https://download.xiuer.work/releases/latest/latest.yml
+# 5. 如需查看状态
+npm run release:status
 ```
 
 ### 同时发 macOS + Windows
@@ -145,25 +127,14 @@ npm version patch  # 或 minor
 # 3. 构建 Mac（读取版本号生成产物）
 npm run release:mac
 
-# 4. 推送代码和 tag
-git push origin main
-git push origin --tags
+# 4. 推送代码、tag，并创建 draft Release
+npm run publish:confirm
 
-# 5. 创建 Release 并上传 Mac 产物
-gh release create v<version> --title "v<version>" --notes-file CHANGELOG.md \
-  release/<version>/*macos*.dmg \
-  release/<version>/*macos*.dmg.blockmap \
-  release/<version>/latest-mac.yml
+# 5. 并行编排平台资产
+npm run publish:orchestrate
 
-# 6. 等待 Windows CI 完成
-gh run watch --exit-status
-
-# 7. 触发 Mac OSS 同步
-gh workflow run "Upload Mac to OSS" -f version=<version>
-gh run watch --exit-status
-
-# 8. 验收
-curl -I https://download.xiuer.work/releases/latest/latest-mac.yml
+# 6. 验收
+npm run publish:verify
 ```
 
 ---
@@ -173,7 +144,7 @@ curl -I https://download.xiuer.work/releases/latest/latest-mac.yml
 满足下面几项，才算真正"用户可更新"：
 
 - [ ] `package.json` 版本号已提升
-- [ ] GitHub Release 已创建
+- [ ] GitHub draft Release 已创建
 - [ ] Windows 产物已上传到 GitHub Release
 - [ ] macOS 产物已上传到 GitHub Release
 - [ ] `latest.yml` 已同步到 OSS（Windows 自动更新）

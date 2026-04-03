@@ -64,7 +64,11 @@
     "deploy:download-page": "node scripts/deploy-download-page.js",
     "publish:mac:full": "node scripts/publish-mac-full.js",
     "publish": "node scripts/publish.js",
+    "release:status": "node scripts/release-status.js",
+    "release:open": "node scripts/release-open.js",
     "publish:confirm": "node scripts/publish-confirm.js",
+    "publish:orchestrate": "node scripts/publish-orchestrate.js",
+    "publish:verify": "node scripts/publish-verify.js",
     "publish:check": "node scripts/publish-check.js",
     "icons:generate": "node scripts/generate-icons.mjs"
   },

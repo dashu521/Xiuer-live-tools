@@ -81,33 +81,35 @@
 │                        标准发布流程                                       │
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                         │
-│  步骤 1: 推送 main 并等待主线 CI 通过                                      │
+│  步骤 1: 发布准备（冻结前检查）                                             │
+│  ├── npm run publish                                                     │
+│  ├── 运行 release:audit / release:guard                                  │
+│  ├── 本地构建 macOS 安装包                                                │
+│  └── 生成 release-notes 与本地 mac 产物                                   │
+│                                                                         │
+│  步骤 2: 推送 main 并等待主线 CI 通过                                      │
 │  ├── git push origin main                                                │
 │  ├── 等待 Quality Gate 变绿                                               │
 │  └── 确认主线不存在阻塞性 CI 问题                                          │
 │                                                                         │
-│  步骤 2: 本地 Mac 构建                                                    │
-│  ├── export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>        │
-│  ├── npm run release:mac                                                 │
-│  └── 产物: release/<version>/*.dmg + latest-mac.yml                      │
-│                                                                         │
-│  步骤 3: 创建 GitHub Release + 上传 Mac 产物                              │
-│  ├── git tag v<version>                                                  │
+│  步骤 3: 创建 tag 并打开 draft Release                                    │
+│  ├── npm run publish:confirm                                             │
 │  ├── git push origin v<version>                                          │
-│  ├── gh release create v<version> --draft                                │
-│  └── gh release upload v<version> release/<version>/*macos*              │
+│  └── gh release create v<version> --draft                                │
 │                                                                         │
-│  步骤 4: Windows 构建（自动触发）                                          │
+│  步骤 4: 并行编排平台资产                                                 │
+│  ├── npm run publish:orchestrate                                         │
+│  ├── 上传本地 mac 产物到 draft Release                                    │
+│  └── 按需触发 Upload Mac to OSS                                          │
+│                                                                         │
+│  步骤 5: Windows 构建（自动触发）                                          │
 │  ├── 触发: build-windows.yml                                             │
 │  ├── 构建: .exe + .zip + latest.yml                                      │
-│  ├── 上传: GitHub Release                                                │
+│  ├── 上传: draft GitHub Release                                          │
 │  └── 同步: OSS/CDN (Windows 产物)                                        │
 │                                                                         │
-│  步骤 5: Mac 产物同步 OSS（手动触发）                                       │
-│  ├── 触发: upload-mac-oss.yml                                            │
-│  └── 同步: OSS/CDN (macOS 产物)                                          │
-│                                                                         │
-│  步骤 6: 发布后验收                                                        │
+│  步骤 6: 发布后纯验收                                                      │
+│  ├── npm run publish:verify                                              │
 │  ├── 验证: download.xiuer.work 所有资源可访问                              │
 │  ├── 验证: latest.yml / latest-mac.yml 与 Release 资产一致                 │
 │  └── 验证: GitHub Release 资产完整                                         │
@@ -119,10 +121,12 @@
 
 为避免“tag 已推送，但主线 CI 或 Windows 构建问题稍后才暴露”的情况，正式发布必须遵守以下顺序：
 
-1. 先推送 `main`
-2. 等待 `Quality Gate` 变绿
-3. 确认没有阻塞性的主线 CI 问题
-4. 再创建并推送正式 tag
+1. 先完成 `publish` 阶段，冻结版本、release-notes 和本地 mac 产物
+2. 再推送 `main`
+3. 等待 `Quality Gate` 变绿
+4. 确认没有阻塞性的主线 CI 问题
+5. 再创建并推送正式 tag
+6. 立即创建 `draft Release` 作为统一资产汇总点
 
 禁止再采用“先打 tag，再观察主线 CI”的流程。
 

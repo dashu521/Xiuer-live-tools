@@ -10,7 +10,8 @@
  * 4. 创建 tag：vX.X.X
  * 5. push main
  * 6. push tag
- * 7. 输出触发结果和下一步指引
+ * 7. 创建 / 更新 draft GitHub Release
+ * 8. 输出触发结果和下一步指引
  */
 
 const { execSync } = require('child_process');
@@ -91,7 +92,8 @@ async function main() {
   console.log(`  3. 创建 tag: ${tagName}`);
   console.log(`  4. 推送 main 分支`);
   console.log(`  5. 推送 tag: ${tagName}`);
-  console.log(`  6. 触发 GitHub Actions Windows 构建\n`);
+  console.log(`  6. 创建 / 更新 draft GitHub Release`);
+  console.log(`  7. 触发 GitHub Actions Windows 构建\n`);
 
   // 检查 1: git 工作区是否干净
   console.log(`${colors.cyan}检查 1/3: Git 工作区状态${colors.reset}`);
@@ -164,26 +166,40 @@ async function main() {
     process.exit(1);
   }
 
+  // 步骤 4: 创建 / 更新 draft Release
+  console.log(`\n${colors.cyan}步骤 4/4: 创建 / 更新 draft Release${colors.reset}`);
+  try {
+    exec('node scripts/release-open.js');
+    logPass(`Draft Release ${tagName} 已就绪`);
+  } catch (error) {
+    logFail(`Draft Release ${tagName} 创建失败`);
+    process.exit(1);
+  }
+
   // 最终输出
   console.log(`\n${colors.bold}════════════════════════════════════════════════════════════${colors.reset}\n`);
   console.log(`${colors.green}${colors.bold}🎉 发布确认完成！${colors.reset}\n`);
 
   console.log(`${colors.cyan}${colors.bold}📋 发布摘要${colors.reset}`);
   console.log(`  Tag 名称: ${tagName}`);
-  console.log(`  Push 状态: ✅ 成功\n`);
+  console.log(`  Push 状态: ✅ 成功`);
+  console.log(`  Draft Release: ✅ 已创建\n`);
 
   console.log(`${colors.cyan}${colors.bold}🔄 GitHub Actions 状态${colors.reset}`);
   console.log(`  Windows 构建已触发`);
   console.log(`  查看地址: ${getRepoWebUrl()}/actions\n`);
 
-  logNext('等待 Windows 构建完成后，执行检查:');
-  console.log(`  ${colors.cyan}npm run publish:check${colors.reset}\n`);
+  logNext('tag 推出后，可立即开始并行编排:');
+  console.log(`  ${colors.cyan}npm run publish:orchestrate${colors.reset}\n`);
+
+  logNext('等待关键动作完成后，执行纯验收检查:');
+  console.log(`  ${colors.cyan}npm run publish:verify${colors.reset}\n`);
 
   console.log(`${colors.yellow}⚠️  注意:${colors.reset}`);
   console.log('  - Windows 构建通常需要 5-10 分钟');
-  console.log('  - Windows 构建完成后会自动上传到 GitHub Release');
-  console.log('  - publish:check 会在需要时自动触发 Mac OSS/CDN 同步并复检');
-  console.log('  - 使用 publish:check 作为最终发布完成判定\n');
+  console.log('  - Draft Release 已创建，Windows / mac 资产可汇总到同一处');
+  console.log('  - publish:orchestrate 会补触发缺失动作');
+  console.log('  - publish:verify 是纯检查脚本，不会做任何写操作\n');
 }
 
 main().catch(err => {

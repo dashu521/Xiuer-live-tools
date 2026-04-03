@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * 安全版一键发布系统 - Publish Script
- * 第一阶段：发布前半自动全流程（不自动推 tag）
+ * 第一阶段：发布准备（冻结前检查 + 本地 mac 构建）
  *
  * 职责：
  * 1. 读取 package.json 当前 version
@@ -10,9 +10,8 @@
  * 4. 执行 npm run release:guard
  * 5. 执行 npm run release（构建 macOS）
  * 6. 执行 npm run release:notes
- * 7. 执行 npm run upload:mac
- * 8. 检查 GitHub Release 是否存在
- * 9. 输出下一步建议
+ * 7. 校验本地 mac 产物
+ * 8. 输出下一步建议
  */
 
 const { execSync } = require('child_process');
@@ -154,23 +153,13 @@ function findMacArtifacts(releaseDir) {
   return artifacts;
 }
 
-// 检查 GitHub Release 是否存在
-function checkReleaseExists(tag) {
-  try {
-    exec(`gh release view ${tag}`, { ignoreError: true });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 // 主流程
 async function main() {
   console.log(`${colors.bold}`);
   console.log('╔════════════════════════════════════════════════════════════╗');
   console.log('║           🚀 安全版一键发布系统 - 第一阶段                  ║');
   console.log('║                                                            ║');
-  console.log('║  本阶段：构建、上传 Mac，但不推 tag                        ║');
+  console.log('║  本阶段：准备发布，不创建 tag，不写 GitHub Release         ║');
   console.log('║                                                            ║');
   console.log('║  构建类型说明：                                            ║');
   console.log('║  • 若未配置 Apple 开发者证书 → 生成测试构建（未签名）      ║');
@@ -182,9 +171,8 @@ async function main() {
   // Step 1: 读取版本
   logStep('读取版本信息');
   const version = getVersion();
-  const tagName = `v${version}`;
   logPass(`当前版本: ${version}`);
-  logInfo(`Tag 名称: ${tagName}`);
+  logInfo(`Tag 名称: v${version}`);
 
   // Step 2: 检查环境变量
   logStep('检查环境变量');
@@ -246,36 +234,6 @@ async function main() {
     logInfo(`  - ${artifact.name} (${artifact.size} MB)`);
   }
 
-  // Step 8: 上传 Mac 产物
-  logStep('上传 Mac 产物到 GitHub Release');
-  logInfo('检查 GitHub Release 是否存在...');
-
-  const releaseExists = checkReleaseExists(tagName);
-  if (releaseExists) {
-    logInfo(`Release ${tagName} 已存在，将上传 Mac 产物`);
-  } else {
-    logInfo(`Release ${tagName} 不存在，upload:mac 会提示你先创建`);
-    logInfo('这是正常的，因为 Windows CI 还未触发');
-  }
-
-  try {
-    execWithOutput('npm run upload:mac');
-    logPass('Mac 产物上传完成（或已准备就绪）');
-  } catch (error) {
-    logWarn('Mac 产物上传遇到问题，可稍后手动执行 npm run upload:mac');
-  }
-
-  // Step 9: 检查 GitHub Release 状态
-  logStep('检查 GitHub Release 状态');
-  const releaseNowExists = checkReleaseExists(tagName);
-  if (releaseNowExists) {
-    logPass(`GitHub Release ${tagName} 已存在`);
-    logInfo('Windows CI 可能已自动创建了 Release');
-  } else {
-    logInfo(`GitHub Release ${tagName} 尚未创建`);
-    logInfo('需要推送 tag 触发 Windows CI 构建');
-  }
-
   // 最终输出
   console.log(`\n${colors.bold}════════════════════════════════════════════════════════════${colors.reset}\n`);
 
@@ -288,13 +246,13 @@ async function main() {
 
     console.log(`${colors.cyan}${colors.bold}📋 发布准备摘要${colors.reset}`);
     console.log(`  当前版本: ${version}`);
-    console.log(`  Tag 名称: ${tagName}`);
+    console.log(`  Tag 名称: v${version}`);
     console.log(`  Mac 产物: ${macArtifacts.length} 个文件`);
     for (const artifact of macArtifacts) {
       console.log(`    - ${artifact.name}`);
     }
     console.log(`  Release Notes: release-notes/v${version}.md`);
-    console.log(`  GitHub Release: ${releaseNowExists ? '已存在' : '待创建'}\n`);
+    console.log(`  GitHub Release: 待创建（confirm 阶段自动建立 draft）\n`);
 
     console.log(`${colors.green}${colors.bold}✅ 可以进入 confirm 阶段${colors.reset}\n`);
 
@@ -305,7 +263,12 @@ async function main() {
     console.log('  1. 检查 git 工作区是否干净');
     console.log('  2. 检查 tag 是否不存在');
     console.log('  3. 创建并推送 tag');
-    console.log('  4. 触发 GitHub Actions Windows 构建\n');
+    console.log('  4. 创建 draft GitHub Release');
+    console.log('  5. 触发 GitHub Actions Windows 构建\n');
+
+    logNext('tag 推出后，建议并行执行:');
+    console.log(`  ${colors.cyan}npm run publish:orchestrate${colors.reset}`);
+    console.log(`  ${colors.cyan}npm run publish:verify${colors.reset}\n`);
   }
 }
 
