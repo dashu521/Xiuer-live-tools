@@ -289,7 +289,11 @@ const useUpdateStoreBase = create<UpdateStore>()((set, get) => ({
     } catch (e) {
       set({
         status: 'error',
-        error: { message: (e as Error).message || '安装更新失败' },
+        error: {
+          message:
+            (e as Error).message ||
+            (runtime.platform === 'win32' ? '重启更新失败' : '安装更新失败'),
+        },
         detailsOpen: true,
       })
     }
@@ -376,7 +380,7 @@ const useUpdateStoreBase = create<UpdateStore>()((set, get) => ({
   handleUpdate: (info: VersionState) => {
     const currentStatus = get().status
     if (currentStatus === 'idle') {
-      set({ status: 'available', versionInfo: info, detailsOpen: true })
+      set({ status: 'available', versionInfo: info })
     }
   },
 
@@ -389,7 +393,6 @@ const useUpdateStoreBase = create<UpdateStore>()((set, get) => ({
           latestVersion: result.newVersion,
           releaseNote: result.releaseNote,
         },
-        detailsOpen: true,
       })
       return
     }

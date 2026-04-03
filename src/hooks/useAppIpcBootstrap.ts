@@ -1,6 +1,7 @@
-import { useEffect } from 'react'
+import { createElement, useEffect } from 'react'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import type { StreamStatus } from 'shared/streamStatus'
+import { ToastAction } from '@/components/ui/toast'
 import { useAccounts } from '@/hooks/useAccounts'
 import { useAutoMessageStore } from '@/hooks/useAutoMessage'
 import { useAutoPopUpStore } from '@/hooks/useAutoPopUp'
@@ -203,9 +204,63 @@ function useUpdateIpcSync() {
   const handleUpdate = useUpdateStore.use.handleUpdate()
   const handleCheckResult = useUpdateStore.use.handleCheckResult()
   const checkUpdateInBackground = useUpdateStore.use.checkUpdateInBackground()
+  const { toast } = useToast()
+
+  const openUpdateDetails = () => {
+    useUpdateStore.getState().setDetailsOpen(true)
+  }
 
   useIpcListener(IPC_CHANNELS.updater.updateAvailable, info => {
+    const currentStatus = useUpdateStore.getState().status
+    const isManualCheck = currentStatus === 'checking'
+
+    if (info?.update && !isManualCheck) {
+      toast.info({
+        title: '发现新版本',
+        description: `检测到新版本 v${info.newVersion}，可查看详情并选择更新时间。`,
+        dedupeKey: `update-available:${info.newVersion}`,
+        duration: 5000,
+        action: createElement(
+          ToastAction,
+          {
+            altText: '查看更新详情',
+            onClick: openUpdateDetails,
+          },
+          '查看',
+        ),
+      })
+    }
+
     handleCheckResult(info)
+  })
+
+  useIpcListener(IPC_CHANNELS.updater.updateDownloaded, () => {
+    const { versionInfo, runtime, installUpdate } = useUpdateStore.getState()
+    const nextVersion = versionInfo?.latestVersion
+    const actionLabel = runtime.platform === 'win32' ? '重启并更新' : '查看详情'
+    const handleReadyAction =
+      runtime.platform === 'win32'
+        ? () => {
+            void installUpdate()
+          }
+        : openUpdateDetails
+
+    toast.success({
+      title: '更新已就绪',
+      description: nextVersion
+        ? `v${nextVersion} 已准备完成，可随时${actionLabel}。`
+        : `更新已准备完成，可随时${actionLabel}。`,
+      dedupeKey: nextVersion ? `update-ready:${nextVersion}` : 'update-ready',
+      duration: 5000,
+      action: createElement(
+        ToastAction,
+        {
+          altText: actionLabel,
+          onClick: handleReadyAction,
+        },
+        actionLabel,
+      ),
+    })
   })
 
   useIpcListener(IPC_CHANNELS.app.notifyUpdate, info => {

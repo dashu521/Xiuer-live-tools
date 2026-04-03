@@ -125,6 +125,7 @@ export function UpdateDialog() {
   }
 
   const isDownloading = status === 'downloading' || status === 'preparing'
+  const isWindowsSilentInstall = runtime.platform === 'win32'
 
   const buttonContent = useMemoizedFn(() => {
     if (status === 'error') {
@@ -156,7 +157,7 @@ export function UpdateDialog() {
           disabled={!runtime.capabilities.quitAndInstall}
         >
           <Rocket className="mr-2 h-4 w-4" />
-          马上安装
+          {isWindowsSilentInstall ? '重启并更新' : '马上安装'}
         </Button>
       )
     }
@@ -287,7 +288,9 @@ export function UpdateDialog() {
         </DialogTitle>
         <DialogDescription>
           {status === 'ready'
-            ? '更新已下载完成，是否立即安装？'
+            ? isWindowsSilentInstall
+              ? '更新已下载完成，重启应用后将静默完成更新。'
+              : '更新已下载完成，是否立即安装？'
             : status === 'error'
               ? '更新过程中遇到问题，请重试或手动下载。'
               : '升级到最新版本以获得更好的体验。'}

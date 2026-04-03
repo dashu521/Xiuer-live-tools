@@ -509,7 +509,8 @@ class EnhancedWindowsUpdater implements Updater {
   }
 
   quitAndInstall() {
-    this.autoUpdater.quitAndInstall(false, true)
+    // Windows 使用静默安装，并在安装完成后自动重新拉起应用。
+    this.autoUpdater.quitAndInstall(true, true)
   }
 }
 
