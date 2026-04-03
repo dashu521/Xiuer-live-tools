@@ -27,6 +27,7 @@ const colors = {
   bold: '\x1b[1m'
 };
 
+// 兼容旧 remote：当前正式口径以 Xiuer-Chinese 为准，但脚本仍接受历史 dashu521 remote。
 const VALID_REPO_SLUGS = ['Xiuer-Chinese/Xiuer-live-tools', 'dashu521/Xiuer-live-tools'];
 
 function logPass(message) {

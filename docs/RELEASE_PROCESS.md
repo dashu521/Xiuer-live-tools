@@ -150,7 +150,7 @@
 #### 第一阶段：准备发布
 
 ```bash
-export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
+export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
 npm run publish
 ```
 
@@ -223,7 +223,7 @@ npm run publish:verify
 
 ```bash
 # 生产环境 API 地址（HTTPS）
-export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
+export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
 export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
 ```
 
@@ -280,7 +280,7 @@ npm run release:audit
 #### 步骤 2：本地构建 macOS（人工）
 
 ```bash
-export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
+export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
 npm run release
 ```
 
@@ -359,7 +359,7 @@ git commit -m "chore: prepare release v1.3.3"
 
 **解决方案**：
 ```bash
-export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
+export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
 ```
 
 ### 3. 未设置 AUTH_STORAGE_SECRET
@@ -429,7 +429,7 @@ git commit -m "chore: remove database files from git tracking"
 
 ```bash
 # 设置环境变量
-export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
+export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
 
 # 阻断检查
 npm run release:guard

@@ -1,5 +1,7 @@
 # TASI-live-Supertool V1.0
 
+> 历史说明：本文记录 v1.0 时期的发布口径，涉及旧域名与旧基线，仅作历史存档，不代表当前正式方案。
+
 ## 版本
 
 **V1.0**（对应 Git tag `v1.0`）
@@ -9,7 +11,7 @@
 - **UI 结构分离**：Header / Main 区域拆分，布局更清晰
 - **主题变量**：统一使用 `theme.css` 设计令牌，便于定制主题
 - **Header 阴影层级**：调整头部阴影与层级，视觉层次更明确
-- **云鉴权**：登录/注册对接远程 auth-api（默认 `http://121.41.179.197:8000`），支持 POST /register、POST /login（返回 `.token`）
+- **云鉴权**：登录/注册对接当时的远程 auth-api（历史上使用过旧 HTTP 直连基线，现已退役），支持 POST /register、POST /login（返回 `.token`）
 - **订阅状态**：桌面端登录后可查询订阅状态（GET /subscription/status，Bearer 鉴权），用于禁用/到期校验
 - **管理员后台**：auth-api 提供 /admin/login 与 /admin/users/* 接口，可配合 Appsmith/Datasette 做用户可视化管理
 

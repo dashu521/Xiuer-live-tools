@@ -30,8 +30,8 @@ permissions:
   contents: write
 
 env:
-  # 生产环境 API 地址
-  VITE_AUTH_API_BASE_URL: http://121.41.179.197:8000
+  # 正式生产 API 地址
+  VITE_AUTH_API_BASE_URL: https://auth.xiuer.work
   # 主进程安全存储密钥（必须在 GitHub Secrets 中配置）
   AUTH_STORAGE_SECRET: ${{ secrets.AUTH_STORAGE_SECRET }}
   # 明确指定构建目标，防止串台
@@ -350,8 +350,8 @@ jobs:
           Write-Host "========================================"
           Write-Host "OSS 上传完成"
           Write-Host "========================================"
-          Write-Host "版本目录: https://xiuer.work/releases/$version/"
-          Write-Host "Latest:   https://xiuer.work/releases/latest/"
+          Write-Host "版本目录: https://download.xiuer.work/releases/$version/"
+          Write-Host "Latest:   https://download.xiuer.work/releases/latest/"
 
       # 13. 输出下载地址（tag 触发或 workflow_dispatch 触发时）
       - name: Output download URL
@@ -370,6 +370,6 @@ jobs:
           if ($env:GITHUB_REF -like 'refs/tags/v*') {
             Write-Host "  GitHub:  https://github.com/${{ github.repository }}/releases/tag/$version"
           }
-          Write-Host "  Version: https://xiuer.work/releases/$version/"
-          Write-Host "  Latest:  https://xiuer.work/releases/latest/"
+          Write-Host "  Version: https://download.xiuer.work/releases/$version/"
+          Write-Host "  Latest:  https://download.xiuer.work/releases/latest/"
           Write-Host "========================================"

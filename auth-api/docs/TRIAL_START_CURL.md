@@ -5,7 +5,7 @@
 ## 1. 先登录拿 token
 
 ```bash
-curl -s -X POST "http://121.41.179.197:8000/auth/login" \
+curl -s -X POST "https://auth.xiuer.work/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"username":"你的邮箱或手机号","password":"你的密码"}'
 ```
@@ -15,7 +15,7 @@ curl -s -X POST "http://121.41.179.197:8000/auth/login" \
 ## 2. 启动试用（POST /auth/trial/start）
 
 ```bash
-curl -s -X POST "http://121.41.179.197:8000/auth/trial/start" \
+curl -s -X POST "https://auth.xiuer.work/auth/trial/start" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
   -H "Content-Type: application/json"
 ```
@@ -29,7 +29,7 @@ curl -s -X POST "http://121.41.179.197:8000/auth/trial/start" \
 ## 3. 查询试用状态（GET /auth/trial/status）
 
 ```bash
-curl -s -X GET "http://121.41.179.197:8000/auth/trial/status" \
+curl -s -X GET "https://auth.xiuer.work/auth/trial/status" \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 
@@ -46,7 +46,7 @@ curl -s -X GET "http://121.41.179.197:8000/auth/trial/status" \
 ## 一键示例（替换 USER、PASS 和 BASE_URL 后执行）
 
 ```bash
-BASE_URL="http://121.41.179.197:8000"
+BASE_URL="https://auth.xiuer.work"
 RESP=$(curl -s -X POST "$BASE_URL/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"username":"USER","password":"PASS"}')

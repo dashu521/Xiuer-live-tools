@@ -45,15 +45,17 @@
 
 ## 下载安装
 
-### 正式下载入口
+### 正式入口
 
-**对外统一入口**：https://download.xiuer.work/
+**官网**：https://xiuer.work  
+**下载站**：https://download.xiuer.work/  
+**正式 API 基线**：https://auth.xiuer.work
 
 | 平台 | 下载地址 | 适用系统 |
 |------|----------|----------|
-| Windows | [下载 Windows 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.5.6_win-x64.exe) | Windows 10/11 64位 |
-| macOS Apple 芯片 | [下载 Apple 芯片版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.5.6_macos_arm64.dmg) | M1/M2/M3/M4 Mac |
-| macOS Intel | [下载 Intel 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.5.6_macos_x64.dmg) | Intel 处理器 Mac |
+| Windows | [下载 Windows 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.6.2_win-x64.exe) | Windows 10/11 64位 |
+| macOS Apple 芯片 | [下载 Apple 芯片版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.6.2_macos_arm64.dmg) | M1/M2/M3/M4 Mac |
+| macOS Intel | [下载 Intel 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.6.2_macos_x64.dmg) | Intel 处理器 Mac |
 
 > **安装提示**：
 > - Windows：如果浏览器提示风险，请点击"保留"或"更多信息"→"仍要运行"

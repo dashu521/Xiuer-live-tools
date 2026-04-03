@@ -5,7 +5,7 @@
  * 确保生产环境变量已正确设置，任何不合格直接 exit 1
  */
 
-const PRODUCTION_API = 'http://121.41.179.197:8000'
+const PRODUCTION_API = 'https://auth.xiuer.work'
 
 function validate() {
   const apiBaseUrl = process.env.VITE_AUTH_API_BASE_URL
@@ -14,13 +14,13 @@ function validate() {
   const errors = []
 
   if (!apiBaseUrl) {
-    errors.push(`VITE_AUTH_API_BASE_URL 未设置（必须为 ${PRODUCTION_API} 或 HTTPS 生产地址）`)
+    errors.push(`VITE_AUTH_API_BASE_URL 未设置（必须精确为 ${PRODUCTION_API}）`)
   } else if (
     apiBaseUrl.includes('localhost') ||
     apiBaseUrl.includes('127.0.0.1') ||
-    (apiBaseUrl !== PRODUCTION_API && !apiBaseUrl.startsWith('https://'))
+    apiBaseUrl !== PRODUCTION_API
   ) {
-    errors.push(`VITE_AUTH_API_BASE_URL 不能为本地地址: "${apiBaseUrl}"`)
+    errors.push(`VITE_AUTH_API_BASE_URL 值不正确: "${apiBaseUrl}"，必须精确为 ${PRODUCTION_API}`)
   }
 
   if (!authStorageSecret) {

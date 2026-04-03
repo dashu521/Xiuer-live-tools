@@ -86,15 +86,15 @@ for (const envVar of requiredEnvVars) {
   }
 }
 
-const PRODUCTION_API = 'http://121.41.179.197:8000';
+const PRODUCTION_API = 'https://auth.xiuer.work';
 const apiBaseUrl = process.env.VITE_AUTH_API_BASE_URL;
 if (
   apiBaseUrl &&
   (apiBaseUrl.includes('localhost') ||
     apiBaseUrl.includes('127.0.0.1') ||
-    (apiBaseUrl !== PRODUCTION_API && !apiBaseUrl.startsWith('https://')))
+    apiBaseUrl !== PRODUCTION_API)
 ) {
-  errors.push(`❌ VITE_AUTH_API_BASE_URL 值不正确: ${apiBaseUrl}，必须为 ${PRODUCTION_API} 或 HTTPS 生产地址`);
+  errors.push(`❌ VITE_AUTH_API_BASE_URL 值不正确: ${apiBaseUrl}，必须精确为 ${PRODUCTION_API}`);
 }
 
 const authSecret = process.env.AUTH_STORAGE_SECRET?.trim();

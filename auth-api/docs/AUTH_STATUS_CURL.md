@@ -11,7 +11,7 @@
 **1. 登录拿 token**
 
 ```bash
-curl -s -X POST "http://121.41.179.197:8000/auth/login" \
+curl -s -X POST "https://auth.xiuer.work/auth/login" \
   -H "Content-Type: application/json" \
   -d '{"username":"你的邮箱或手机号","password":"你的密码"}'
 ```
@@ -21,7 +21,7 @@ curl -s -X POST "http://121.41.179.197:8000/auth/login" \
 **2. 调用 GET /auth/status（无试用时）**
 
 ```bash
-curl -s -X GET "http://121.41.179.197:8000/auth/status" \
+curl -s -X GET "https://auth.xiuer.work/auth/status" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -31,13 +31,13 @@ curl -s -X GET "http://121.41.179.197:8000/auth/status" \
 
 ```bash
 # 开通试用（TOKEN 同上）
-curl -s -X POST "http://121.41.179.197:8000/auth/trial/start" \
+curl -s -X POST "https://auth.xiuer.work/auth/trial/start" \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"username":"当前登录用户名"}'
 
 # 再查状态
-curl -s -X GET "http://121.41.179.197:8000/auth/status" \
+curl -s -X GET "https://auth.xiuer.work/auth/status" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 

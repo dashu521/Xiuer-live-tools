@@ -27,9 +27,11 @@ const colors = {
   bold: '\x1b[1m'
 };
 
+// 兼容旧 remote：当前正式口径以 Xiuer-Chinese 为准，但脚本仍接受历史 dashu521 remote。
 const VALID_REPO_SLUGS = ['Xiuer-Chinese/Xiuer-live-tools', 'dashu521/Xiuer-live-tools'];
 const ALLOWED_REMOTES = new Set(['origin', 'backup', 'legacy-origin']);
-const EMERGENCY_PRODUCTION_API = 'http://121.41.179.197:8000';
+const FORMAL_PRODUCTION_API = 'https://auth.xiuer.work';
+const LEGACY_EMERGENCY_API = 'http://121.41.179.197:8000';
 
 let hasBlocker = false;
 const blockers = [];
@@ -191,7 +193,7 @@ function checkGit() {
     if (isValidRepo) {
       log('Origin URL 正确', 'PASS');
       if (matchedSlug === 'dashu521/Xiuer-live-tools') {
-        addInfo('Git', `检测到新主仓库 origin: ${matchedSlug}`);
+        addInfo('Git', `检测到历史兼容 origin: ${matchedSlug}`);
       }
     } else {
       log(
@@ -314,7 +316,7 @@ function checkConfig() {
 function checkEnv() {
   console.log(`\n${colors.blue}${colors.bold}🔍 环境变量检查${colors.reset}\n`);
 
-  const PRODUCTION_API = 'http://121.41.179.197:8000';
+  const PRODUCTION_API = FORMAL_PRODUCTION_API;
   const apiBaseUrl = process.env.VITE_AUTH_API_BASE_URL;
   const authStorageSecret = process.env.AUTH_STORAGE_SECRET?.trim();
 
@@ -326,7 +328,11 @@ function checkEnv() {
     apiBaseUrl.includes('127.0.0.1') ||
     apiBaseUrl !== PRODUCTION_API
   ) {
-    log(`VITE_AUTH_API_BASE_URL 值不正确: ${apiBaseUrl}`, 'BLOCKER', `必须为 ${PRODUCTION_API}`);
+    log(
+      `VITE_AUTH_API_BASE_URL 值不正确: ${apiBaseUrl}`,
+      'BLOCKER',
+      `必须精确为 ${PRODUCTION_API}${apiBaseUrl === LEGACY_EMERGENCY_API ? '；旧裸 IP 仅可视为历史应急地址，不得再作为正式发布值' : ''}`,
+    );
     addBlocker('环境变量', `VITE_AUTH_API_BASE_URL 值不正确，当前值: ${apiBaseUrl}`);
   } else {
     log(`VITE_AUTH_API_BASE_URL: ${apiBaseUrl}`, 'PASS');

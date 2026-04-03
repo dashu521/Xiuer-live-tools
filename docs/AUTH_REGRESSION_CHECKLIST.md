@@ -10,7 +10,7 @@
 
 ### 1. 验证码发送
 ```bash
-curl -X POST "http://121.41.179.197:8000/auth/sms/send?phone=15639913165"
+curl -X POST "https://auth.xiuer.work/auth/sms/send?phone=15639913165"
 ```
 **预期**: `{"success":true}` 或 `{"detail":"too_many_requests"}` (频率限制)
 **禁止**: `InvalidAccessKeyId.NotFound` (404) / `Forbidden.NoPermission` (403)
@@ -90,13 +90,13 @@ docker exec auth-api-api-1 cat /app/routers/auth.py | grep 'jti'
 
 - [ ] /auth/session-check 接口存在
 ```bash
-curl http://121.41.179.197:8000/auth/session-check -H "Authorization: Bearer test"
+curl https://auth.xiuer.work/auth/session-check -H "Authorization: Bearer test"
 # 应返回 {"detail":{"code":"token_invalid"}} (不是 404)
 ```
 
 - [ ] 短信发送正常
 ```bash
-curl -X POST "http://121.41.179.197:8000/auth/sms/send?phone=15639913165"
+curl -X POST "https://auth.xiuer.work/auth/sms/send?phone=15639913165"
 # 应返回 {"success":true} 或频率限制错误 (不是 404/403)
 ```
 

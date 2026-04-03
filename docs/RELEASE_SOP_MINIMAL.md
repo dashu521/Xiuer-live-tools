@@ -47,7 +47,7 @@
 
 ```bash
 # 设置生产环境 HTTPS API 地址
-export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
+export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
 export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
 
 # 提升版本号（先定版本号）
@@ -118,7 +118,7 @@ npm run release:status
 
 ```bash
 # 1. 设置环境变量
-export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>
+export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
 export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
 
 # 2. 提升版本号（先定版本号）

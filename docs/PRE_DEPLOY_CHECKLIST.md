@@ -93,10 +93,10 @@ export AUTH_STORAGE_SECRET=$(openssl rand -hex 32)
 export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work
 
 # ❌ 错误（禁止发布）
-export VITE_AUTH_API_BASE_URL=https://<your-auth-api-domain>   # 占位符地址
+export VITE_AUTH_API_BASE_URL=https://auth.xiuer.work.example   # 占位符地址，禁止用于正式发布
 export VITE_AUTH_API_BASE_URL=http://localhost:8000
 export VITE_AUTH_API_BASE_URL=http://127.0.0.1:8000
-export VITE_AUTH_API_BASE_URL=http://121.41.179.197:8000
+export VITE_AUTH_API_BASE_URL=http://<legacy-ip>:8000         # 任何裸 IP 明文 HTTP
 # 或未设置环境变量
 ```
 

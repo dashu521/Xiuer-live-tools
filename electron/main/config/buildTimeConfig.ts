@@ -5,7 +5,7 @@ export interface BuildTimeConfig {
 }
 
 let cachedConfig: BuildTimeConfig | null = null
-const PRODUCTION_AUTH_API_BASE_URL = 'http://121.41.179.197:8000'
+const PRODUCTION_AUTH_API_BASE_URL = 'https://auth.xiuer.work'
 const DEVELOPMENT_AUTH_API_BASE_URL = 'http://localhost:8000'
 
 export function getBuildTimeConfig(): BuildTimeConfig {

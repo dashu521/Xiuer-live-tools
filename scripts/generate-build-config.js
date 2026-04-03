@@ -4,16 +4,15 @@
  * 在打包前运行，将环境变量写入 build-config.json
  * 主进程在运行时读取此配置文件
  *
- * 应急规则：
- * - VITE_AUTH_API_BASE_URL 允许使用旧直连地址 http://121.41.179.197:8000
- * - 或其他 HTTPS 生产地址
+ * 正式规则：
+ * - VITE_AUTH_API_BASE_URL 必须为 https://auth.xiuer.work
  * - AUTH_STORAGE_SECRET 必须存在且长度 >= 32
  */
 
 const fs = require('fs')
 const path = require('path')
 
-const PRODUCTION_API = 'http://121.41.179.197:8000'
+const PRODUCTION_API = 'https://auth.xiuer.work'
 
 function validateApiUrl(url) {
   if (!url) {
@@ -22,8 +21,8 @@ function validateApiUrl(url) {
   if (url.includes('localhost') || url.includes('127.0.0.1')) {
     return { valid: false, reason: `VITE_AUTH_API_BASE_URL 不能为本地地址，当前值: ${url}` }
   }
-  if (url !== PRODUCTION_API && !url.startsWith('https://')) {
-    return { valid: false, reason: `VITE_AUTH_API_BASE_URL 必须为 ${PRODUCTION_API} 或 HTTPS 生产地址，当前值: ${url}` }
+  if (url !== PRODUCTION_API) {
+    return { valid: false, reason: `VITE_AUTH_API_BASE_URL 必须精确为 ${PRODUCTION_API}，当前值: ${url}` }
   }
   return { valid: true }
 }

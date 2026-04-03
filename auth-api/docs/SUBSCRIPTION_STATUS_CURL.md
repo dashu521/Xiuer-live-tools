@@ -2,7 +2,7 @@
 
 **对齐真相**：仅 POST /register、POST /login（无 /auth 前缀）；/login 返回字段名为 **token**（非 access_token）。
 
-基准 URL：`http://127.0.0.1:8000` 或 `http://121.41.179.197:8000`
+基准 URL：本地调试使用 `http://127.0.0.1:8000`，正式环境使用 `https://auth.xiuer.work`
 
 ## 1) 注册新用户
 

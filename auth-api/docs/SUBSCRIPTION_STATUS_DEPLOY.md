@@ -48,7 +48,7 @@ docker compose up -d api
 
 ## 4.3 在服务器上用 curl 验证
 
-在**服务器**上执行（或本机用 121.41.179.197:8000）：
+在**服务器**上执行（或本机用 `https://auth.xiuer.work` 验证正式入口）：
 
 ```bash
 # 1) Login 拿 token（替换为已有用户）

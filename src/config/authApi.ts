@@ -1,6 +1,6 @@
 /**
  * Auth API 基址：与 authApiBase.ts 约定一致，渲染进程 getMe/refresh/status 等用此 base。
- * 认证服务现在通过 8080 端口对外暴露（例如 Nginx / 反向代理转发到容器内部 8000）。
+ * 正式环境统一通过 https://auth.xiuer.work 对外访问。
  */
 import { AUTH_API_BASE } from './authApiBase'
 

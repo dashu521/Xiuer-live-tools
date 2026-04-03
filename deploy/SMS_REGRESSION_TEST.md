@@ -1,7 +1,7 @@
 # 短信功能回归测试清单
 
 ## 测试环境
-- **后端地址**: http://121.41.179.197:8000
+- **后端地址**: https://auth.xiuer.work
 - **RAM 用户**: sms-api-user
 - **AccessKey ID**: LTAI5t69************ (已脱敏)
 
@@ -43,7 +43,7 @@
 
 ```bash
 # 基础发送测试
-curl -X POST "http://121.41.179.197:8000/auth/sms/send?phone=15639913165"
+curl -X POST "https://auth.xiuer.work/auth/sms/send?phone=15639913165"
 
 # 预期响应
 {"success":true}

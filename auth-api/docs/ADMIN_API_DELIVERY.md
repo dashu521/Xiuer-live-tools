@@ -175,7 +175,7 @@ docker compose up -d --build api
 - **curl 集合**（需先设置环境变量）：
 
 ```bash
-export BASE_URL=http://121.41.179.197:8000
+export BASE_URL=https://auth.xiuer.work
 export ADMIN_USER=admin
 export ADMIN_PASS=你的管理员密码
 bash auth-api/scripts/test_admin_curl.sh
@@ -185,7 +185,7 @@ bash auth-api/scripts/test_admin_curl.sh
 
 ```bash
 cd auth-api
-AUTH_BASE_URL=http://121.41.179.197:8000 ADMIN_USER=admin ADMIN_PASS=你的管理员密码 python scripts/test_admin_api.py
+AUTH_BASE_URL=https://auth.xiuer.work ADMIN_USER=admin ADMIN_PASS=你的管理员密码 python scripts/test_admin_api.py
 ```
 
 ---
