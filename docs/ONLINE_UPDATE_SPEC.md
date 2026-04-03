@@ -11,7 +11,7 @@ description: "Designs complete online update functionality for Electron app. Inv
 
 | 层级 | 技术选型 |
 |------|----------|
-| 框架 | Electron 36.3.2 |
+| 框架 | Electron 39.8.6 |
 | 前端 | React 19.1 + TypeScript 5.9.3 |
 | 构建 | Vite 6.0.11 + electron-builder 26.0.12 |
 | 更新 | electron-updater 6.6.2 |
