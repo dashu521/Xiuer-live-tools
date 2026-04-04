@@ -41,24 +41,6 @@ function useTaskEventIpcSync() {
   const setIsRunningAutoPopUp = useAutoPopUpStore(s => s.setIsRunning)
   const setLiveStatsListening = useLiveStatsStore(s => s.setListening)
 
-  useIpcListener(IPC_CHANNELS.tasks.autoMessage.stoppedEvent, id => {
-    setIsRunningAutoMessage(id, false)
-    taskManager.syncStatus('autoSpeak', 'stopped', id)
-  })
-
-  useIpcListener(IPC_CHANNELS.tasks.autoPopUp.stoppedEvent, id => {
-    setIsRunningAutoPopUp(id, false)
-    taskManager.syncStatus('autoPopup', 'stopped', id)
-  })
-
-  useIpcListener(IPC_CHANNELS.tasks.commentListener.stopped, id => {
-    markCommentListenerStopped(id)
-    setIsListening(id, 'stopped')
-    setIsRunningAutoReply(id, false)
-    setLiveStatsListening(id, false)
-    taskManager.syncStatus('autoReply', 'stopped', id)
-  })
-
   useEffect(() => {
     if (!window.ipcRenderer?.on) return
 

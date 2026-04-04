@@ -23,6 +23,13 @@ interface LoadAccountScopedContextsOptions<Context, Namespace extends StorageDat
   restoreContext: (savedContext: Context, accountId: string) => Context
 }
 
+interface LoadSingleAccountScopedContextOptions<Context, Namespace extends StorageDataType> {
+  namespace: Namespace
+  userId: string
+  accountId: string
+  restoreContext: (savedContext: Context, accountId: string) => Context
+}
+
 interface PersistAllAccountScopedContextsOptions<
   Context,
   Namespace extends StorageDataType,
@@ -77,8 +84,10 @@ export function persistAccountScopedContext<
   try {
     const persistKey = `${namespace}:${userId}:${accountId}`
     const payload = serialize ? serialize(context) : (context as unknown as Persisted)
+    // 将 immer draft / proxy 在当前同步阶段转换为普通 JSON 对象，避免延迟持久化时访问失效代理。
+    const detachedPayload = JSON.parse(JSON.stringify(payload)) as Persisted
     const write = () => {
-      storageManager.set(namespace, payload, {
+      storageManager.set(namespace, detachedPayload, {
         level: 'account',
         userId,
         accountId,
@@ -118,6 +127,26 @@ export function loadAccountScopedContexts<Context, Namespace extends StorageData
   }
 
   return contexts
+}
+
+export function loadSingleAccountScopedContext<Context, Namespace extends StorageDataType>({
+  namespace,
+  userId,
+  accountId,
+  restoreContext,
+}: LoadSingleAccountScopedContextOptions<Context, Namespace>): Context | undefined {
+  flushAllPersists()
+  const savedContext = storageManager.get<Context>(namespace, {
+    level: 'account',
+    userId,
+    accountId,
+  })
+
+  if (!savedContext) {
+    return undefined
+  }
+
+  return restoreContext(savedContext, accountId)
 }
 
 export function persistAllAccountScopedContexts<

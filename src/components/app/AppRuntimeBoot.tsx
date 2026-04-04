@@ -9,6 +9,7 @@ import { useLoadChromeConfigOnLogin } from '@/hooks/useChromeConfig'
 import { useLoadLiveControlOnLogin } from '@/hooks/useLiveControl'
 import { useLoadSubAccountOnLogin } from '@/hooks/useSubAccount'
 import { useTaskConnectionGuard } from '@/hooks/useTaskConnectionGuard'
+import { useTaskRuntimeSync } from '@/hooks/useTaskRuntimeSync'
 import { initializePlatformPreferenceService } from '@/services/platformPreferenceService'
 import { ensureAccountsAuthSync } from '@/stores/auth/accountsAuthSync'
 
@@ -39,6 +40,7 @@ export default function AppRuntimeBoot() {
   useLoadSubAccountOnLogin()
   useLoadLiveControlOnLogin()
   useTaskConnectionGuard()
+  useTaskRuntimeSync()
 
   useEffect(() => ensureAccountsAuthSync(), [])
 

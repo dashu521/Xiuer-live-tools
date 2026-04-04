@@ -750,6 +750,7 @@ export class AccountSession {
     if (Result.isFailure(newTask)) {
       return newTask
     }
+    let runtimeMonitorTaskId: string | null = null
 
     // 【P0修复】先启动任务，确认真正运行成功后才登记到 activeTasks
     await newTask.value.start()
@@ -781,12 +782,14 @@ export class AccountSession {
     }
 
     // 注册到运行时监控
-    taskRuntimeMonitor.registerTask(this.account.id, task.type)
+    runtimeMonitorTaskId = taskRuntimeMonitor.registerTask(this.account.id, task.type)
 
     // 任务停止时从任务列表中移除
     newTask.value.addStopListener(() => {
       this.activeTasks.delete(task.type)
-      taskRuntimeMonitor.unregisterTask(`${this.account.id}:${task.type}`)
+      if (runtimeMonitorTaskId) {
+        taskRuntimeMonitor.unregisterTask(runtimeMonitorTaskId)
+      }
     })
 
     // 【P0修复】确认任务真正运行后才登记到 activeTasks
@@ -839,6 +842,12 @@ export class AccountSession {
       return task.updateConfig(config)
     }
     return Result.fail(new TaskNotSupportedError({ taskName: `update-${type}` }))
+  }
+
+  public getActiveTaskTypes(): LiveControlTask['type'][] {
+    return Array.from(this.activeTasks.entries())
+      .filter(([, task]) => task.isRunning())
+      .map(([taskType]) => taskType)
   }
 
   public async fetchAutoPopupGoodsIds(): Result.ResultAsync<number[], Error> {

@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { EVENTS, eventEmitter } from '@/utils/events'
 import {
   loadAccountScopedContexts,
+  loadSingleAccountScopedContext,
   persistAccountScopedContext,
   persistAllAccountScopedContexts,
   removeAccountScopedContext,
@@ -71,6 +72,7 @@ interface AutoMessageStore {
   setIsRunning: (accountId: string, running: boolean) => void
   setConfig: (accountId: string, config: Partial<AutoMessageConfig>) => void
   setBatchCount: (accountId: string, batchCount: number) => void
+  ensureContextLoaded: (userId: string, accountId: string) => void
   loadUserContexts: (userId: string) => void
   resetAllContexts: () => void
 }
@@ -179,18 +181,65 @@ export const useAutoMessageStore = create<AutoMessageStore>()(
           saveToStorage(accountId, context)
         }),
 
-      loadUserContexts: (userId: string) => {
-        const loadContexts = () => {
+      ensureContextLoaded: (userId, accountId) => {
+        const loadContext = () => {
           set(state => {
+            if (state.contexts[accountId]) {
+              console.log(`[AutoMessage] Context already loaded for account ${accountId}, skip`)
+              return
+            }
+
             state.currentUserId = userId
-            state.contexts = loadAccountScopedContexts({
+            const restored = loadSingleAccountScopedContext<AutoMessageContext, 'auto-message'>({
               namespace: 'auto-message',
               userId,
-              restoreContext: savedContext => ({
+              accountId,
+              restoreContext: (savedContext: AutoMessageContext) => ({
                 ...savedContext,
                 isRunning: false,
               }),
             })
+
+            console.log(
+              `[AutoMessage] Hydrating single account context for ${accountId}: ${restored ? 'restored' : 'created-default'}`,
+            )
+            state.contexts[accountId] = restored ?? defaultContext()
+          })
+        }
+
+        runWhenAccountsReady(loadContext)
+      },
+
+      loadUserContexts: (userId: string) => {
+        const loadContexts = () => {
+          set(state => {
+            const prevContexts: Record<string, AutoMessageContext> =
+              state.currentUserId === userId ? state.contexts : {}
+            state.currentUserId = userId
+            const loadedContexts = loadAccountScopedContexts<AutoMessageContext, 'auto-message'>({
+              namespace: 'auto-message',
+              userId,
+              restoreContext: (savedContext: AutoMessageContext) => ({
+                ...savedContext,
+                isRunning: false,
+              }),
+            })
+
+            console.log(
+              `[AutoMessage] Loading all contexts for user ${userId}: loaded=${Object.keys(loadedContexts).length}, prev=${Object.keys(prevContexts).length}`,
+            )
+            state.contexts = loadedContexts
+
+            for (const [accountId, existingContext] of Object.entries(prevContexts)) {
+              if (!existingContext) continue
+
+              if (existingContext.isRunning || !state.contexts[accountId]) {
+                console.log(
+                  `[AutoMessage] Preserving in-memory context for ${accountId}: isRunning=${existingContext.isRunning}`,
+                )
+                state.contexts[accountId] = existingContext
+              }
+            }
           })
         }
 
@@ -241,7 +290,7 @@ export const useAutoMessageActions = () => {
 
 export const useCurrentAutoMessage = <T>(getter: (context: AutoMessageContext) => T): T => {
   const currentAccountId = useAccounts(state => state.currentAccountId)
-  const { loadUserContexts } = useAutoMessageStore()
+  const { ensureContextLoaded } = useAutoMessageStore()
   const { user } = useAuthStore()
 
   // 当账号切换时，确保配置已加载
@@ -250,10 +299,10 @@ export const useCurrentAutoMessage = <T>(getter: (context: AutoMessageContext) =
       const state = useAutoMessageStore.getState()
       // 如果当前账号的配置不存在，重新加载
       if (!state.contexts[currentAccountId]) {
-        loadUserContexts(user.id)
+        ensureContextLoaded(user.id, currentAccountId)
       }
     }
-  }, [currentAccountId, user?.id, loadUserContexts])
+  }, [currentAccountId, user?.id, ensureContextLoaded])
 
   const defaultContextRef = useRef(defaultContext())
   return useAutoMessageStore(

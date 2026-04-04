@@ -71,6 +71,7 @@ export class BaseTask implements Task {
   status: TaskStatus = 'idle'
   protected disposers: Disposable[] = []
   protected isStopped = false
+  protected backendStopObserved = false
 
   constructor(id: TaskId) {
     this.id = id
@@ -95,6 +96,16 @@ export class BaseTask implements Task {
       }
     }
     this.disposers = []
+  }
+
+  protected markBackendStopped(): void {
+    this.backendStopObserved = true
+  }
+
+  protected consumeBackendStopObserved(): boolean {
+    const observed = this.backendStopObserved
+    this.backendStopObserved = false
+    return observed
   }
 
   /**
@@ -131,5 +142,6 @@ export class BaseTask implements Task {
   protected reset(): void {
     this.status = 'idle'
     this.isStopped = false
+    this.backendStopObserved = false
   }
 }

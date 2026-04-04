@@ -8,7 +8,11 @@ import { taskManager } from '@/tasks'
 import { getGateTaskName } from '@/tasks/taskMeta'
 import type { StopReason, TaskContext, TaskId } from '@/tasks/types'
 import { getStopReasonText } from '@/utils/taskGate'
+import { syncDirectTaskRuntimeFromMain } from '@/utils/taskRuntimeSync'
 import { useAccounts } from './useAccounts'
+import { useAutoMessageStore } from './useAutoMessage'
+import { useAutoPopUpStore } from './useAutoPopUp'
+import { useAutoReplyStore } from './useAutoReply'
 import { useLiveControlStore } from './useLiveControl'
 import { useToast } from './useToast'
 
@@ -18,6 +22,34 @@ import { useToast } from './useToast'
 export function useTaskManager() {
   const currentAccountId = useAccounts(state => state.currentAccountId)
   const { toast } = useToast()
+
+  const reconcileTaskStatusBeforeStart = useMemoizedFn((taskId: TaskId) => {
+    switch (taskId) {
+      case 'autoReply': {
+        const context = useAutoReplyStore.getState().contexts[currentAccountId]
+        const actuallyRunning =
+          context?.isListening === 'listening' || context?.isListening === 'waiting'
+        if (!actuallyRunning) {
+          taskManager.syncStatus(taskId, 'stopped', currentAccountId)
+        }
+        break
+      }
+      case 'autoSpeak': {
+        const context = useAutoMessageStore.getState().contexts[currentAccountId]
+        if (!context?.isRunning) {
+          taskManager.syncStatus(taskId, 'stopped', currentAccountId)
+        }
+        break
+      }
+      case 'autoPopup': {
+        const context = useAutoPopUpStore.getState().contexts[currentAccountId]
+        if (!context?.isRunning) {
+          taskManager.syncStatus(taskId, 'stopped', currentAccountId)
+        }
+        break
+      }
+    }
+  })
 
   /**
    * 创建任务上下文
@@ -50,6 +82,8 @@ export function useTaskManager() {
    * 启动任务
    */
   const startTask = useMemoizedFn(async (taskId: TaskId): Promise<boolean> => {
+    await syncDirectTaskRuntimeFromMain(currentAccountId, `before-start-${taskId}`)
+    reconcileTaskStatusBeforeStart(taskId)
     const ctx = createContext()
     // 【Phase 2B-1】taskManager.start() 已基于任务实例真实状态返回 ALREADY_RUNNING
     const result = await taskManager.start(taskId, ctx)
@@ -80,6 +114,7 @@ export function useTaskManager() {
     async (taskId: TaskId, reason: StopReason = 'manual'): Promise<void> => {
       // 【修复】传入 accountId 以停止指定账号的任务
       await taskManager.stop(taskId, reason, currentAccountId)
+      await syncDirectTaskRuntimeFromMain(currentAccountId, `after-stop-${taskId}`)
 
       // 显示停止提示（仅非手动停止时显示）
       if (reason !== 'manual') {

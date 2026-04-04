@@ -7,6 +7,43 @@ import type { providers } from 'shared/providers'
 import { IPC_CHANNELS } from './ipcChannels'
 
 export interface IpcChannels {
+  [IPC_CHANNELS.diagnostics.getRuntimeStats]: () => {
+    totalTasks: number
+    runningTasks: number
+    stoppedTasks: number
+    activeTimers: number
+    activeListeners: number
+    tasksByAccount: Map<
+      string,
+      Array<{
+        accountId: string
+        taskType: string
+        startedAt: number
+        stoppedAt?: number
+        status: 'running' | 'stopped'
+      }>
+    >
+  }
+  [IPC_CHANNELS.diagnostics.getAccountTasks]: (accountId: string) => {
+    accountId: string
+    activeTasks: string[]
+    monitorTasks: Array<{
+      accountId: string
+      taskType: string
+      startedAt: number
+      stoppedAt?: number
+      status: 'running' | 'stopped'
+    }>
+  }
+  [IPC_CHANNELS.diagnostics.getTimeline]: () => Array<{
+    time: string
+    event: string
+    accountId: string
+    data?: unknown
+  }>
+  [IPC_CHANNELS.diagnostics.printSummary]: () => { success: boolean }
+  [IPC_CHANNELS.diagnostics.reset]: () => { success: boolean; message: string }
+
   // Auth
   [IPC_CHANNELS.auth.register]: (data: {
     username: string
@@ -173,7 +210,6 @@ export interface IpcChannels {
   // AutoMessage
   [IPC_CHANNELS.tasks.autoMessage.start]: (accountId: string, config: AutoCommentConfig) => boolean
   [IPC_CHANNELS.tasks.autoMessage.stop]: (accountId: string) => boolean
-  [IPC_CHANNELS.tasks.autoMessage.stoppedEvent]: (id: string) => void
   /** 账号隔离的停止事件 */
   [key: `tasks:autoMessage:stopped:${string}`]: (id: string) => void
   [IPC_CHANNELS.tasks.autoMessage.sendBatchMessages]: (
@@ -189,7 +225,6 @@ export interface IpcChannels {
   // AutoPopup
   [IPC_CHANNELS.tasks.autoPopUp.start]: (accountId: string, config: AutoPopupConfig) => boolean
   [IPC_CHANNELS.tasks.autoPopUp.stop]: (accountId: string) => boolean
-  [IPC_CHANNELS.tasks.autoPopUp.stoppedEvent]: (id: string) => void
   /** 账号隔离的停止事件 */
   [key: `tasks:autoPopUp:stopped:${string}`]: (id: string) => void
   [IPC_CHANNELS.tasks.autoPopUp.updateConfig]: (
@@ -228,7 +263,6 @@ export interface IpcChannels {
     config: CommentListenerConfig,
   ) => boolean
   [IPC_CHANNELS.tasks.commentListener.stop]: (accountId: string) => void
-  [IPC_CHANNELS.tasks.commentListener.stopped]: (accountId: string) => void
   /** 账号隔离的监听器停止事件 */
   [key: `tasks:commentListener:stopped:${string}`]: (accountId: string) => void
   [IPC_CHANNELS.tasks.commentListener.showComment]: (data: {
@@ -238,6 +272,42 @@ export interface IpcChannels {
 
   // AutoReply
   [IPC_CHANNELS.tasks.autoReply.sendReply]: (accountId: string, replyContent: string) => boolean
+  [IPC_CHANNELS.tasks.autoReply.exportData]: (payload: {
+    data: {
+      accountName: string
+      exportedAt: number
+      stats: {
+        totalComments: number
+        totalReplies: number
+        sentReplies: number
+        rewrittenReplies: number
+      }
+      rows: Array<{
+        sessionId?: string
+        sessionStartedAt?: string
+        sessionEndedAt?: string
+        commentId: string
+        commentTime: string
+        nickname: string
+        commentContent: string
+        replyTime?: string
+        replyContent?: string
+        isSent: boolean
+        source: 'ai' | 'product-kb' | 'none'
+        replyIntent?: string
+        questionType?: string
+        factStatus?: string
+        guardrailAction?: string
+        guardrailReason?: string
+        knowledgeMissReason?: string
+        matchedSlotIndex?: number
+        matchedTitle?: string
+        matchedFields?: string[]
+      }>
+    }
+    format?: 'csv' | 'json'
+  }) => Promise<{ success: boolean; filePath?: string; error?: string }>
+  [IPC_CHANNELS.tasks.autoReply.openExportFolder]: () => void
 
   // AIChat
   [IPC_CHANNELS.tasks.aiChat.normalChat]: (params: {

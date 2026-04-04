@@ -167,8 +167,6 @@ export function createAutoCommentTask(
   intervalTask.addStopListener(() => {
     // 发送账号隔离的停止事件
     windowManager.send(IPC_CHANNELS.tasks.autoMessage.stoppedFor(account.id), account.id)
-    // 同时发送旧事件以保持兼容（后续可移除）
-    windowManager.send(IPC_CHANNELS.tasks.autoMessage.stoppedEvent, account.id)
   })
 
   return Result.pipe(

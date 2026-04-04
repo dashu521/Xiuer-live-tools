@@ -12,6 +12,8 @@
 import { taskStateManager } from './TaskStateManager'
 import type { TaskStopReason } from './taskGate'
 
+const inFlightStopAllByAccount = new Map<string, Promise<void>>()
+
 /**
  * 停止所有直播相关任务
  *
@@ -26,6 +28,14 @@ export async function stopAllLiveTasks(
   showToast = true,
   toastCallback?: (message: string) => void,
 ): Promise<void> {
+  const inFlight = inFlightStopAllByAccount.get(accountId)
+  if (inFlight) {
+    console.log(
+      `[stopAllLiveTasks] Reusing in-flight stop for account ${accountId}, incoming reason: ${reason}`,
+    )
+    return inFlight
+  }
+
   console.log(
     `[stopAllLiveTasks] Delegating to TaskStateManager for account ${accountId}, reason: ${reason}`,
   )
@@ -38,5 +48,13 @@ export async function stopAllLiveTasks(
         ? 'disconnected'
         : 'auto_stop'
 
-  await taskStateManager.stopAllTasksForAccount(accountId, mappedReason, showToast, toastCallback)
+  const stopPromise = taskStateManager
+    .stopAllTasksForAccount(accountId, mappedReason, showToast, toastCallback)
+    .then(() => undefined)
+    .finally(() => {
+      inFlightStopAllByAccount.delete(accountId)
+    })
+
+  inFlightStopAllByAccount.set(accountId, stopPromise)
+  await stopPromise
 }

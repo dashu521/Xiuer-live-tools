@@ -59,6 +59,7 @@ export class AutoSpeakTask extends BaseTask {
         // 由于使用账号隔离的事件，这里不需要再检查 accountId
         if (this.status === 'running') {
           console.log(`[AutoSpeakTask] Task stopped by backend for account ${accountId}`)
+          this.markBackendStopped()
           this.stop('error')
         }
       }
@@ -95,17 +96,18 @@ export class AutoSpeakTask extends BaseTask {
 
     console.log(`[AutoSpeakTask] Stopping, reason: ${reason}`)
     this.status = 'stopping'
+    const backendAlreadyStopped = this.consumeBackendStopObserved()
 
     // 执行清理器（移除 IPC 监听器等）
     // 这会清理所有注册的清理函数，包括：
-    // - IPC 事件监听器（stoppedEvent）
+    // - IPC 事件监听器（账号隔离 stoppedFor 通道）
     // - 任何其他定时器、websocket 等资源
     this.executeDisposers()
 
     // 调用 IPC 停止任务（后端会清理 interval/timer/abort controller）
     if (this.accountId) {
       try {
-        if (window.ipcRenderer) {
+        if (!backendAlreadyStopped && window.ipcRenderer) {
           await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.autoMessage.stop, this.accountId)
           console.log('[AutoSpeakTask] IPC stop invoked successfully')
         }

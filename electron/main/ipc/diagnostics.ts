@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { accountManager } from '#/managers/AccountManager'
 import { taskRuntimeMonitor } from '../services/TaskRuntimeMonitor'
 
 export function setupDiagnosticsIpcHandlers() {
@@ -7,7 +8,11 @@ export function setupDiagnosticsIpcHandlers() {
   })
 
   ipcMain.handle('diagnostics:getAccountTasks', async (_, accountId: string) => {
-    return taskRuntimeMonitor.getAccountTasks(accountId)
+    return {
+      accountId,
+      activeTasks: accountManager.getActiveTaskTypes(accountId),
+      monitorTasks: taskRuntimeMonitor.getAccountTasks(accountId),
+    }
   })
 
   ipcMain.handle('diagnostics:getTimeline', async () => {

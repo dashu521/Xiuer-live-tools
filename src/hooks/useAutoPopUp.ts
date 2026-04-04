@@ -8,6 +8,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { EVENTS, eventEmitter } from '@/utils/events'
 import {
   loadAccountScopedContexts,
+  loadSingleAccountScopedContext,
   persistAccountScopedContext,
   persistAllAccountScopedContexts,
   removeAccountScopedContext,
@@ -89,6 +90,7 @@ interface AutoPopUpStore {
     accountId: string,
     state: Partial<Pick<AutoPopUpContext, 'goodsAutoFillAttempted' | 'goodsAutoFillLocked'>>,
   ) => void
+  ensureContextLoaded: (userId: string, accountId: string) => void
   loadUserContexts: (userId: string) => void
   resetAllContexts: () => void
 }
@@ -189,11 +191,60 @@ export const useAutoPopUpStore = create<AutoPopUpStore>()(
           saveToStorage(accountId, context)
         }),
 
+      ensureContextLoaded: (userId, accountId) => {
+        const loadContext = () => {
+          set(state => {
+            if (state.contexts[accountId]) {
+              console.log(`[AutoPopUp] Context already loaded for account ${accountId}, skip`)
+              return
+            }
+
+            state.currentUserId = userId
+            const restored = loadSingleAccountScopedContext<AutoPopUpContext, 'auto-popup'>({
+              namespace: 'auto-popup',
+              userId,
+              accountId,
+              restoreContext: (savedContext, restoredAccountId) => {
+                const nextContext: AutoPopUpContext = {
+                  ...savedContext,
+                  config: {
+                    ...savedContext.config,
+                  },
+                  isRunning: false,
+                  goodsAutoFillAttempted: savedContext.goodsAutoFillAttempted ?? false,
+                  goodsAutoFillLocked: savedContext.goodsAutoFillLocked ?? false,
+                }
+                if (
+                  nextContext.config.goodsIds &&
+                  nextContext.config.goodsIds.length > 0 &&
+                  (!nextContext.config.goods || nextContext.config.goods.length === 0)
+                ) {
+                  nextContext.config.goods = nextContext.config.goodsIds.map(id => ({ id }))
+                  console.log(
+                    `[AutoPopUp] 数据迁移: account ${restoredAccountId} goodsIds -> goods`,
+                  )
+                }
+                return nextContext
+              },
+            })
+
+            console.log(
+              `[AutoPopUp] Hydrating single account context for ${accountId}: ${restored ? 'restored' : 'created-default'}`,
+            )
+            state.contexts[accountId] = restored ?? defaultContext()
+          })
+        }
+
+        runWhenAccountsReady(loadContext)
+      },
+
       loadUserContexts: (userId: string) => {
         const loadContexts = () => {
           set(state => {
+            const prevContexts: Record<string, AutoPopUpContext> =
+              state.currentUserId === userId ? state.contexts : {}
             state.currentUserId = userId
-            state.contexts = loadAccountScopedContexts({
+            const loadedContexts = loadAccountScopedContexts<AutoPopUpContext, 'auto-popup'>({
               namespace: 'auto-popup',
               userId,
               restoreContext: (savedContext, accountId) => {
@@ -217,6 +268,22 @@ export const useAutoPopUpStore = create<AutoPopUpStore>()(
                 return nextContext
               },
             })
+
+            console.log(
+              `[AutoPopUp] Loading all contexts for user ${userId}: loaded=${Object.keys(loadedContexts).length}, prev=${Object.keys(prevContexts).length}`,
+            )
+            state.contexts = loadedContexts
+
+            for (const [accountId, existingContext] of Object.entries(prevContexts)) {
+              if (!existingContext) continue
+
+              if (existingContext.isRunning || !state.contexts[accountId]) {
+                console.log(
+                  `[AutoPopUp] Preserving in-memory context for ${accountId}: isRunning=${existingContext.isRunning}`,
+                )
+                state.contexts[accountId] = existingContext
+              }
+            }
           })
         }
 
@@ -390,6 +457,18 @@ export const useShortcutListener = () => {
 
 export const useCurrentAutoPopUp = <T>(getter: (context: AutoPopUpContext) => T): T => {
   const currentAccountId = useAccounts(state => state.currentAccountId)
+  const { ensureContextLoaded } = useAutoPopUpStore()
+  const { user } = useAuthStore()
+
+  useEffect(() => {
+    if (currentAccountId && user?.id) {
+      const state = useAutoPopUpStore.getState()
+      if (!state.contexts[currentAccountId]) {
+        ensureContextLoaded(user.id, currentAccountId)
+      }
+    }
+  }, [currentAccountId, user?.id, ensureContextLoaded])
+
   const defaultContextRef = useRef(defaultContext())
   return useAutoPopUpStore(
     useShallow(state => {

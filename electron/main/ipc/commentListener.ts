@@ -36,7 +36,6 @@ function setupIpcHandlers() {
         // 正常停止也要广播 stopped 事件，避免前端 TaskManager /
         // 自动回复 / 数据监控状态残留到下一次开播。
         windowManager.send(IPC_CHANNELS.tasks.commentListener.stoppedFor(accountId), accountId)
-        windowManager.send(IPC_CHANNELS.tasks.commentListener.stopped, accountId)
       }),
       Result.inspectError(error => {
         const logger = createLogger(`@${accountManager.getAccountName(accountId)}`).scope(TASK_NAME)
@@ -70,8 +69,3 @@ function setupIpcHandlers() {
 export function setupCommentListenerIpcHandlers() {
   setupIpcHandlers()
 }
-
-/**
- * @deprecated 使用 setupCommentListenerIpcHandlers
- */
-export const setupAutoReplyIpcHandlers = setupCommentListenerIpcHandlers

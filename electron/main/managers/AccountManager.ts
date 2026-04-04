@@ -123,6 +123,14 @@ export class AccountManager {
     return this.accountNames.get(accountId) ?? '未定义账号'
   }
 
+  getActiveTaskTypes(accountId: string): string[] {
+    const accountSession = this.accountSessions.get(accountId)
+    if (!accountSession) {
+      return []
+    }
+    return accountSession.getActiveTaskTypes()
+  }
+
   async closeSession(
     accountId: string,
     reason?: string,

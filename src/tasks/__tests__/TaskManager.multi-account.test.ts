@@ -312,6 +312,40 @@ describe('TaskManager 多账号隔离测试', () => {
       expect(firstStart.success).toBe(true)
       expect(taskManager.getStatus('autoSpeak', 'account-a')).toBe('running')
     })
+
+    it('任务启动中的窗口内收到 stop 应在启动完成后立即停下', async () => {
+      taskManager = new TaskManagerImpl()
+      SlowStartTask.prepare()
+      taskManager.register(SlowStartTask as any)
+
+      const ctxA = createMockContext('account-a')
+
+      const startPromise = taskManager.start('autoSpeak', ctxA)
+      await taskManager.stop('autoSpeak', 'manual', 'account-a')
+
+      SlowStartTask.releaseStart?.()
+      const startResult = await startPromise
+
+      expect(startResult.success).toBe(true)
+      expect(taskManager.getStatus('autoSpeak', 'account-a')).toBe('stopped')
+    })
+
+    it('stopAllForAccount 应覆盖启动中的任务', async () => {
+      taskManager = new TaskManagerImpl()
+      SlowStartTask.prepare()
+      taskManager.register(SlowStartTask as any)
+
+      const ctxA = createMockContext('account-a')
+
+      const startPromise = taskManager.start('autoSpeak', ctxA)
+      await taskManager.stopAllForAccount('account-a', 'disconnected')
+
+      SlowStartTask.releaseStart?.()
+      const startResult = await startPromise
+
+      expect(startResult.success).toBe(true)
+      expect(taskManager.getStatus('autoSpeak', 'account-a')).toBe('stopped')
+    })
   })
 
   describe('向后兼容性', () => {

@@ -23,6 +23,8 @@ import { useAutoPopUpStore } from '@/hooks/useAutoPopUp'
 import { useAutoReplyStore } from '@/hooks/useAutoReply'
 import { useLiveStatsStore } from '@/hooks/useLiveStats'
 import { useSubAccountStore } from '@/hooks/useSubAccount'
+import { taskManager } from '@/tasks'
+import type { StopReason } from '@/tasks/types'
 
 type TaskType = 'auto-message' | 'auto-popup' | 'auto-reply' | 'sub-account' | 'live-stats'
 
@@ -149,6 +151,9 @@ class TaskStateManager {
       `${this.logPrefix} Before stop:`,
       beforeTasks.map(t => `${t.type}=${t.isRunning}`),
     )
+
+    // 先让前端调度器消费停止请求，覆盖“任务启动中”的竞态窗口。
+    await taskManager.stopAllForAccount(accountId, this._mapReasonToTaskStopReason(reason))
 
     // 1. 停止自动回复（同时停止评论监听器和数据监控)
     const autoReplyResult = await this._stopAutoReply(accountId)
@@ -443,6 +448,19 @@ class TaskStateManager {
         return `已自动停止: ${taskNames}`
       default:
         return `已停止: ${taskNames}`
+    }
+  }
+
+  private _mapReasonToTaskStopReason(
+    reason: 'manual' | 'stream_ended' | 'disconnected' | 'page_closed' | 'auto_stop',
+  ): StopReason {
+    switch (reason) {
+      case 'manual':
+        return 'manual'
+      case 'stream_ended':
+        return 'stream_ended'
+      default:
+        return 'disconnected'
     }
   }
 }

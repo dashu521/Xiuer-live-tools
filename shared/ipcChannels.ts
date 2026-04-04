@@ -1,7 +1,6 @@
 const COMMENT_LISTENER_CHANNELS = {
   start: 'tasks:commentListener:start',
   stop: 'tasks:commentListener:stop',
-  stopped: 'tasks:commentListener:stopped',
   stoppedFor: (accountId: string) => `tasks:commentListener:stopped:${accountId}`,
   showComment: 'tasks:commentListener:showComment',
 } as const
@@ -54,8 +53,6 @@ export const IPC_CHANNELS = {
     autoMessage: {
       start: 'tasks:autoMessage:start',
       stop: 'tasks:autoMessage:stop',
-      /** @deprecated 使用 stoppedFor(accountId) 替代 */
-      stoppedEvent: 'tasks:autoMessage:stoppedEvent',
       /** 账号隔离的停止事件 */
       stoppedFor: (accountId: string) => `tasks:autoMessage:stopped:${accountId}`,
       updateConfig: 'tasks:autoMessage:updateConfig',
@@ -67,8 +64,6 @@ export const IPC_CHANNELS = {
       updateConfig: 'tasks:autoPopUp:updateConfig',
       fetchGoodsIds: 'tasks:autoPopUp:fetchGoodsIds',
       scanGoodsKnowledge: 'tasks:autoPopUp:scanGoodsKnowledge',
-      /** @deprecated 使用 stoppedFor(accountId) 替代 */
-      stoppedEvent: 'tasks:autoPopUp:stoppedEvent',
       /** 账号隔离的停止事件 */
       stoppedFor: (accountId: string) => `tasks:autoPopUp:stopped:${accountId}`,
       registerShortcuts: 'tasks:autoPopup:registerShortcut',
@@ -87,27 +82,17 @@ export const IPC_CHANNELS = {
     commentListener: {
       start: COMMENT_LISTENER_CHANNELS.start,
       stop: COMMENT_LISTENER_CHANNELS.stop,
-      /** @deprecated 使用 stoppedFor(accountId) 替代 */
-      stopped: COMMENT_LISTENER_CHANNELS.stopped,
       /** 账号隔离的监听器停止事件 */
       stoppedFor: COMMENT_LISTENER_CHANNELS.stoppedFor,
       showComment: COMMENT_LISTENER_CHANNELS.showComment,
     },
     autoReply: {
-      /** @deprecated 使用 tasks.commentListener.start 替代 */
-      startCommentListener: COMMENT_LISTENER_CHANNELS.start,
-      /** @deprecated 使用 tasks.commentListener.stop 替代 */
-      stopCommentListener: COMMENT_LISTENER_CHANNELS.stop,
-      /** @deprecated 使用 tasks.commentListener.stopped 替代 */
-      listenerStopped: COMMENT_LISTENER_CHANNELS.stopped,
-      /** @deprecated 使用 tasks.commentListener.stoppedFor(accountId) 替代 */
-      listenerStoppedFor: COMMENT_LISTENER_CHANNELS.stoppedFor,
-      /** @deprecated 使用 tasks.commentListener.showComment 替代 */
-      showComment: COMMENT_LISTENER_CHANNELS.showComment,
       startAutoReply: 'tasks:autoReply:startAutoReply',
       stopAutoReply: 'tasks:autoReply:stopAutoReply',
       replyGenerated: 'tasks:autoReply:replyGenerated',
       sendReply: 'tasks:autoReply:sendReply',
+      exportData: 'tasks:autoReply:exportData',
+      openExportFolder: 'tasks:autoReply:openExportFolder',
     },
     // 视频号上墙
     pinComment: 'tasks:pinComment',

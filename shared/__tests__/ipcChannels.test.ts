@@ -74,12 +74,6 @@ describe('IPC 通道契约测试', () => {
       expect(IPC_CHANNELS.tasks.commentListener).toHaveProperty('stop')
     })
 
-    it('应保留 autoReply 下的 commentListener 兼容别名', () => {
-      expect(IPC_CHANNELS.tasks).toHaveProperty('autoReply')
-      expect(IPC_CHANNELS.tasks.autoReply).toHaveProperty('startCommentListener')
-      expect(IPC_CHANNELS.tasks.autoReply).toHaveProperty('stopCommentListener')
-    })
-
     it('应包含 subAccount 子命名空间', () => {
       expect(IPC_CHANNELS.tasks).toHaveProperty('subAccount')
       expect(IPC_CHANNELS.tasks.subAccount).toHaveProperty('start')
@@ -90,12 +84,6 @@ describe('IPC 通道契约测试', () => {
   describe('通道命名唯一性', () => {
     it('所有通道值应唯一', () => {
       const allChannels: string[] = []
-      const allowedDuplicateChannels = new Set([
-        IPC_CHANNELS.tasks.autoReply.startCommentListener,
-        IPC_CHANNELS.tasks.autoReply.stopCommentListener,
-        IPC_CHANNELS.tasks.autoReply.listenerStopped,
-        IPC_CHANNELS.tasks.autoReply.showComment,
-      ])
 
       // 收集所有通道值
       Object.entries(IPC_CHANNELS).forEach(([_key, value]) => {
@@ -116,11 +104,8 @@ describe('IPC 通道契约测试', () => {
         }
       })
 
-      const nonAliasedChannels = allChannels.filter(
-        channel => !allowedDuplicateChannels.has(channel),
-      )
-      const uniqueChannels = new Set(nonAliasedChannels)
-      expect(uniqueChannels.size).toBe(nonAliasedChannels.length)
+      const uniqueChannels = new Set(allChannels)
+      expect(uniqueChannels.size).toBe(allChannels.length)
     })
   })
 

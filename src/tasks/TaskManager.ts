@@ -28,6 +28,8 @@ export class TaskManagerImpl {
   private accountTasks: Map<string, Map<TaskId, AccountTaskState>> = new Map()
   // 启动中的任务集合：用于锁住 await start() 窗口，防止重复启动
   private startInFlight: Set<string> = new Set()
+  // 启动窗口内收到的停止请求：避免任务在断线/关播后“启动完成又继续跑”
+  private pendingStopReasons: Map<string, StopReason> = new Map()
   // 已清理账号集合：用于区分“从未创建过”和“已显式清理”
   private cleanedAccounts: Set<string> = new Set()
   // 全局状态存储（向后兼容）
@@ -70,6 +72,18 @@ export class TaskManagerImpl {
 
   private getTaskScopeKey(accountId: string, taskId: TaskId): string {
     return `${accountId}:${taskId}`
+  }
+
+  private getPendingStopReason(accountId: string, taskId: TaskId): StopReason | undefined {
+    return this.pendingStopReasons.get(this.getTaskScopeKey(accountId, taskId))
+  }
+
+  private setPendingStopReason(accountId: string, taskId: TaskId, reason: StopReason): void {
+    this.pendingStopReasons.set(this.getTaskScopeKey(accountId, taskId), reason)
+  }
+
+  private clearPendingStopReason(accountId: string, taskId: TaskId): void {
+    this.pendingStopReasons.delete(this.getTaskScopeKey(accountId, taskId))
   }
 
   /**
@@ -203,6 +217,18 @@ export class TaskManagerImpl {
       task.status = 'running'
       this.statusStore.set(taskId, 'running')
 
+      const pendingStopReason = this.getPendingStopReason(accountId, taskId)
+      if (pendingStopReason) {
+        console.warn(
+          `[TaskManager] Task ${taskId} for account ${accountId} received a deferred stop during startup, stopping immediately. reason=${pendingStopReason}`,
+        )
+        this.clearPendingStopReason(accountId, taskId)
+        await task.stop(pendingStopReason)
+        taskState.status = task.status
+        this.statusStore.set(taskId, task.status)
+        return { success: true }
+      }
+
       console.log(`[TaskManager] Task ${taskId} started successfully for account ${accountId}`)
 
       return { success: true }
@@ -219,6 +245,9 @@ export class TaskManagerImpl {
       }
     } finally {
       this.startInFlight.delete(taskScopeKey)
+      if (taskState.status !== 'running') {
+        this.clearPendingStopReason(accountId, taskId)
+      }
     }
   }
 
@@ -231,19 +260,42 @@ export class TaskManagerImpl {
   async stop(taskId: TaskId, reason: StopReason, accountId?: string): Promise<void> {
     // 【修复】如果提供了 accountId，只停止该账号的任务
     if (accountId) {
+      const taskScopeKey = this.getTaskScopeKey(accountId, taskId)
       const accountMap = this.accountTasks.get(accountId)
+      const hasStartInFlight = this.startInFlight.has(taskScopeKey)
       if (!accountMap) {
+        if (hasStartInFlight) {
+          this.setPendingStopReason(accountId, taskId, reason)
+          console.warn(
+            `[TaskManager] Deferred stop for task ${taskId} on account ${accountId} while task map is not ready. reason=${reason}`,
+          )
+          return
+        }
         console.warn(`[TaskManager] No tasks found for account ${accountId}`)
         return
       }
 
       const taskState = accountMap.get(taskId)
       if (!taskState) {
+        if (hasStartInFlight) {
+          this.setPendingStopReason(accountId, taskId, reason)
+          console.warn(
+            `[TaskManager] Deferred stop for task ${taskId} on account ${accountId} while task instance is starting. reason=${reason}`,
+          )
+          return
+        }
         console.warn(`[TaskManager] Task ${taskId} not found for account ${accountId}`)
         return
       }
 
       if (taskState.status === 'idle' || taskState.status === 'stopped') {
+        if (hasStartInFlight) {
+          this.setPendingStopReason(accountId, taskId, reason)
+          console.warn(
+            `[TaskManager] Deferred stop for task ${taskId} on account ${accountId} during startup window. schedulerStatus=${taskState.status}, reason=${reason}`,
+          )
+          return
+        }
         console.log(
           `[TaskManager] Task ${taskId} for account ${accountId} is already ${taskState.status}`,
         )
@@ -288,25 +340,32 @@ export class TaskManagerImpl {
   async stopAllForAccount(accountId: string, reason: StopReason): Promise<void> {
     console.log(`[TaskManager] stopAllForAccount called for ${accountId}, reason: ${reason}`)
     const accountMap = this.accountTasks.get(accountId)
-    if (!accountMap) {
+    const hasInFlightTask = Array.from(this.taskTemplates.keys()).some(taskId =>
+      this.startInFlight.has(this.getTaskScopeKey(accountId, taskId)),
+    )
+
+    if (!accountMap && !hasInFlightTask) {
       console.log(`[TaskManager] No tasks found for account ${accountId}`)
       return
     }
 
-    const runningTasks: TaskId[] = []
-    for (const [taskId, taskState] of accountMap.entries()) {
-      if (taskState.status === 'running' || taskState.status === 'stopping') {
-        runningTasks.push(taskId)
-      }
-    }
+    const taskIds = Array.from(this.taskTemplates.keys())
+    const stoppableTasks = taskIds.filter(taskId => {
+      const taskState = accountMap?.get(taskId)
+      const schedulerRunning = taskState?.status === 'running' || taskState?.status === 'stopping'
+      const starting = this.startInFlight.has(this.getTaskScopeKey(accountId, taskId))
+      return schedulerRunning || starting
+    })
 
-    if (runningTasks.length === 0) {
-      console.log(`[TaskManager] No running tasks for account ${accountId}`)
+    if (stoppableTasks.length === 0) {
+      console.log(`[TaskManager] No running or starting tasks for account ${accountId}`)
       return
     }
 
-    console.log(`[TaskManager] Stopping ${runningTasks.length} tasks for account ${accountId}`)
-    await Promise.all(runningTasks.map(taskId => this.stop(taskId, reason, accountId)))
+    console.log(
+      `[TaskManager] Stopping ${stoppableTasks.length} running/starting tasks for account ${accountId}`,
+    )
+    await Promise.all(stoppableTasks.map(taskId => this.stop(taskId, reason, accountId)))
   }
 
   /**
@@ -383,6 +442,7 @@ export class TaskManagerImpl {
 
     for (const taskId of this.taskTemplates.keys()) {
       this.startInFlight.delete(this.getTaskScopeKey(accountId, taskId))
+      this.clearPendingStopReason(accountId, taskId)
     }
   }
 }
