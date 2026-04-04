@@ -8,24 +8,24 @@ describe('normalizeAccountSelection', () => {
     { id: 'acc-3', name: '账号3' },
   ]
 
-  it('keeps valid current and default ids', () => {
+  it('keeps valid current id and ignores legacy default id', () => {
     expect(normalizeAccountSelection(accounts, 'acc-2', 'acc-3')).toEqual({
       currentAccountId: 'acc-2',
-      defaultAccountId: 'acc-3',
+      defaultAccountId: null,
     })
   })
 
-  it('falls back current to default when current is invalid', () => {
+  it('falls back current to first account when current is invalid', () => {
     expect(normalizeAccountSelection(accounts, 'missing', 'acc-3')).toEqual({
-      currentAccountId: 'acc-3',
-      defaultAccountId: 'acc-3',
+      currentAccountId: 'acc-1',
+      defaultAccountId: null,
     })
   })
 
-  it('falls back both to first account when default is invalid', () => {
+  it('falls back to first account when current is empty', () => {
     expect(normalizeAccountSelection(accounts, '', 'missing')).toEqual({
       currentAccountId: 'acc-1',
-      defaultAccountId: 'acc-1',
+      defaultAccountId: null,
     })
   })
 

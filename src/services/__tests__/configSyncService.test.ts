@@ -50,7 +50,7 @@ describe('configSyncService account selection', () => {
     configSyncService.resetForTests()
   })
 
-  it('collects currentAccountId and defaultAccountId for cloud sync', async () => {
+  it('collects currentAccountId and clears legacy defaultAccountId for cloud sync', async () => {
     const { useAccounts } = await import('@/hooks/useAccounts')
     const { useAutoMessageStore } = await import('@/hooks/useAutoMessage')
     const { useAutoPopUpStore } = await import('@/hooks/useAutoPopUp')
@@ -122,7 +122,7 @@ describe('configSyncService account selection', () => {
     expect(configSyncService.collectConfigData()).toMatchObject({
       accounts: [{ id: 'acc-1', name: '账号1' }],
       currentAccountId: 'acc-1',
-      defaultAccountId: 'acc-1',
+      defaultAccountId: null,
       autoReplyConfigs: {
         'acc-1': {
           config: {
@@ -159,7 +159,7 @@ describe('configSyncService account selection', () => {
     })
   })
 
-  it('restores valid current/default account ids from cloud config', async () => {
+  it('restores current account id from cloud config and ignores legacy default account id', async () => {
     getUserConfigMock.mockResolvedValue({
       ok: true,
       data: {
@@ -199,7 +199,7 @@ describe('configSyncService account selection', () => {
         { id: 'acc-2', name: '账号2' },
       ],
       currentAccountId: 'acc-2',
-      defaultAccountId: 'acc-1',
+      defaultAccountId: null,
     })
   })
 
@@ -235,7 +235,7 @@ describe('configSyncService account selection', () => {
 
     expect(useAccounts.getState()).toMatchObject({
       currentAccountId: 'acc-1',
-      defaultAccountId: 'acc-1',
+      defaultAccountId: null,
     })
   })
 

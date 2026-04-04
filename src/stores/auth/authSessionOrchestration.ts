@@ -2,6 +2,7 @@ import { AUTH_LAST_IDENTIFIER_KEY, AUTH_REMEMBER_ME_KEY } from '@/constants/auth
 import { useAccounts } from '@/hooks/useAccounts'
 import { useAutoMessageStore } from '@/hooks/useAutoMessage'
 import { useAutoPopUpStore } from '@/hooks/useAutoPopUp'
+import { useAutoReplyStore } from '@/hooks/useAutoReply'
 import { useAutoReplyConfigStore } from '@/hooks/useAutoReplyConfig'
 import { useChromeConfigStore } from '@/hooks/useChromeConfig'
 import { useLiveControlStore } from '@/hooks/useLiveControl'
@@ -14,6 +15,7 @@ const USER_SCOPED_STORAGE_PREFIXES = [
   'account-config',
   'chrome-config',
   'auto-reply',
+  'auto-reply-history',
   'auto-message',
   'auto-popup',
   'live-control',
@@ -27,6 +29,7 @@ export function loadUserBaseSessionData(userId: string): void {
 }
 
 export function loadUserScopedRuntimeContexts(userId: string): void {
+  useAutoReplyStore.getState().loadUserContexts(userId)
   useAutoReplyConfigStore.getState().loadUserContexts(userId)
   useAutoMessageStore.getState().loadUserContexts(userId)
   useAutoPopUpStore.getState().loadUserContexts(userId)
@@ -64,7 +67,7 @@ export function saveAccountsSnapshot(userId: string | null | undefined, logMessa
     state: {
       accounts: accountsState.accounts,
       currentAccountId: accountsState.currentAccountId,
-      defaultAccountId: accountsState.defaultAccountId,
+      defaultAccountId: null,
     },
     version: 0,
   }
@@ -99,6 +102,7 @@ export function resetUserScopedStores(): void {
   useLiveControlStore.getState().resetAllContexts?.()
   useAutoMessageStore.getState().resetAllContexts?.()
   useAutoPopUpStore.getState().resetAllContexts?.()
+  useAutoReplyStore.getState().resetAllContexts?.()
   useAutoReplyConfigStore.getState().resetAllContexts?.()
   useChromeConfigStore.getState().resetAllContexts()
   useSubAccountStore.getState().resetAllContexts?.()

@@ -104,15 +104,11 @@ export class AccountStorageService {
   removeAccount(accountId: string): void {
     const userData = this.getUserData()
     userData.accounts = userData.accounts.filter(acc => acc.id !== accountId)
+    userData.defaultAccountId = null
 
     // 如果删除的是当前账号，更新当前账号ID
     if (userData.currentAccountId === accountId) {
       userData.currentAccountId = userData.accounts[0]?.id || ''
-    }
-
-    // 如果删除的是默认账号，更新默认账号ID
-    if (userData.defaultAccountId === accountId) {
-      userData.defaultAccountId = userData.accounts[0]?.id || null
     }
 
     this.saveUserData(userData)
@@ -139,16 +135,15 @@ export class AccountStorageService {
    * 获取默认账号ID
    */
   getDefaultAccountId(): string | null {
-    const userData = this.getUserData()
-    return userData.defaultAccountId
+    return null
   }
 
   /**
    * 设置默认账号ID
    */
-  setDefaultAccountId(accountId: string | null): void {
+  setDefaultAccountId(_accountId: string | null): void {
     const userData = this.getUserData()
-    userData.defaultAccountId = accountId
+    userData.defaultAccountId = null
     this.saveUserData(userData)
   }
 

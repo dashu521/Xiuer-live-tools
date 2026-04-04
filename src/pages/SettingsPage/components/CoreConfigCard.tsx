@@ -187,15 +187,13 @@ export function CoreConfigCard() {
     })
   }
 
-  const { accounts, removeAccount, currentAccountId, defaultAccountId } = useAccounts()
+  const { accounts, removeAccount, currentAccountId } = useAccounts()
   const connectState = useCurrentLiveControl(context => context.connectState)
   const isConnected = connectState.status === 'connected'
   const currentAccount = accounts.find(acc => acc.id === currentAccountId)
-  const isDefaultAccount = defaultAccountId === currentAccountId
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
 
   const handleDeleteAccount = useMemoizedFn(async () => {
-    if (isDefaultAccount) return
     if (isConnected) {
       await window.ipcRenderer.invoke(IPC_CHANNELS.tasks.liveControl.disconnect, currentAccountId)
     }
@@ -384,44 +382,37 @@ export function CoreConfigCard() {
               label="删除当前账号"
               description={currentAccount ? `当前账号：${currentAccount.name}` : '无账号'}
             >
-              {!isDefaultAccount ? (
-                isConnected ? (
-                  <Button variant="outline" size="sm" className="h-9" disabled>
-                    <ShieldAlert className="mr-2 h-4 w-4" />
-                    请先断开连接
-                  </Button>
-                ) : (
-                  <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-9">
-                        <TrashIcon className="mr-2 h-4 w-4" />
-                        删除账号
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>确认删除该账号？</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          账号删除后无法恢复，请确保该账号的任务已停止。
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>取消</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={handleDeleteAccount}
-                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                        >
-                          确认删除
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                )
-              ) : (
+              {isConnected ? (
                 <Button variant="outline" size="sm" className="h-9" disabled>
                   <ShieldAlert className="mr-2 h-4 w-4" />
-                  默认账号不可删
+                  请先断开连接
                 </Button>
+              ) : (
+                <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-9">
+                      <TrashIcon className="mr-2 h-4 w-4" />
+                      删除账号
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>确认删除该账号？</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        账号删除后无法恢复，请确保该账号的任务已停止。
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>取消</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={handleDeleteAccount}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        确认删除
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               )}
             </SettingRow>
           </div>

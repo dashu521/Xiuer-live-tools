@@ -15,7 +15,7 @@ interface Account {
 export function normalizeAccountSelection<T extends { id: string }>(
   accounts: T[],
   currentAccountId: string,
-  defaultAccountId: string | null,
+  _defaultAccountId: string | null,
 ): { currentAccountId: string; defaultAccountId: string | null } {
   const firstAccountId = accounts[0]?.id ?? ''
   const accountIds = new Set(accounts.map(account => account.id))
@@ -27,14 +27,12 @@ export function normalizeAccountSelection<T extends { id: string }>(
     }
   }
 
-  const nextDefaultAccountId =
-    defaultAccountId && accountIds.has(defaultAccountId) ? defaultAccountId : firstAccountId
   const nextCurrentAccountId =
-    currentAccountId && accountIds.has(currentAccountId) ? currentAccountId : nextDefaultAccountId
+    currentAccountId && accountIds.has(currentAccountId) ? currentAccountId : firstAccountId
 
   return {
     currentAccountId: nextCurrentAccountId,
-    defaultAccountId: nextDefaultAccountId,
+    defaultAccountId: null,
   }
 }
 
@@ -160,13 +158,9 @@ export const useAccounts = create<AccountsStore>()(
           id: newId,
           name,
         })
-        const normalized = normalizeAccountSelection(
-          state.accounts,
-          state.currentAccountId,
-          state.defaultAccountId,
-        )
+        const normalized = normalizeAccountSelection(state.accounts, state.currentAccountId, null)
         state.currentAccountId = normalized.currentAccountId
-        state.defaultAccountId = normalized.defaultAccountId
+        state.defaultAccountId = null
       })
 
       // 在 set 外部调用 saveToStorage，确保使用最新的状态
@@ -174,7 +168,7 @@ export const useAccounts = create<AccountsStore>()(
       saveToStorage(currentState.currentUserId, {
         accounts: currentState.accounts,
         currentAccountId: currentState.currentAccountId,
-        defaultAccountId: currentState.defaultAccountId,
+        defaultAccountId: null,
       })
 
       eventEmitter.emit(EVENTS.ACCOUNT_ADDED, newId, name)
@@ -184,33 +178,14 @@ export const useAccounts = create<AccountsStore>()(
 
     removeAccount: (id: string) => {
       set(state => {
-        if (state.defaultAccountId === id) {
-          if (
-            state.currentAccountId &&
-            state.currentAccountId !== id &&
-            state.accounts.some(acc => acc.id === state.currentAccountId)
-          ) {
-            state.defaultAccountId = state.currentAccountId
-          } else {
-            const remainingAccounts = state.accounts.filter(acc => acc.id !== id)
-            if (remainingAccounts.length > 0) {
-              state.defaultAccountId = remainingAccounts[0].id
-            } else {
-              state.defaultAccountId = null
-            }
-          }
-        }
-
         state.accounts = state.accounts.filter(acc => acc.id !== id)
+        state.defaultAccountId = null
 
         if (state.currentAccountId === id) {
-          if (
-            state.defaultAccountId &&
-            state.accounts.some(acc => acc.id === state.defaultAccountId)
-          ) {
-            state.currentAccountId = state.defaultAccountId
-          } else if (state.accounts.length > 0) {
+          if (state.accounts.length > 0) {
             state.currentAccountId = state.accounts[0].id
+          } else {
+            state.currentAccountId = ''
           }
         }
       })
@@ -221,7 +196,7 @@ export const useAccounts = create<AccountsStore>()(
         {
           accounts: currentState.accounts,
           currentAccountId: currentState.currentAccountId,
-          defaultAccountId: currentState.defaultAccountId,
+          defaultAccountId: null,
         },
         { immediate: true },
       )
@@ -230,6 +205,13 @@ export const useAccounts = create<AccountsStore>()(
     },
 
     switchAccount: (id: string) => {
+      const previousAccount = get().accounts.find(acc => acc.id === get().currentAccountId)
+      const nextAccount = get().accounts.find(acc => acc.id === id)
+
+      console.log(
+        `[Accounts] switchAccount: ${previousAccount?.name || previousAccount?.id || 'unknown'} -> ${nextAccount?.name || nextAccount?.id || id}`,
+      )
+
       set(state => {
         state.currentAccountId = id
       })
@@ -241,7 +223,7 @@ export const useAccounts = create<AccountsStore>()(
         {
           accounts: currentState.accounts,
           currentAccountId: currentState.currentAccountId,
-          defaultAccountId: currentState.defaultAccountId,
+          defaultAccountId: null,
         },
         { immediate: true },
       )
@@ -250,19 +232,7 @@ export const useAccounts = create<AccountsStore>()(
     },
 
     setDefaultAccount: (id: string) => {
-      const state = get()
-      if (!state.accounts.some(acc => acc.id === id)) return
-
-      set(state => {
-        state.defaultAccountId = id
-      })
-
-      const currentState = get()
-      saveToStorage(currentState.currentUserId, {
-        accounts: currentState.accounts,
-        currentAccountId: currentState.currentAccountId,
-        defaultAccountId: currentState.defaultAccountId,
-      })
+      console.log(`[Accounts] setDefaultAccount ignored (feature removed): ${id}`)
     },
 
     getCurrentAccount: () => {
@@ -283,7 +253,7 @@ export const useAccounts = create<AccountsStore>()(
       saveToStorage(currentState.currentUserId, {
         accounts: currentState.accounts,
         currentAccountId: currentState.currentAccountId,
-        defaultAccountId: currentState.defaultAccountId,
+        defaultAccountId: null,
       })
     },
 
@@ -305,7 +275,7 @@ export const useAccounts = create<AccountsStore>()(
       saveToStorage(currentState.currentUserId, {
         accounts: currentState.accounts,
         currentAccountId: currentState.currentAccountId,
-        defaultAccountId: currentState.defaultAccountId,
+        defaultAccountId: null,
       })
     },
 
@@ -322,10 +292,10 @@ export const useAccounts = create<AccountsStore>()(
           const normalized = normalizeAccountSelection(
             state.accounts,
             loadedData.currentAccountId || '',
-            loadedData.defaultAccountId || null,
+            null,
           )
           state.currentAccountId = normalized.currentAccountId
-          state.defaultAccountId = normalized.defaultAccountId
+          state.defaultAccountId = null
         } else {
           state.accounts = []
           state.currentAccountId = ''
@@ -343,7 +313,7 @@ export const useAccounts = create<AccountsStore>()(
           {
             accounts: currentState.accounts,
             currentAccountId: currentState.currentAccountId,
-            defaultAccountId: currentState.defaultAccountId,
+            defaultAccountId: null,
           },
           { immediate: true },
         )

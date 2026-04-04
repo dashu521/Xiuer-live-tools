@@ -107,7 +107,7 @@ class ConfigSyncService {
     const config: UserConfigData = {
       accounts: accountsState.accounts,
       currentAccountId: accountsState.currentAccountId || undefined,
-      defaultAccountId: accountsState.defaultAccountId || undefined,
+      defaultAccountId: null,
       platformPreferences: platformPrefState.preferences,
       autoReplyConfigs: collectAutoReplyConfigs(),
       autoMessageConfigs: collectAutoMessageConfigs(),
@@ -221,12 +221,12 @@ class ConfigSyncService {
         const normalized = normalizeAccountSelection(
           config.accounts,
           config.currentAccountId || '',
-          config.defaultAccountId || null,
+          null,
         )
         useAccounts.setState({
           accounts: config.accounts,
           currentAccountId: normalized.currentAccountId,
-          defaultAccountId: normalized.defaultAccountId,
+          defaultAccountId: null,
         })
         if (DEBUG) console.log('[ConfigSync] Applied accounts:', config.accounts.length)
       }
