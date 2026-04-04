@@ -273,6 +273,9 @@ describe('kickout cleanup', () => {
         connectState: { ...DEFAULT_CONNECT_STATE },
         accountName: null,
         streamState: 'unknown',
+        liveSessionId: null,
+        liveSessionStartedAt: null,
+        liveSessionEndedAt: null,
       },
     })
 

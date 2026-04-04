@@ -119,7 +119,7 @@ describe('runtime config sync guards', () => {
     })
 
     expect(window.ipcRenderer.invoke).toHaveBeenCalledWith('tasks:commentListener:start', 'acc-1', {
-      source: 'websocket',
+      source: 'control',
       ws: { port: 23456 },
     })
   })
