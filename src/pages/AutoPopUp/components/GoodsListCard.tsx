@@ -12,7 +12,7 @@ import {
   ScanSearch,
   Trash2,
 } from 'lucide-react'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -628,7 +628,18 @@ const GoodsItemEditDialog: React.FC<GoodsItemEditDialogProps> = ({
 
 // 商品列表卡片组件
 const GoodsListCard = React.memo(
-  ({ initialEditingGoodsId }: { initialEditingGoodsId?: number | null }) => {
+  ({
+    initialEditingGoodsId,
+    initialAssistContext,
+  }: {
+    initialEditingGoodsId?: number | null
+    initialAssistContext?: {
+      title?: string | null
+      description?: string | null
+      sampleQuestion?: string | null
+      filter?: string | null
+    }
+  }) => {
     // 【P1-3】使用 goods 替代 goodsIds
     const goods = useCurrentAutoPopUp(context => context.config.goods) ?? []
     const goodsAutoFillAttempted = useCurrentAutoPopUp(
@@ -652,6 +663,8 @@ const GoodsListCard = React.memo(
     const [editingItem, setEditingItem] = useState<GoodsItemConfig | null>(null)
     const [isAutoFilling, setIsAutoFilling] = useState(false)
     const [importText, setImportText] = useState('')
+    const [dismissedAssist, setDismissedAssist] = useState(false)
+    const [assistFilter, setAssistFilter] = useState<string>('all')
     const autoFillRequestRef = useRef(false)
 
     // 当账号切换时，重置编辑状态
@@ -660,14 +673,42 @@ const GoodsListCard = React.memo(
       setIsEditing(false)
       setInputValue('')
       setEditingItem(null)
+      setDismissedAssist(false)
+      setAssistFilter(initialAssistContext?.filter?.trim() || 'all')
       autoFillRequestRef.current = false
-    }, [currentAccountId])
+    }, [currentAccountId, initialAssistContext?.filter])
 
     useEffect(() => {
       if (!initialEditingGoodsId) return
       const existing = goods.find(item => item.id === initialEditingGoodsId)
       setEditingItem(existing ?? { id: initialEditingGoodsId })
     }, [goods, initialEditingGoodsId])
+
+    const assistTitle = initialAssistContext?.title?.trim()
+    const assistDescription = initialAssistContext?.description?.trim()
+    const assistQuestion = initialAssistContext?.sampleQuestion?.trim()
+    const initialAssistFilter = initialAssistContext?.filter?.trim()
+    const showAssistWorkbench =
+      !dismissedAssist && Boolean(assistTitle || assistDescription || assistQuestion)
+
+    useEffect(() => {
+      if (initialAssistFilter) {
+        setAssistFilter(initialAssistFilter)
+      }
+    }, [initialAssistFilter])
+
+    const filteredGoods = useMemo(() => {
+      switch (assistFilter) {
+        case 'faq-missing':
+          return goods.filter(item => !item.faq?.length)
+        case 'price-stock-missing':
+          return goods.filter(item => !item.priceText || !item.stockText)
+        case 'needs-basics':
+          return goods.filter(item => !item.title || !item.priceText || !item.faq?.length)
+        default:
+          return goods
+      }
+    }, [assistFilter, goods])
 
     // 【测试模式检查】仅在测试平台或开发模式下启用 Mock 数据
     const isTestMode = shouldUseMockGoods(platform)
@@ -1010,6 +1051,104 @@ const GoodsListCard = React.memo(
             </TabsList>
 
             <TabsContent value="goods-list" className="space-y-4">
+              {showAssistWorkbench && (
+                <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium text-foreground">
+                        {assistTitle || '知识卡补全工作台'}
+                      </div>
+                      {assistDescription ? (
+                        <p className="text-xs leading-5 text-muted-foreground">
+                          {assistDescription}
+                        </p>
+                      ) : null}
+                      {assistQuestion ? (
+                        <div className="rounded-md bg-background/80 px-2.5 py-2 text-[11px] text-muted-foreground">
+                          样本问题：{assistQuestion}
+                        </div>
+                      ) : null}
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 shrink-0"
+                      onClick={() => setDismissedAssist(true)}
+                    >
+                      收起
+                    </Button>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {initialEditingGoodsId ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8"
+                        onClick={() => {
+                          const existing = goods.find(item => item.id === initialEditingGoodsId)
+                          setEditingItem(existing ?? { id: initialEditingGoodsId })
+                        }}
+                      >
+                        <Package className="mr-1.5 h-3.5 w-3.5" />
+                        继续补 {initialEditingGoodsId} 号商品
+                      </Button>
+                    ) : null}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8"
+                      onClick={() => setIsEditing(true)}
+                    >
+                      <Plus className="mr-1.5 h-3.5 w-3.5" />
+                      批量补知识卡
+                    </Button>
+                    <Button
+                      variant={assistFilter === 'all' ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-8"
+                      onClick={() => setAssistFilter('all')}
+                    >
+                      全部商品
+                    </Button>
+                    <Button
+                      variant={assistFilter === 'faq-missing' ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-8"
+                      onClick={() => setAssistFilter('faq-missing')}
+                    >
+                      只看缺 FAQ
+                    </Button>
+                    <Button
+                      variant={assistFilter === 'price-stock-missing' ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-8"
+                      onClick={() => setAssistFilter('price-stock-missing')}
+                    >
+                      只看缺价格/库存
+                    </Button>
+                    <Button
+                      variant={assistFilter === 'needs-basics' ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-8"
+                      onClick={() => setAssistFilter('needs-basics')}
+                    >
+                      只看待完善
+                    </Button>
+                  </div>
+                  <div className="mt-2 text-[11px] text-muted-foreground">
+                    当前筛选：
+                    {assistFilter === 'faq-missing'
+                      ? '缺 FAQ'
+                      : assistFilter === 'price-stock-missing'
+                        ? '缺价格/库存'
+                        : assistFilter === 'needs-basics'
+                          ? '待完善'
+                          : '全部商品'}
+                    ，共 {filteredGoods.length} 个商品。
+                  </div>
+                </div>
+              )}
+
               {/* 商品列表编辑区 */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -1092,10 +1231,10 @@ const GoodsListCard = React.memo(
                     onClick={handleStartEdit}
                     className="ui-hover-surface min-h-[120px] cursor-text rounded-lg border bg-muted/30 p-4"
                   >
-                    {goods.length > 0 ? (
+                    {filteredGoods.length > 0 ? (
                       <TooltipProvider>
                         <div className="flex flex-wrap gap-2">
-                          {goods.map(item => (
+                          {filteredGoods.map(item => (
                             <Tooltip key={item.id}>
                               <TooltipTrigger asChild>
                                 <div

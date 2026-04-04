@@ -23,6 +23,15 @@ export default function AutoPopUp() {
     const parsed = Number.parseInt(raw, 10)
     return Number.isNaN(parsed) ? null : parsed
   }, [searchParams])
+  const assistContext = useMemo(
+    () => ({
+      title: searchParams.get('assistTitle'),
+      description: searchParams.get('assistDescription'),
+      sampleQuestion: searchParams.get('assistQuestion'),
+      filter: searchParams.get('assistFilter'),
+    }),
+    [searchParams],
+  )
 
   // 自动停机：当 Gate 条件不满足时，自动停止任务
   useAutoStopOnGateLoss({
@@ -60,7 +69,10 @@ export default function AutoPopUp() {
             />
 
             {/* 商品列表卡片 */}
-            <GoodsListCard initialEditingGoodsId={editGoodsId} />
+            <GoodsListCard
+              initialEditingGoodsId={editGoodsId}
+              initialAssistContext={assistContext}
+            />
           </div>
         </div>
       </div>
