@@ -1,11 +1,11 @@
 # 秀儿直播助手
 
-> **版本**: v1.5.6
-> **最后更新**: 2026-03-29
+> **版本**: v1.6.3
+> **最后更新**: 2026-04-04
 > **状态**: 当前有效
 > **负责人**: TEAM
 > **当前适用性**: 项目总入口文档
-> **版本主题**: 稳定性与发布基线增强版
+> **版本主题**: 任务状态一致性与智能运营工作台增强版
 
 ---
 
@@ -53,9 +53,9 @@
 
 | 平台 | 下载地址 | 适用系统 |
 |------|----------|----------|
-| Windows | [下载 Windows 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.6.2_win-x64.exe) | Windows 10/11 64位 |
-| macOS Apple 芯片 | [下载 Apple 芯片版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.6.2_macos_arm64.dmg) | M1/M2/M3/M4 Mac |
-| macOS Intel | [下载 Intel 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.6.2_macos_x64.dmg) | Intel 处理器 Mac |
+| Windows | [下载 Windows 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.6.3_win-x64.exe) | Windows 10/11 64位 |
+| macOS Apple 芯片 | [下载 Apple 芯片版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.6.3_macos_arm64.dmg) | M1/M2/M3/M4 Mac |
+| macOS Intel | [下载 Intel 版](https://download.xiuer.work/releases/latest/Xiuer-Live-Assistant_1.6.3_macos_x64.dmg) | Intel 处理器 Mac |
 
 > **安装提示**：
 > - Windows：如果浏览器提示风险，请点击"保留"或"更多信息"→"仍要运行"
@@ -227,12 +227,12 @@ npm run auth:check
 
 ## 当前稳定版本
 
-**v1.5.6** - 当前稳定版本
+**v1.6.3** - 当前稳定版本
 
-- 新增自动弹窗商品序号自动填充，并在首次空列表且已连接中控台时自动初始化一次
-- 默认直播统计导出改为 CSV，保留显式 Excel 导出入口
-- 修复打包后微信支持二维码不显示的问题
-- 持续收口主进程与前端包体，提升启动稳定性与发布基线
+- 统一任务真实运行态回填，减少按钮、绿点与后台状态分叉
+- 新增自动回复洞察面板、会话导出和知识回复增强链路
+- 新增自动弹窗商品知识卡辅助工作台
+- 取消默认账号不可删等旧逻辑，并修复监听来源空值问题
 
 ## 技术支持
 
