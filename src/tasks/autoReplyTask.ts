@@ -5,7 +5,11 @@
 import type { IpcInvoke } from 'shared/electron-api'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { useAutoReplyStore } from '@/hooks/useAutoReply'
-import { createDefaultConfig, useAutoReplyConfigStore } from '@/hooks/useAutoReplyConfig'
+import {
+  createDefaultConfig,
+  getSafeAutoReplyEntry,
+  useAutoReplyConfigStore,
+} from '@/hooks/useAutoReplyConfig'
 import { acquireCommentListener, releaseCommentListener } from '@/utils/commentListenerRuntime'
 import { BaseTask, type StopReason, type TaskContext } from './types'
 
@@ -49,7 +53,7 @@ export class AutoReplyTask extends BaseTask {
         ctx.accountId,
         'autoReply',
         {
-          source: config.entry,
+          source: getSafeAutoReplyEntry(ctx.accountId, config.entry),
           ws: config.ws?.enable ? { port: config.ws.port } : undefined,
         },
         ctx.ipcInvoke,

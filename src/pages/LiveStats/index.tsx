@@ -4,7 +4,7 @@ import type { IpcInvoke } from 'shared/electron-api'
 import { Title } from '@/components/common/Title'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAccounts } from '@/hooks/useAccounts'
-import { useAutoReplyConfig } from '@/hooks/useAutoReplyConfig'
+import { getSafeAutoReplyEntry, useAutoReplyConfig } from '@/hooks/useAutoReplyConfig'
 import { useAutoStopOnGateLoss } from '@/hooks/useAutoStopOnGateLoss'
 import { useCurrentLiveControl } from '@/hooks/useLiveControl'
 import { useLiveFeatureGate } from '@/hooks/useLiveFeatureGate'
@@ -64,7 +64,7 @@ export default function LiveStats() {
         currentAccountId,
         'liveStats',
         {
-          source: config.entry,
+          source: getSafeAutoReplyEntry(currentAccountId, config.entry),
           ws: config.ws?.enable ? { port: config.ws.port } : undefined,
         },
         invokeCommentListenerIpc,

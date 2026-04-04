@@ -13,6 +13,7 @@ import { mergeWithoutArray } from '@/utils/misc'
 import { storageManager } from '@/utils/storage/StorageManager'
 import { useAccounts } from './useAccounts'
 import type { EventMessageType } from './useAutoReply'
+import { useLiveControlStore } from './useLiveControl'
 
 interface AutoReplyBaseConfig {
   entry: CommentListenerConfig['source']
@@ -63,6 +64,14 @@ type WechatChannelExtraConfig = {
 
 export type AutoReplyConfig = AutoReplyBaseConfig & CompassExtraConfig & WechatChannelExtraConfig
 
+const ALL_LISTENING_SOURCES: AutoReplyConfig['entry'][] = [
+  'compass',
+  'control',
+  'wechat-channel',
+  'xiaohongshu',
+  'taobao',
+]
+
 function normalizeUserPrompt(prompt?: string) {
   const normalized = prompt?.trim() ?? ''
   if (!normalized) {
@@ -92,16 +101,48 @@ function getDefaultEntryForPlatform(platform?: LiveControlPlatform): AutoReplyCo
   }
 }
 
+function resolvePlatformForAccount(accountId: string): LiveControlPlatform | undefined {
+  const accountPlatform = useAccounts
+    .getState()
+    .accounts.find(account => account.id === accountId)?.platform
+  if (accountPlatform) {
+    return accountPlatform
+  }
+
+  const liveControlPlatform =
+    useLiveControlStore.getState().contexts[accountId]?.connectState.platform
+  if (liveControlPlatform) {
+    return liveControlPlatform as LiveControlPlatform
+  }
+
+  return undefined
+}
+
 function normalizeEntryForPlatform(
-  entry: AutoReplyConfig['entry'],
+  entry: AutoReplyConfig['entry'] | string | null | undefined,
   platform?: LiveControlPlatform,
 ): AutoReplyConfig['entry'] {
-  if (!platform) return entry
+  const normalizedEntry =
+    typeof entry === 'string' && ALL_LISTENING_SOURCES.includes(entry as AutoReplyConfig['entry'])
+      ? (entry as AutoReplyConfig['entry'])
+      : undefined
+
+  if (!platform) {
+    return normalizedEntry ?? getDefaultEntryForPlatform(platform)
+  }
+
   const supported = abilities[platform]?.autoReply?.source ?? []
-  if (supported.includes(entry)) {
-    return entry
+  if (normalizedEntry && supported.includes(normalizedEntry)) {
+    return normalizedEntry
   }
   return getDefaultEntryForPlatform(platform)
+}
+
+export function getSafeAutoReplyEntry(
+  accountId: string,
+  entry?: AutoReplyConfig['entry'] | string | null,
+): AutoReplyConfig['entry'] {
+  return normalizeEntryForPlatform(entry, resolvePlatformForAccount(accountId))
 }
 
 function normalizeConfigForPlatform(
@@ -265,9 +306,7 @@ export const useAutoReplyConfigStore = create<AutoReplyConfigStore>()(
       updateConfig: (accountId, configUpdates) =>
         set(state => {
           const context = ensureContext(state, accountId)
-          const platform = useAccounts
-            .getState()
-            .accounts.find(account => account.id === accountId)?.platform
+          const platform = resolvePlatformForAccount(accountId)
           const newConfig = normalizeConfigForPlatform(
             mergeWithoutArray(context.config, configUpdates),
             platform,
@@ -356,9 +395,7 @@ export const useAutoReplyConfigStore = create<AutoReplyConfigStore>()(
 export const useAutoReplyConfig = () => {
   const store = useAutoReplyConfigStore()
   const currentAccountId = useAccounts(ctx => ctx.currentAccountId)
-  const currentPlatform = useAccounts(
-    state => state.accounts.find(account => account.id === currentAccountId)?.platform,
-  )
+  const currentPlatform = resolvePlatformForAccount(currentAccountId)
   const config = mergeWithoutArray(
     createDefaultConfig(currentPlatform),
     normalizeConfigForPlatform(
@@ -366,6 +403,7 @@ export const useAutoReplyConfig = () => {
       currentPlatform,
     ),
   )
+  config.entry = getSafeAutoReplyEntry(currentAccountId, config.entry)
   config.comment.aiReply.prompt = normalizeUserPrompt(config.comment.aiReply.prompt)
   config.comment.aiReply.productPrompt = normalizeUserPrompt(config.comment.aiReply.productPrompt)
 
