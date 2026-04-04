@@ -3,6 +3,7 @@ import type { StreamStatus } from 'shared/streamStatus'
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { type ConnectState, DEFAULT_CONNECT_STATE } from '@/config/platformConfig'
+import { deriveLiveSessionMeta } from '@/lib/liveSession'
 import { useAuthStore } from '@/stores/authStore'
 import { flushAllPersists, flushPersist, schedulePersist } from '@/utils/debouncedPersist'
 import { EVENTS, eventEmitter } from '@/utils/events'
@@ -15,6 +16,9 @@ interface LiveControlContext {
   connectState: ConnectState
   accountName: string | null
   streamState: StreamStatus
+  liveSessionId: string | null
+  liveSessionStartedAt: string | null
+  liveSessionEndedAt: string | null
 }
 
 interface LiveControlStore {
@@ -35,6 +39,9 @@ function defaultContext(): LiveControlContext {
     connectState: { ...DEFAULT_CONNECT_STATE },
     accountName: null,
     streamState: 'unknown',
+    liveSessionId: null,
+    liveSessionStartedAt: null,
+    liveSessionEndedAt: null,
   }
 }
 
@@ -43,6 +50,9 @@ const READONLY_DEFAULT_CONTEXT: LiveControlContext = {
   connectState: { ...DEFAULT_CONNECT_STATE },
   accountName: null,
   streamState: 'unknown',
+  liveSessionId: null,
+  liveSessionStartedAt: null,
+  liveSessionEndedAt: null,
 }
 
 export const useLiveControlStore = create<LiveControlStore>()(
@@ -102,6 +112,9 @@ export const useLiveControlStore = create<LiveControlStore>()(
                     lastVerifiedAt: null,
                   }
                 : connectState,
+            liveSessionId: null,
+            liveSessionStartedAt: null,
+            liveSessionEndedAt: null,
           }
           const persistKey = `live-control:${currentUserId}:${accountId}`
           const write = () => {
@@ -146,6 +159,21 @@ export const useLiveControlStore = create<LiveControlStore>()(
       setStreamState: (accountId, streamState) =>
         set(state => {
           const context = ensureContext(state, accountId)
+          const prevStreamState = context.streamState
+          const nextMeta = deriveLiveSessionMeta({
+            prevStreamState,
+            nextStreamState: streamState,
+            current: {
+              liveSessionId: context.liveSessionId,
+              liveSessionStartedAt: context.liveSessionStartedAt,
+              liveSessionEndedAt: context.liveSessionEndedAt,
+            },
+            nowIso: new Date().toISOString(),
+            createId: () => crypto.randomUUID(),
+          })
+          context.liveSessionId = nextMeta.liveSessionId
+          context.liveSessionStartedAt = nextMeta.liveSessionStartedAt
+          context.liveSessionEndedAt = nextMeta.liveSessionEndedAt
           context.streamState = streamState
           // streamState 不保存到存储
         }),
@@ -206,6 +234,9 @@ export const useLiveControlStore = create<LiveControlStore>()(
                   connectState: safeConnectState,
                   accountName: null,
                   streamState: 'unknown',
+                  liveSessionId: null,
+                  liveSessionStartedAt: null,
+                  liveSessionEndedAt: null,
                 }
               }
             })

@@ -65,6 +65,11 @@ export class AutoReplyTask extends BaseTask {
         // 由于使用账号隔离的事件，这里不需要再检查 accountId
         if (this.status === 'running') {
           console.log(`[AutoReplyTask] Listener stopped by backend for account ${accountId}`)
+          this.markBackendStopped()
+          autoReplyStore.recordStopAudit(accountId, {
+            reason: 'comment-listener-stopped',
+            detail: '后端广播评论监听 stopped 事件',
+          })
           this.stop('error')
         }
       }
@@ -110,17 +115,36 @@ export class AutoReplyTask extends BaseTask {
 
     console.log(`[AutoReplyTask] Stopping, reason: ${reason}`)
     this.status = 'stopping'
+    const backendAlreadyStopped = this.consumeBackendStopObserved()
 
     // 执行清理器（移除 IPC 监听器等）
     // 这会清理所有注册的清理函数，包括：
-    // - IPC 事件监听器（listenerStopped）
+    // - IPC 事件监听器（账号隔离 stoppedFor 通道）
     // - 任何其他定时器、websocket 等资源
     this.executeDisposers()
 
     if (this.accountId) {
+      const autoReplyStore = useAutoReplyStore.getState()
+      const reasonMap: Record<StopReason, string> = {
+        manual: 'manual',
+        disconnected: 'disconnected',
+        stream_ended: 'stream-ended',
+        auth_lost: 'auth-lost',
+        gate_failed: 'gate-failed',
+        error: 'task-error',
+      }
+      const currentContext = autoReplyStore.contexts[this.accountId]
+      const shouldPreserveExistingAudit =
+        reason === 'error' && currentContext?.lastStopReason === 'comment-listener-stopped'
+      if (!shouldPreserveExistingAudit) {
+        autoReplyStore.recordStopAudit(this.accountId, {
+          reason: reasonMap[reason],
+          detail: `AutoReplyTask.stop(${reason})`,
+        })
+      }
       // 自动回复与数据监控共享底层评论监听。这里只释放自动回复消费者，
       // 仅当没有其他消费者时才真正停止监听器。
-      if (window.ipcRenderer) {
+      if (!backendAlreadyStopped && window.ipcRenderer) {
         const invokeCommentListenerIpc: IpcInvoke = (channel, ...args) =>
           window.ipcRenderer.invoke(channel, ...args)
         await releaseCommentListener(this.accountId, 'autoReply', invokeCommentListenerIpc)

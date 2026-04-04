@@ -1,5 +1,13 @@
 import type { GoodsItemConfig } from '@/hooks/useAutoPopUp'
 
+export type ProductQuestionType = 'price' | 'stock' | 'usage' | 'general' | 'list'
+export type ProductIntent =
+  | 'not-product'
+  | 'single-product'
+  | 'reference-product'
+  | 'product-list'
+  | 'unknown-product'
+
 export interface ViewerProductSession {
   slotIndex: number
   updatedAt: number
@@ -7,11 +15,12 @@ export interface ViewerProductSession {
 
 export interface ProductKnowledgeHit {
   hit: boolean
+  intent?: ProductIntent
   slotIndex?: number
   item?: GoodsItemConfig
   reply?: string
   shouldUpdateSession?: boolean
-  questionType?: 'price' | 'stock' | 'usage' | 'general'
+  questionType?: ProductQuestionType
   matchedFields?: string[]
   missReason?:
     | 'no-items'
@@ -168,10 +177,18 @@ const SLOT_PATTERNS = [
 const PRODUCT_QUERY_RE =
   /(链接|商品|这款|那个|这个|多少钱|价格|优惠|活动|库存|有货|适合|怎么用|介绍|发货|规格|尺码|成分|功效|材质|颜色|第.+个|几号)/
 
+const PRODUCT_LIST_RE =
+  /((今天|现在|目前).*(有什么|有哪些|都有什么|都有哪些|卖什么|上什么|上了什么|有哪些链接|都有哪些链接).*(产品|商品|链接|款)?|(产品|商品|链接|款).*(有什么|有哪些|都有什么|都有哪些)|(主推|重点推|主打款))/i
+
 const REFERENCE_RE = /(这个|那个|它|这款|那款|刚才那个|刚刚那个)/
 const PRICE_RE = /(多少|多少钱|价格|优惠|活动|几折|便宜|到手)/
 const STOCK_RE = /(有货|库存|还有吗|还能拍|能下单|现货)/
 const USAGE_RE = /(怎么用|怎么穿|怎么选|适合|功效|作用|成分|材质|颜色|尺码|规格|介绍|详情)/
+const FEATURED_RE = /(主推|重点推|主打款)/
+const SLOT_REFERENCE_GLOBAL_RE = /([0-9]{1,2})\s*号\s*链接/gi
+const PRICE_SIGNAL_RE = /(¥|￥|\d+\s*元|价格|到手)/
+const PROMO_SIGNAL_RE = /(优惠|活动|满减|立减|拍\d+件|拍\d件|券|到手)/
+const STOCK_SIGNAL_RE = /(库存|有货|现货|还能拍|能下单|缺货|没货|售罄)/
 
 function chineseNumberToInt(text: string) {
   const map: Record<string, number> = {
@@ -231,6 +248,111 @@ function parseSlotIndex(comment: string | null | undefined) {
 
 function normalizeText(text: string | null | undefined) {
   return normalizeCommentText(text).toLowerCase()
+}
+
+function sliceByChars(text: string, maxChars: number) {
+  const chars = Array.from(text.trim())
+  if (chars.length <= maxChars) {
+    return chars.join('')
+  }
+  return chars.slice(0, maxChars).join('')
+}
+
+function getListItemLabel(item: GoodsItemConfig) {
+  const fallbackAlias = item.aliases?.find(alias => normalizeCommentText(alias).length >= 2)
+  const base = item.shortTitle || fallbackAlias || item.title || `${item.id}号这款`
+  return sliceByChars(base, 8)
+}
+
+function getItemLabels(item: GoodsItemConfig) {
+  return [item.title, item.shortTitle, ...(item.aliases ?? [])]
+    .map(label => normalizeCommentText(label))
+    .filter(label => label.length >= 2)
+}
+
+export function isProductListQuery(comment: string | null | undefined) {
+  return PRODUCT_LIST_RE.test(normalizeCommentText(comment))
+}
+
+export function buildSafeProductFallbackReply(
+  comment: string | null | undefined,
+  items: GoodsItemConfig[] = [],
+) {
+  const normalizedComment = normalizeCommentText(comment)
+
+  if (!items.length) {
+    if (FEATURED_RE.test(normalizedComment)) {
+      return '今天商品还在整理中，您想看哪类我先给您介绍'
+    }
+    if (isProductListQuery(normalizedComment)) {
+      return '今天商品还没配置好，您想看哪类我先给您介绍'
+    }
+    return '这边按链接号讲更准确，您想了解哪一款'
+  }
+
+  if (FEATURED_RE.test(normalizedComment)) {
+    return '今天上了几款呢，您想先看哪号我给您详细介绍'
+  }
+
+  if (isProductListQuery(normalizedComment)) {
+    return '今天有几款在上架，您想先看哪号我给您介绍'
+  }
+
+  return '这边按链接号讲更准确，您想了解哪一款'
+}
+
+export function buildProductListReply(
+  comment: string | null | undefined,
+  items: GoodsItemConfig[],
+) {
+  if (items.length === 0) {
+    return buildSafeProductFallbackReply(comment, items)
+  }
+
+  const normalizedComment = normalizeCommentText(comment)
+  if (FEATURED_RE.test(normalizedComment)) {
+    return buildSafeProductFallbackReply(normalizedComment, items)
+  }
+
+  const orderedItems = [...items].sort((a, b) => a.id - b.id)
+  const topItems = orderedItems.slice(0, 3)
+  const summary = topItems.map(item => `${item.id}号${getListItemLabel(item)}`).join('、')
+
+  if (orderedItems.length === 1) {
+    return `今天先上这1款，${summary}，您想了解我给您细说`
+  }
+
+  if (orderedItems.length <= 3) {
+    return `今天有${summary}，您想先看哪号`
+  }
+
+  return `今天有${summary}等几款，您想先看哪号`
+}
+
+function inferProductIntent(params: {
+  comment: string
+  slotIndex?: number
+  keywordMatchedItem?: GoodsItemConfig
+}) {
+  const { comment, slotIndex, keywordMatchedItem } = params
+
+  if (isProductListQuery(comment)) {
+    return 'product-list' satisfies ProductIntent
+  }
+
+  if (slotIndex || keywordMatchedItem) {
+    return 'single-product' satisfies ProductIntent
+  }
+
+  if (REFERENCE_RE.test(comment)) {
+    return 'reference-product' satisfies ProductIntent
+  }
+
+  if (PRODUCT_QUERY_RE.test(comment)) {
+    return 'unknown-product' satisfies ProductIntent
+  }
+
+  return 'not-product' satisfies ProductIntent
 }
 
 function matchByKeyword(comment: string | null | undefined, items: GoodsItemConfig[]) {
@@ -393,15 +515,40 @@ export function tryProductKnowledgeReply(params: {
   const normalizedComment = normalizeCommentText(comment)
 
   if (items.length === 0) {
-    return { hit: false, missReason: 'no-items' } satisfies ProductKnowledgeHit
+    return {
+      hit: false,
+      intent: inferProductIntent({ comment: normalizedComment, slotIndex: undefined }),
+      missReason: 'no-items',
+    } satisfies ProductKnowledgeHit
   }
 
   if (!normalizedComment) {
-    return { hit: false, missReason: 'not-product-query' } satisfies ProductKnowledgeHit
+    return {
+      hit: false,
+      intent: 'not-product',
+      missReason: 'not-product-query',
+    } satisfies ProductKnowledgeHit
   }
 
   const slotIndex = parseSlotIndex(normalizedComment)
   const keywordMatchedItem = matchByKeyword(normalizedComment, items)
+  const intent = inferProductIntent({
+    comment: normalizedComment,
+    slotIndex,
+    keywordMatchedItem,
+  })
+
+  if (intent === 'product-list') {
+    return {
+      hit: true,
+      intent,
+      reply: buildProductListReply(normalizedComment, items),
+      questionType: 'list',
+      matchedFields: ['goodsList'],
+      shouldUpdateSession: false,
+    } satisfies ProductKnowledgeHit
+  }
+
   let item =
     (slotIndex ? items.find(candidate => candidate.id === slotIndex) : undefined) ??
     keywordMatchedItem
@@ -433,6 +580,7 @@ export function tryProductKnowledgeReply(params: {
   if (!item) {
     return {
       hit: false,
+      intent,
       slotIndex,
       missReason,
     } satisfies ProductKnowledgeHit
@@ -445,6 +593,7 @@ export function tryProductKnowledgeReply(params: {
   ) {
     return {
       hit: false,
+      intent: 'not-product',
       missReason: 'not-product-query',
     } satisfies ProductKnowledgeHit
   }
@@ -455,6 +604,7 @@ export function tryProductKnowledgeReply(params: {
 
   return {
     hit: true,
+    intent,
     slotIndex: item.id,
     item,
     reply: productReply?.reply,
@@ -462,4 +612,173 @@ export function tryProductKnowledgeReply(params: {
     matchedFields: inferMatchedFields({ item, questionType }),
     shouldUpdateSession: true,
   } satisfies ProductKnowledgeHit
+}
+
+function extractReplySlotIndices(reply: string) {
+  const slotIndices = new Set<number>()
+
+  for (const match of reply.matchAll(SLOT_REFERENCE_GLOBAL_RE)) {
+    const raw = match[1]
+    const parsed = Number.parseInt(raw, 10)
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      slotIndices.add(parsed)
+    }
+  }
+
+  return [...slotIndices]
+}
+
+function containsAnyLabel(reply: string, labels: string[]) {
+  const normalizedReply = normalizeText(reply)
+  return labels.some(label => normalizedReply.includes(normalizeText(label)))
+}
+
+export function validateGroundedProductReply(params: {
+  comment: string | null | undefined
+  reply: string
+  items: GoodsItemConfig[]
+  expectedItem?: GoodsItemConfig
+}) {
+  const { comment, reply, items, expectedItem } = params
+  const normalizedReply = normalizeCommentText(reply)
+
+  if (!normalizedReply) {
+    return {
+      ok: false,
+      safeReply: buildSafeProductFallbackReply(comment, items),
+      reason: 'empty-reply',
+    } as const
+  }
+
+  if (FEATURED_RE.test(normalizedReply)) {
+    return {
+      ok: false,
+      safeReply: buildSafeProductFallbackReply(comment, items),
+      reason: 'featured-claim',
+    } as const
+  }
+
+  const replySlotIndices = extractReplySlotIndices(normalizedReply)
+  const otherItems = expectedItem ? items.filter(item => item.id !== expectedItem.id) : []
+  const otherLabels = otherItems.flatMap(getItemLabels)
+
+  if (expectedItem) {
+    const hasUnexpectedSlot = replySlotIndices.some(slotIndex => slotIndex !== expectedItem.id)
+    if (hasUnexpectedSlot) {
+      return {
+        ok: false,
+        safeReply: buildSafeProductFallbackReply(comment, items),
+        reason: 'slot-mismatch',
+      } as const
+    }
+
+    if (containsAnyLabel(normalizedReply, otherLabels)) {
+      return {
+        ok: false,
+        safeReply: buildSafeProductFallbackReply(comment, items),
+        reason: 'other-item-label',
+      } as const
+    }
+
+    const otherPriceTexts = otherItems
+      .map(item => normalizeCommentText(item.priceText))
+      .filter(Boolean)
+    if (containsAnyLabel(normalizedReply, otherPriceTexts)) {
+      return {
+        ok: false,
+        safeReply: buildSafeProductFallbackReply(comment, items),
+        reason: 'other-item-price',
+      } as const
+    }
+
+    const otherPromoTexts = otherItems
+      .map(item => normalizeCommentText(item.promoText))
+      .filter(Boolean)
+    if (containsAnyLabel(normalizedReply, otherPromoTexts)) {
+      return {
+        ok: false,
+        safeReply: buildSafeProductFallbackReply(comment, items),
+        reason: 'other-item-promo',
+      } as const
+    }
+
+    const otherStockTexts = otherItems
+      .map(item => normalizeCommentText(item.stockText))
+      .filter(Boolean)
+    if (containsAnyLabel(normalizedReply, otherStockTexts)) {
+      return {
+        ok: false,
+        safeReply: buildSafeProductFallbackReply(comment, items),
+        reason: 'other-item-stock',
+      } as const
+    }
+
+    const expectedPriceText = normalizeCommentText(expectedItem.priceText)
+    if (PRICE_SIGNAL_RE.test(normalizedReply)) {
+      if (
+        !expectedPriceText ||
+        !normalizeText(normalizedReply).includes(normalizeText(expectedPriceText))
+      ) {
+        return {
+          ok: false,
+          safeReply: buildSafeProductFallbackReply(comment, items),
+          reason: 'price-mismatch',
+        } as const
+      }
+    }
+
+    const expectedPromoText = normalizeCommentText(expectedItem.promoText)
+    if (PROMO_SIGNAL_RE.test(normalizedReply)) {
+      if (
+        !expectedPromoText ||
+        !normalizeText(normalizedReply).includes(normalizeText(expectedPromoText))
+      ) {
+        return {
+          ok: false,
+          safeReply: buildSafeProductFallbackReply(comment, items),
+          reason: 'promo-mismatch',
+        } as const
+      }
+    }
+
+    const expectedStockText = normalizeCommentText(expectedItem.stockText)
+    if (STOCK_SIGNAL_RE.test(normalizedReply)) {
+      if (
+        !expectedStockText ||
+        !normalizeText(normalizedReply).includes(normalizeText(expectedStockText))
+      ) {
+        return {
+          ok: false,
+          safeReply: buildSafeProductFallbackReply(comment, items),
+          reason: 'stock-mismatch',
+        } as const
+      }
+    }
+  } else {
+    const validSlotSet = new Set(items.map(item => item.id))
+    const hasInvalidSlot = replySlotIndices.some(slotIndex => !validSlotSet.has(slotIndex))
+    if (hasInvalidSlot) {
+      return {
+        ok: false,
+        safeReply: buildSafeProductFallbackReply(comment, items),
+        reason: 'slot-not-found',
+      } as const
+    }
+
+    if (
+      PRICE_SIGNAL_RE.test(normalizedReply) ||
+      PROMO_SIGNAL_RE.test(normalizedReply) ||
+      STOCK_SIGNAL_RE.test(normalizedReply)
+    ) {
+      return {
+        ok: false,
+        safeReply: buildSafeProductFallbackReply(comment, items),
+        reason: 'unguarded-facts',
+      } as const
+    }
+  }
+
+  return {
+    ok: true,
+  } as const
 }

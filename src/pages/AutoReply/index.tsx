@@ -49,7 +49,7 @@ export function getAutoReplyUnavailableState(platform?: LiveControlPlatform | st
 }
 
 export default function AutoReply() {
-  const { isRunning, isListening } = useAutoReply()
+  const { isRunning, isListening, lastStopReason, lastStoppedAt, lastStopDetail } = useAutoReply()
   const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(null)
   const gate = useLiveFeatureGate()
   const currentAccountId = useAccounts(state => state.currentAccountId)
@@ -91,6 +91,15 @@ export default function AutoReply() {
 
   const connectState = useCurrentLiveControl(context => context.connectState)
   const platform = connectState.platform
+  const stopReasonLabelMap: Record<string, string> = {
+    manual: '手动停止',
+    disconnected: '中控台断开',
+    'stream-ended': '直播结束',
+    'auth-lost': '登录失效',
+    'gate-failed': 'Gate 校验失败',
+    'task-error': '任务异常停止',
+    'comment-listener-stopped': '评论监听被后端停止',
+  }
   if (!autoReplyPlatforms.includes(platform as LiveControlPlatform)) {
     const supportedPlatforms = autoReplyPlatforms
       .map(item => AUTO_REPLY_PLATFORM_LABELS[item] || item)
@@ -140,6 +149,22 @@ export default function AutoReply() {
       <div className="flex flex-col items-start justify-between gap-4 md:flex-row md:items-start md:justify-between shrink-0">
         <div className="min-w-0 shrink-0">
           <Title title="自动回复" description="查看直播间的实时评论并自动回复" />
+          {lastStopReason ? (
+            <p className="mt-2 text-xs text-muted-foreground">
+              最近一次停止：
+              {stopReasonLabelMap[lastStopReason] ?? lastStopReason}
+              {lastStoppedAt
+                ? ` · ${new Date(lastStoppedAt).toLocaleString('zh-CN', {
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                  })}`
+                : ''}
+              {lastStopDetail ? ` · ${lastStopDetail}` : ''}
+            </p>
+          ) : null}
         </div>
         <div className="flex w-full shrink-0 items-center gap-2 md:w-auto">
           <Button

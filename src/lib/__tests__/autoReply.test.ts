@@ -14,6 +14,7 @@ describe('autoReply helpers', () => {
     expect(prompt).toContain('你只需要输出最终要发送给观众的一句话回复')
     expect(prompt).toContain('不要输出 JSON')
     expect(prompt).toContain('每次只回复一句')
+    expect(prompt).toContain('如果系统没有提供真实商品事实')
     expect(prompt).toContain('用户补充要求：\n语气更活泼一点')
     expect(prompt).toContain('你是一个 helpful assistant')
   })
@@ -146,6 +147,50 @@ describe('autoReply helpers', () => {
       {
         role: 'user',
         content: '{"nickname":"秀儿","content":"主播你在干嘛"}',
+      },
+    ])
+  })
+
+  it('can isolate the current comment from previous turns', () => {
+    const messages = buildAutoReplyConversation(
+      {
+        msg_id: 'c-2',
+        nick_name: '秀儿',
+        content: '今天都有什么产品',
+        time: '2026-03-31T21:00:00.000Z',
+      },
+      [
+        {
+          msg_id: 'c-1',
+          nick_name: '秀儿',
+          content: '介绍下三号链接',
+          time: '2026-03-31T20:59:00.000Z',
+        },
+        {
+          msg_id: 'c-2',
+          nick_name: '秀儿',
+          content: '今天都有什么产品',
+          time: '2026-03-31T21:00:00.000Z',
+        },
+      ],
+      [
+        {
+          commentId: 'c-1',
+          replyFor: '秀儿',
+          replyContent: '3号链接是修护面霜',
+          time: '2026-03-31T20:59:10.000Z',
+          isSent: true,
+        },
+      ],
+      {
+        mode: 'current-only',
+      },
+    )
+
+    expect(messages).toEqual([
+      {
+        role: 'user',
+        content: '{"nickname":"秀儿","content":"今天都有什么产品"}',
       },
     ])
   })

@@ -5,6 +5,7 @@ const AUTO_REPLY_SYSTEM_DEFAULT_RULES = [
   '每次只回复一句，15到28字优先，绝不要超过40字。',
   '语气像真人主播接话，自然、顺口、有互动感，不要像客服，不要像AI助手。',
   '闲聊、打招呼、夸主播时，先自然回应，不要强行带货。',
+  '如果系统没有提供真实商品事实，禁止输出具体链接号、商品名、价格、优惠、库存、主推信息。',
   '问商品时，优先用“几号链接 + 短称呼 + 一个重点”回答。',
   '不要复述完整商品长标题，不要连续堆多个卖点，不要像念详情页。',
   '问价格先回价格，问介绍先回一个卖点，问库存先回库存状态。',
@@ -85,6 +86,10 @@ export interface AutoReplyConversationMessage {
   content: string
 }
 
+export interface AutoReplyConversationOptions {
+  mode?: 'latest-turn' | 'current-only'
+}
+
 function toCommentPayload(comment: Pick<AutoReplyCommentInput, 'nick_name' | 'content'>) {
   return JSON.stringify({
     nickname: comment.nick_name,
@@ -96,7 +101,9 @@ export function buildAutoReplyConversation(
   currentComment: AutoReplyCommentInput,
   allComments: AutoReplyCommentInput[],
   allReplies: AutoReplyPreviewInput[],
+  options?: AutoReplyConversationOptions,
 ): AutoReplyConversationMessage[] {
+  const mode = options?.mode ?? 'latest-turn'
   const latestSentReply = allReplies
     .filter(reply => reply.replyFor === currentComment.nick_name && reply.isSent)
     .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
@@ -104,7 +111,7 @@ export function buildAutoReplyConversation(
 
   const messages: AutoReplyConversationMessage[] = []
 
-  if (latestSentReply) {
+  if (mode === 'latest-turn' && latestSentReply) {
     const repliedComment = allComments.find(comment => comment.msg_id === latestSentReply.commentId)
     if (repliedComment && repliedComment.msg_id !== currentComment.msg_id) {
       messages.push({

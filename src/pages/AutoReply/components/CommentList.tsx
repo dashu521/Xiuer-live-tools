@@ -1,4 +1,4 @@
-import { memo, useId, useMemo, useState } from 'react'
+import { memo, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Badge, type BadgeProps } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -146,6 +146,7 @@ export default function CommentList({
 }) {
   const { comments, isListening } = useAutoReply()
   const [hideHost, setHideHost] = useState(false)
+  const commentRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   const accountName = useCurrentLiveControl(ctx => ctx.accountName)
 
@@ -185,6 +186,14 @@ export default function CommentList({
 
   const userCommentOnlyId = useId()
 
+  useEffect(() => {
+    if (!highlightedCommentId) return
+    const target = commentRefs.current[highlightedCommentId]
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
+  }, [highlightedCommentId])
+
   return (
     <Card className="shadow-sm flex h-full flex-col min-h-0 overflow-hidden">
       <CardHeader className="pb-2 shrink-0">
@@ -222,11 +231,17 @@ export default function CommentList({
               </div>
             ) : (
               filteredComments.map(comment => (
-                <MessageItem
+                <div
                   key={comment.msg_id}
-                  message={comment}
-                  isHighlighted={highlightedCommentId === comment.msg_id}
-                />
+                  ref={node => {
+                    commentRefs.current[comment.msg_id] = node
+                  }}
+                >
+                  <MessageItem
+                    message={comment}
+                    isHighlighted={highlightedCommentId === comment.msg_id}
+                  />
+                </div>
               ))
             )}
           </div>

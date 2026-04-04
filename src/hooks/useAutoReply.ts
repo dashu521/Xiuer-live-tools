@@ -1,5 +1,5 @@
 import { useMemoizedFn } from 'ahooks'
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { IPC_CHANNELS } from 'shared/ipcChannels'
 import { providers } from 'shared/providers'
 import { create } from 'zustand'
@@ -12,13 +12,26 @@ import {
   sanitizeAutoReplyResponse,
   shouldSkipDuplicateReply,
 } from '@/lib/autoReply'
+import { decideAutoReply } from '@/lib/autoReplyDecision'
 import {
   buildProductKnowledgePolishPrompt,
+  type ProductIntent,
+  type ProductQuestionType,
   tryProductKnowledgeReply,
   type ViewerProductSession,
+  validateGroundedProductReply,
 } from '@/lib/productKnowledge'
+import { useAuthStore } from '@/stores/authStore'
 import { EVENTS, eventEmitter } from '@/utils/events'
 import { matchObject } from '@/utils/filter'
+import {
+  loadAccountScopedContexts,
+  loadSingleAccountScopedContext,
+  persistAccountScopedContext,
+  persistAllAccountScopedContexts,
+  removeAccountScopedContext,
+  runWhenAccountsReady,
+} from './accountScopedContextStorage'
 import { useAccounts } from './useAccounts'
 import { type AIProvider, useAIChatStore } from './useAIChat'
 import { getEffectiveAICredentials, useAITrialStore } from './useAITrial'
@@ -38,8 +51,12 @@ interface ReplyPreview {
   source: 'ai' | 'product-kb'
   matchedSlotIndex?: number
   matchedTitle?: string
-  questionType?: 'price' | 'stock' | 'usage' | 'general'
+  questionType?: ProductQuestionType
   matchedFields?: string[]
+  replyIntent?: ProductIntent | 'chat'
+  factStatus?: 'grounded' | 'missing' | 'not-applicable'
+  guardrailAction?: 'pass' | 'rewrite'
+  guardrailReason?: string
   knowledgeMissReason?:
     | 'no-items'
     | 'not-product-query'
@@ -68,12 +85,27 @@ type ListeningStatus = 'waiting' | 'listening' | 'stopped' | 'error'
 interface AutoReplyContext {
   isRunning: boolean
   isListening: ListeningStatus
+  lastStopReason?: string
+  lastStoppedAt?: string
+  lastStopDetail?: string
   replies: ReplyPreview[]
   comments: Message[]
+  currentSessionId: string | null
+  currentSessionStartedAt: string | null
+  currentSessionEndedAt: string | null
+  archivedSessionId: string | null
+  historySessions: Array<{
+    sessionId: string
+    startedAt: string
+    endedAt: string
+    comments: Message[]
+    replies: ReplyPreview[]
+  }>
 }
 
 interface AutoReplyState {
   contexts: Record<string, AutoReplyContext>
+  currentUserId: string | null
 }
 interface AutoReplyAction {
   setIsRunning: (accountId: string, isRunning: boolean) => void
@@ -92,6 +124,10 @@ interface AutoReplyAction {
         | 'matchedTitle'
         | 'questionType'
         | 'matchedFields'
+        | 'replyIntent'
+        | 'factStatus'
+        | 'guardrailAction'
+        | 'guardrailReason'
         | 'knowledgeMissReason'
         | 'wasDeduplicated'
       >
@@ -100,20 +136,46 @@ interface AutoReplyAction {
   ) => void
   markReplySent: (accountId: string, commentId: string) => void
   removeReply: (accountId: string, commentId: string) => void
+  clearHistory: (accountId: string) => void
+  recordStopAudit: (
+    accountId: string,
+    payload: { reason: string; detail?: string; at?: string },
+  ) => void
+  syncLiveSession: (
+    accountId: string,
+    session: { sessionId: string | null; startedAt: string | null; endedAt: string | null },
+  ) => void
+  ensureContextLoaded: (userId: string, accountId: string) => void
+  loadUserContexts: (userId: string) => void
+  resetAllContexts: () => void
 }
 
 const createDefaultContext = (): AutoReplyContext => ({
   isRunning: false,
   isListening: 'stopped',
+  lastStopReason: undefined,
+  lastStoppedAt: undefined,
+  lastStopDetail: undefined,
   replies: [],
   comments: [],
+  currentSessionId: null,
+  currentSessionStartedAt: null,
+  currentSessionEndedAt: null,
+  archivedSessionId: null,
+  historySessions: [],
 })
 
 export const useAutoReplyStore = create<AutoReplyState & AutoReplyAction>()(
-  immer(set => {
+  immer((set, get) => {
     eventEmitter.on(EVENTS.ACCOUNT_REMOVED, (accountId: string) => {
       set(state => {
         delete state.contexts[accountId]
+        removeAccountScopedContext(
+          'auto-reply-history',
+          get().currentUserId,
+          accountId,
+          '[AutoReply]',
+        )
       })
     })
 
@@ -124,17 +186,80 @@ export const useAutoReplyStore = create<AutoReplyState & AutoReplyAction>()(
       return state.contexts[accountId]
     }
 
+    const saveToStorage = (accountId: string, context: AutoReplyContext) => {
+      persistAccountScopedContext({
+        namespace: 'auto-reply-history',
+        userId: get().currentUserId,
+        accountId,
+        context,
+        logPrefix: '[AutoReply]',
+        serialize: savedContext => ({
+          ...savedContext,
+          isRunning: false,
+          isListening: 'stopped' as ListeningStatus,
+        }),
+      })
+    }
+
+    const archiveCurrentSession = (context: AutoReplyContext) => {
+      if (
+        !context.currentSessionId ||
+        context.archivedSessionId === context.currentSessionId ||
+        (context.comments.length === 0 && context.replies.length === 0)
+      ) {
+        return
+      }
+
+      context.historySessions = [
+        {
+          sessionId: context.currentSessionId,
+          startedAt: context.currentSessionStartedAt ?? new Date().toISOString(),
+          endedAt: context.currentSessionEndedAt ?? new Date().toISOString(),
+          comments: context.comments,
+          replies: context.replies,
+        },
+        ...context.historySessions.filter(
+          session => session.sessionId !== context.currentSessionId,
+        ),
+      ].slice(0, 50)
+      context.archivedSessionId = context.currentSessionId
+    }
+
+    const beginNewSessionIfNeeded = (context: AutoReplyContext) => {
+      if (
+        !context.currentSessionId ||
+        context.archivedSessionId === context.currentSessionId ||
+        (context.isListening === 'stopped' &&
+          (context.comments.length > 0 || context.replies.length > 0))
+      ) {
+        context.currentSessionId = crypto.randomUUID()
+        context.currentSessionStartedAt = new Date().toISOString()
+        context.currentSessionEndedAt = null
+        context.archivedSessionId = null
+        context.comments = []
+        context.replies = []
+      }
+    }
+
     return {
       contexts: {},
+      currentUserId: null,
       setIsRunning: (accountId, isRunning) =>
         set(state => {
           const context = ensureContext(state, accountId)
           context.isRunning = isRunning
+          saveToStorage(accountId, context)
         }),
       setIsListening: (accountId, isListening) =>
         set(state => {
           const context = ensureContext(state, accountId)
+          if (isListening === 'listening') {
+            beginNewSessionIfNeeded(context)
+          } else if (context.isListening === 'listening' && isListening === 'stopped') {
+            archiveCurrentSession(context)
+          }
           context.isListening = isListening
+          saveToStorage(accountId, context)
         }),
 
       addComment: (accountId, comment) =>
@@ -142,6 +267,7 @@ export const useAutoReplyStore = create<AutoReplyState & AutoReplyAction>()(
           const context = ensureContext(state, accountId)
           // 限制评论数量，防止内存无限增长
           context.comments = [{ ...comment }, ...context.comments].slice(0, AUTO_REPLY.MAX_COMMENTS)
+          saveToStorage(accountId, context)
         }),
       addReply: (accountId, commentId, nickname, content, metadata, isSent = false) =>
         set(state => {
@@ -159,6 +285,10 @@ export const useAutoReplyStore = create<AutoReplyState & AutoReplyAction>()(
               matchedTitle: metadata?.matchedTitle,
               questionType: metadata?.questionType,
               matchedFields: metadata?.matchedFields,
+              replyIntent: metadata?.replyIntent,
+              factStatus: metadata?.factStatus,
+              guardrailAction: metadata?.guardrailAction,
+              guardrailReason: metadata?.guardrailReason,
               knowledgeMissReason: metadata?.knowledgeMissReason,
               wasDeduplicated: metadata?.wasDeduplicated,
             },
@@ -167,6 +297,7 @@ export const useAutoReplyStore = create<AutoReplyState & AutoReplyAction>()(
                 reply.commentId !== commentId && !(!reply.isSent && reply.replyFor === nickname),
             ),
           ].slice(0, AUTO_REPLY.MAX_REPLIES)
+          saveToStorage(accountId, context)
         }),
       markReplySent: (accountId, commentId) =>
         set(state => {
@@ -174,13 +305,167 @@ export const useAutoReplyStore = create<AutoReplyState & AutoReplyAction>()(
           const reply = context.replies.find(item => item.commentId === commentId)
           if (reply) {
             reply.isSent = true
+            saveToStorage(accountId, context)
           }
         }),
       removeReply: (accountId, commentId) =>
         set(state => {
           const context = ensureContext(state, accountId)
           context.replies = context.replies.filter(reply => reply.commentId !== commentId)
+          saveToStorage(accountId, context)
         }),
+      clearHistory: accountId =>
+        set(state => {
+          const context = ensureContext(state, accountId)
+          context.comments = []
+          context.replies = []
+          context.historySessions = []
+          context.currentSessionId = null
+          context.currentSessionStartedAt = null
+          context.currentSessionEndedAt = null
+          context.archivedSessionId = null
+          saveToStorage(accountId, context)
+        }),
+      recordStopAudit: (accountId, payload) =>
+        set(state => {
+          const context = ensureContext(state, accountId)
+          context.lastStopReason = payload.reason
+          context.lastStopDetail = payload.detail
+          context.lastStoppedAt = payload.at ?? new Date().toISOString()
+          saveToStorage(accountId, context)
+        }),
+      syncLiveSession: (accountId, session) =>
+        set(state => {
+          const context = ensureContext(state, accountId)
+          if (!session.sessionId) {
+            if (session.endedAt && context.currentSessionId) {
+              context.currentSessionEndedAt = session.endedAt
+              saveToStorage(accountId, context)
+            }
+            return
+          }
+
+          if (context.currentSessionId && context.currentSessionId !== session.sessionId) {
+            archiveCurrentSession(context)
+            context.comments = []
+            context.replies = []
+            context.archivedSessionId = null
+          }
+
+          context.currentSessionId = session.sessionId
+          context.currentSessionStartedAt = session.startedAt
+          context.currentSessionEndedAt = session.endedAt
+          saveToStorage(accountId, context)
+        }),
+      ensureContextLoaded: (userId, accountId) => {
+        const loadContext = () => {
+          set(state => {
+            if (state.contexts[accountId]) {
+              console.log(`[AutoReply] Context already loaded for account ${accountId}, skip`)
+              return
+            }
+
+            state.currentUserId = userId
+            const restored = loadSingleAccountScopedContext<AutoReplyContext, 'auto-reply-history'>(
+              {
+                namespace: 'auto-reply-history',
+                userId,
+                accountId,
+                restoreContext: (savedContext: AutoReplyContext) => ({
+                  ...savedContext,
+                  isRunning: false,
+                  isListening: 'stopped',
+                  lastStopReason: savedContext.lastStopReason,
+                  lastStoppedAt: savedContext.lastStoppedAt,
+                  lastStopDetail: savedContext.lastStopDetail,
+                  currentSessionId: savedContext.currentSessionId ?? null,
+                  currentSessionStartedAt: savedContext.currentSessionStartedAt ?? null,
+                  currentSessionEndedAt: savedContext.currentSessionEndedAt ?? null,
+                  archivedSessionId: savedContext.archivedSessionId ?? null,
+                  historySessions: (savedContext.historySessions ?? []).slice(0, 50),
+                  comments: savedContext.comments.slice(0, AUTO_REPLY.MAX_COMMENTS),
+                  replies: savedContext.replies.slice(0, AUTO_REPLY.MAX_REPLIES),
+                }),
+              },
+            )
+
+            console.log(
+              `[AutoReply] Hydrating single account context for ${accountId}: ${restored ? 'restored' : 'created-default'}`,
+            )
+            state.contexts[accountId] = restored ?? createDefaultContext()
+          })
+        }
+
+        runWhenAccountsReady(loadContext)
+      },
+      loadUserContexts: (userId: string) => {
+        const loadContexts = () => {
+          set(state => {
+            const prevContexts: Record<string, AutoReplyContext> =
+              state.currentUserId === userId ? state.contexts : {}
+            state.currentUserId = userId
+            const loadedContexts: Record<string, AutoReplyContext> = loadAccountScopedContexts({
+              namespace: 'auto-reply-history',
+              userId,
+              restoreContext: (savedContext: AutoReplyContext) => ({
+                ...savedContext,
+                isRunning: false,
+                isListening: 'stopped',
+                lastStopReason: savedContext.lastStopReason,
+                lastStoppedAt: savedContext.lastStoppedAt,
+                lastStopDetail: savedContext.lastStopDetail,
+                currentSessionId: savedContext.currentSessionId ?? null,
+                currentSessionStartedAt: savedContext.currentSessionStartedAt ?? null,
+                currentSessionEndedAt: savedContext.currentSessionEndedAt ?? null,
+                archivedSessionId: savedContext.archivedSessionId ?? null,
+                historySessions: (savedContext.historySessions ?? []).slice(0, 50),
+                comments: savedContext.comments.slice(0, AUTO_REPLY.MAX_COMMENTS),
+                replies: savedContext.replies.slice(0, AUTO_REPLY.MAX_REPLIES),
+              }),
+            })
+
+            console.log(
+              `[AutoReply] Loading all contexts for user ${userId}: loaded=${Object.keys(loadedContexts).length}, prev=${Object.keys(prevContexts).length}`,
+            )
+            state.contexts = loadedContexts
+
+            for (const [accountId, existingContext] of Object.entries(prevContexts)) {
+              if (!existingContext) continue
+
+              const hasActiveRuntimeState =
+                existingContext.isRunning || existingContext.isListening !== 'stopped'
+
+              if (hasActiveRuntimeState) {
+                console.log(
+                  `[AutoReply] Preserving in-memory context for ${accountId}: isRunning=${existingContext.isRunning}, isListening=${existingContext.isListening}`,
+                )
+                state.contexts[accountId] = existingContext
+              } else if (!state.contexts[accountId]) {
+                state.contexts[accountId] = existingContext
+              }
+            }
+          })
+        }
+
+        runWhenAccountsReady(loadContexts)
+      },
+      resetAllContexts: () => {
+        set(state => {
+          persistAllAccountScopedContexts({
+            namespace: 'auto-reply-history',
+            userId: state.currentUserId,
+            contexts: state.contexts,
+            logPrefix: '[AutoReply]',
+            serialize: savedContext => ({
+              ...savedContext,
+              isRunning: false,
+              isListening: 'stopped' as ListeningStatus,
+            }),
+          })
+          state.contexts = {}
+          state.currentUserId = null
+        })
+      },
     }
   }),
 )
@@ -334,11 +619,13 @@ const handleAIReply = async (
     model,
     apiKey,
     customBaseURL,
+    conversationMode = 'latest-turn',
   }: {
     provider: AIProvider
     model: string
     apiKey: string
     customBaseURL: string
+    conversationMode?: 'latest-turn' | 'current-only'
   },
   onReply: (content: string, isSent?: boolean) => void,
   errorHandler: ReturnType<typeof useErrorHandler>['handleError'],
@@ -396,7 +683,9 @@ const handleAIReply = async (
   const userReplies = allReplies.filter(reply => reply.replyFor === comment.nick_name)
 
   // 生成 AI 请求的消息体
-  const plainMessages = buildAutoReplyConversation(comment, userComments, userReplies)
+  const plainMessages = buildAutoReplyConversation(comment, userComments, userReplies, {
+    mode: conversationMode,
+  })
 
   // 构造系统提示
   const systemPrompt = buildAutoReplySystemPrompt(
@@ -496,6 +785,7 @@ const maybePolishProductKnowledgeReply = async ({
 export function useAutoReply() {
   const currentAccountId = useAccounts(state => state.currentAccountId)
   const accountName = useCurrentLiveControl(ctx => ctx.accountName)
+  const { user, isAuthenticated } = useAuthStore()
   const defaultContextRef = useRef(createDefaultContext())
   const context = useAutoReplyStore(
     state => state.contexts[currentAccountId] ?? defaultContextRef.current,
@@ -506,6 +796,8 @@ export function useAutoReply() {
   const setIsRunning = useAutoReplyStore(state => state.setIsRunning)
   const setIsListening = useAutoReplyStore(state => state.setIsListening)
   const removeReply = useAutoReplyStore(state => state.removeReply)
+  const clearHistory = useAutoReplyStore(state => state.clearHistory)
+  const syncLiveSession = useAutoReplyStore(state => state.syncLiveSession)
   const provider = useAIChatStore(state => state.config.provider)
   const model = useAIChatStore(state => state.config.model)
   const apiKeys = useAIChatStore(state => state.apiKeys)
@@ -514,11 +806,52 @@ export function useAutoReply() {
   const reportTrialUse = useAITrialStore(state => state.reportUse)
   const { config } = useAutoReplyConfig()
   const { handleError } = useErrorHandler()
+  const { ensureContextLoaded, loadUserContexts } = useAutoReplyStore()
 
-  const { isListening, comments, replies } = context
+  const {
+    isListening,
+    lastStopReason,
+    lastStoppedAt,
+    lastStopDetail,
+    comments,
+    replies,
+    historySessions,
+    currentSessionId,
+    currentSessionStartedAt,
+    currentSessionEndedAt,
+  } = context
+  const liveSessionId = useCurrentLiveControl(ctx => ctx.liveSessionId)
+  const liveSessionStartedAt = useCurrentLiveControl(ctx => ctx.liveSessionStartedAt)
+  const liveSessionEndedAt = useCurrentLiveControl(ctx => ctx.liveSessionEndedAt)
   const latestAiRequestVersionRef = useRef<Record<string, number>>({})
   const viewerProductSessionRef = useRef<Record<string, ViewerProductSession>>({})
   const recentReplyCacheRef = useRef<Record<string, { content: string; at: number }>>({})
+
+  useEffect(() => {
+    if (currentAccountId && user?.id) {
+      const state = useAutoReplyStore.getState()
+      if (!state.contexts[currentAccountId]) {
+        ensureContextLoaded(user.id, currentAccountId)
+      }
+    }
+  }, [currentAccountId, user?.id, ensureContextLoaded])
+
+  useEffect(() => {
+    if (isAuthenticated && user?.id) {
+      const state = useAutoReplyStore.getState()
+      if (state.currentUserId !== user.id || Object.keys(state.contexts).length === 0) {
+        loadUserContexts(user.id)
+      }
+    }
+  }, [isAuthenticated, user?.id, loadUserContexts])
+
+  useEffect(() => {
+    syncLiveSession(currentAccountId, {
+      sessionId: liveSessionId,
+      startedAt: liveSessionStartedAt,
+      endedAt: liveSessionEndedAt,
+    })
+  }, [currentAccountId, liveSessionEndedAt, liveSessionId, liveSessionStartedAt, syncLiveSession])
 
   const handleComment = useMemoizedFn((comment: Message, accountId: string) => {
     // const context = contexts[accountId] || createDefaultContext()
@@ -596,14 +929,15 @@ export function useAutoReply() {
             const productKnowledgeItems =
               useAutoPopUpStore.getState().contexts[accountId]?.config.goods ?? []
             const viewerSessionKey = `${accountId}:${comment.nick_name}`
-            const productKnowledgeHit = tryProductKnowledgeReply({
+            const decision = decideAutoReply({
               comment: commentContent,
               items: productKnowledgeItems,
               viewerSession: viewerProductSessionRef.current[viewerSessionKey],
             })
+            const { productKnowledgeHit } = decision
 
-            if (productKnowledgeHit.hit) {
-              const templateReply = productKnowledgeHit.reply
+            if (decision.mode === 'product-kb') {
+              const templateReply = decision.replyContent
               const matchedKnowledgeItem = productKnowledgeHit.item
 
               if (productKnowledgeHit.shouldUpdateSession && productKnowledgeHit.slotIndex) {
@@ -614,12 +948,11 @@ export function useAutoReply() {
               }
 
               if (templateReply) {
-                const shouldSkipPolish =
-                  productKnowledgeHit.questionType === 'price' ||
-                  productKnowledgeHit.questionType === 'stock'
+                let guardrailAction: 'pass' | 'rewrite' = 'pass'
+                let guardrailReason: string | undefined
 
-                const finalReply =
-                  matchedKnowledgeItem && !shouldSkipPolish
+                let finalReply =
+                  matchedKnowledgeItem && decision.shouldPolishWithAi
                     ? await maybePolishProductKnowledgeReply({
                         commentText: commentContent,
                         templateReply,
@@ -632,6 +965,30 @@ export function useAutoReply() {
                         customBaseURL,
                       })
                     : templateReply
+
+                const guardedReply = validateGroundedProductReply({
+                  comment: commentContent,
+                  reply: finalReply,
+                  items: productKnowledgeItems,
+                  expectedItem: matchedKnowledgeItem,
+                })
+                if (!guardedReply.ok) {
+                  guardrailAction = 'rewrite'
+                  guardrailReason = guardedReply.reason
+                  finalReply = matchedKnowledgeItem ? templateReply : guardedReply.safeReply
+                }
+
+                const guardedTemplateReply = validateGroundedProductReply({
+                  comment: commentContent,
+                  reply: finalReply,
+                  items: productKnowledgeItems,
+                  expectedItem: matchedKnowledgeItem,
+                })
+                if (!guardedTemplateReply.ok) {
+                  guardrailAction = 'rewrite'
+                  guardrailReason = guardedTemplateReply.reason
+                  finalReply = guardedTemplateReply.safeReply
+                }
 
                 const sendableReply = enforceAutoReplyLength(finalReply)
                 const recentReplyKey = `${accountId}:${comment.nick_name}`
@@ -649,11 +1006,15 @@ export function useAutoReply() {
                     comment.nick_name,
                     sendableReply,
                     {
-                      source: 'product-kb',
+                      source: decision.diagnostics.source,
                       matchedSlotIndex: productKnowledgeHit.slotIndex,
                       matchedTitle: productKnowledgeHit.item?.title,
-                      questionType: productKnowledgeHit.questionType,
-                      matchedFields: productKnowledgeHit.matchedFields,
+                      questionType: decision.diagnostics.questionType,
+                      matchedFields: decision.diagnostics.matchedFields,
+                      replyIntent: decision.diagnostics.replyIntent,
+                      factStatus: decision.diagnostics.factStatus,
+                      guardrailAction,
+                      guardrailReason,
                       wasDeduplicated: true,
                     },
                     false,
@@ -682,16 +1043,83 @@ export function useAutoReply() {
                   comment.nick_name,
                   sendableReply,
                   {
-                    source: 'product-kb',
+                    source: decision.diagnostics.source,
                     matchedSlotIndex: productKnowledgeHit.slotIndex,
                     matchedTitle: productKnowledgeHit.item?.title,
-                    questionType: productKnowledgeHit.questionType,
-                    matchedFields: productKnowledgeHit.matchedFields,
+                    questionType: decision.diagnostics.questionType,
+                    matchedFields: decision.diagnostics.matchedFields,
+                    replyIntent: decision.diagnostics.replyIntent,
+                    factStatus: decision.diagnostics.factStatus,
+                    guardrailAction,
+                    guardrailReason,
                   },
                   isSent,
                 )
                 return
               }
+            }
+
+            if (decision.mode === 'safe-fallback' && decision.replyContent) {
+              const safeReply = enforceAutoReplyLength(decision.replyContent)
+              const recentReplyKey = `${accountId}:${comment.nick_name}`
+              const lastReply = recentReplyCacheRef.current[recentReplyKey]
+              if (
+                shouldSkipDuplicateReply({
+                  replyContent: safeReply,
+                  lastReplyContent: lastReply?.content,
+                  lastReplyAt: lastReply?.at,
+                })
+              ) {
+                addReply(
+                  accountId,
+                  comment.msg_id,
+                  comment.nick_name,
+                  safeReply,
+                  {
+                    source: decision.diagnostics.source,
+                    matchedSlotIndex: productKnowledgeHit.slotIndex,
+                    replyIntent: decision.diagnostics.replyIntent,
+                    factStatus: decision.diagnostics.factStatus,
+                    guardrailAction: decision.diagnostics.guardrailAction,
+                    guardrailReason: decision.diagnostics.guardrailReason,
+                    knowledgeMissReason: decision.diagnostics.knowledgeMissReason,
+                    wasDeduplicated: true,
+                  },
+                  false,
+                )
+                return
+              }
+
+              if (config.comment.aiReply.autoSend) {
+                void sendMessage(accountId, safeReply, handleError).then(sent => {
+                  if (sent) {
+                    markReplySent(accountId, comment.msg_id)
+                  }
+                })
+              }
+
+              recentReplyCacheRef.current[recentReplyKey] = {
+                content: safeReply,
+                at: Date.now(),
+              }
+
+              addReply(
+                accountId,
+                comment.msg_id,
+                comment.nick_name,
+                safeReply,
+                {
+                  source: decision.diagnostics.source,
+                  matchedSlotIndex: productKnowledgeHit.slotIndex,
+                  replyIntent: decision.diagnostics.replyIntent,
+                  factStatus: decision.diagnostics.factStatus,
+                  guardrailAction: decision.diagnostics.guardrailAction,
+                  guardrailReason: decision.diagnostics.guardrailReason,
+                  knowledgeMissReason: decision.diagnostics.knowledgeMissReason,
+                },
+                false,
+              )
+              return
             }
 
             const credentials = getEffectiveAICredentials({
@@ -718,6 +1146,7 @@ export function useAutoReply() {
                 model: credentials.model,
                 apiKey: credentials.apiKey,
                 customBaseURL: credentials.customBaseURL,
+                conversationMode: decision.aiConversationMode,
               },
               (replyContent: string, isSent = false) => {
                 if (latestAiRequestVersionRef.current[requestKey] !== requestVersion) {
@@ -738,9 +1167,12 @@ export function useAutoReply() {
                     comment.nick_name,
                     replyContent,
                     {
-                      source: 'ai',
+                      source: decision.diagnostics.source,
                       matchedSlotIndex: productKnowledgeHit.slotIndex,
-                      knowledgeMissReason: productKnowledgeHit.missReason,
+                      replyIntent: decision.diagnostics.replyIntent,
+                      factStatus: decision.diagnostics.factStatus,
+                      guardrailAction: decision.diagnostics.guardrailAction,
+                      knowledgeMissReason: decision.diagnostics.knowledgeMissReason,
                       wasDeduplicated: true,
                     },
                     false,
@@ -758,9 +1190,12 @@ export function useAutoReply() {
                   comment.nick_name,
                   replyContent,
                   {
-                    source: 'ai',
+                    source: decision.diagnostics.source,
                     matchedSlotIndex: productKnowledgeHit.slotIndex,
-                    knowledgeMissReason: productKnowledgeHit.missReason,
+                    replyIntent: decision.diagnostics.replyIntent,
+                    factStatus: decision.diagnostics.factStatus,
+                    guardrailAction: decision.diagnostics.guardrailAction,
+                    knowledgeMissReason: decision.diagnostics.knowledgeMissReason,
                   },
                   isSent,
                 )
@@ -827,8 +1262,15 @@ export function useAutoReply() {
     // 【Phase 2A】isRunning 对外暴露为 isEffectivelyRunning，绿点只基于真实运行态
     isRunning: isEffectivelyRunning,
     isListening,
+    lastStopReason,
+    lastStoppedAt,
+    lastStopDetail,
     comments, // 当前账户的评论
     replies, // 当前账户的回复
+    historySessions,
+    currentSessionId,
+    currentSessionStartedAt,
+    currentSessionEndedAt,
 
     // Actions (绑定到当前账户)
     handleComment,
@@ -837,5 +1279,6 @@ export function useAutoReply() {
     setIsListening: (listening: ListeningStatus) => setIsListening(currentAccountId, listening),
     markReplySent: (commentId: string) => markReplySent(currentAccountId, commentId),
     removeReply: (commentId: string) => removeReply(currentAccountId, commentId),
+    clearHistory: () => clearHistory(currentAccountId),
   }
 }

@@ -21,6 +21,7 @@ export type StorageDataType =
   | 'account-config' // 账号配置
   | 'chrome-config' // Chrome配置
   | 'auto-reply' // 自动回复配置
+  | 'auto-reply-history' // 自动回复历史
   | 'auto-message' // 自动发言配置
   | 'auto-popup' // 自动弹窗配置
   | 'live-control' // 直播控制配置

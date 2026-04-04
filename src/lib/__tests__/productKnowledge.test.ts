@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   buildFallbackFaqFromKnowledgeDraft,
   buildProductKnowledgePolishPrompt,
+  buildProductListReply,
+  buildSafeProductFallbackReply,
   tryProductKnowledgeReply,
+  validateGroundedProductReply,
 } from '@/lib/productKnowledge'
 
 describe('productKnowledge', () => {
@@ -131,5 +134,151 @@ describe('productKnowledge', () => {
 
     expect(prompt).toContain('用户补充要求：')
     expect(prompt).toContain('更像主播口播，不要太像客服')
+  })
+
+  it('answers product list questions from the real goods list', () => {
+    const result = tryProductKnowledgeReply({
+      comment: '今天都有什么产品',
+      items: [
+        {
+          id: 1,
+          shortTitle: '修护面霜',
+        },
+        {
+          id: 2,
+          shortTitle: '舒缓精华',
+        },
+        {
+          id: 3,
+          shortTitle: '补水喷雾',
+        },
+      ],
+    })
+
+    expect(result.hit).toBe(true)
+    expect(result.questionType).toBe('list')
+    expect(result.reply).toContain('1号修护面霜')
+    expect(result.reply).toContain('2号舒缓精华')
+    expect(result.reply).toContain('3号补水喷雾')
+  })
+
+  it('does not invent a featured product when asked about today main push', () => {
+    const result = tryProductKnowledgeReply({
+      comment: '今天主推什么',
+      items,
+    })
+
+    expect(result.hit).toBe(true)
+    expect(result.questionType).toBe('list')
+    expect(result.reply).not.toContain('主推3号')
+    expect(result.reply).not.toContain('胶原修护面霜')
+  })
+
+  it('returns a safe fallback for product questions when no goods are configured', () => {
+    expect(buildSafeProductFallbackReply('今天都有什么产品', [])).toContain('还没配置好')
+    expect(buildSafeProductFallbackReply('这个多少钱', [])).toContain('按链接号讲更准确')
+  })
+
+  it('guards featured claims and invalid slot references in replies', () => {
+    expect(
+      validateGroundedProductReply({
+        comment: '今天主推什么',
+        reply: '今天主推3号链接防晒衣',
+        items,
+      }).ok,
+    ).toBe(false)
+
+    expect(
+      validateGroundedProductReply({
+        comment: '介绍下三号链接',
+        reply: '9号链接是修护面霜',
+        items,
+        expectedItem: items[0],
+      }).ok,
+    ).toBe(false)
+  })
+
+  it('guards product facts such as other item labels, prices, promo and stock', () => {
+    const multiItems = [
+      items[0],
+      {
+        id: 4,
+        title: '舒缓精华',
+        priceText: '129元',
+        promoText: '第二件半价',
+        stockText: '现货充足',
+        aliases: ['精华'],
+      },
+    ]
+
+    expect(
+      validateGroundedProductReply({
+        comment: '介绍下三号链接',
+        reply: '3号链接是舒缓精华',
+        items: multiItems,
+        expectedItem: multiItems[0],
+      }).ok,
+    ).toBe(false)
+
+    expect(
+      validateGroundedProductReply({
+        comment: '三号链接多少钱',
+        reply: '3号链接现在129元',
+        items: multiItems,
+        expectedItem: multiItems[0],
+      }).ok,
+    ).toBe(false)
+
+    expect(
+      validateGroundedProductReply({
+        comment: '三号链接有什么优惠',
+        reply: '3号链接第二件半价',
+        items: multiItems,
+        expectedItem: multiItems[0],
+      }).ok,
+    ).toBe(false)
+
+    expect(
+      validateGroundedProductReply({
+        comment: '三号链接有货吗',
+        reply: '3号链接现货充足',
+        items: multiItems,
+        expectedItem: multiItems[0],
+      }).ok,
+    ).toBe(false)
+  })
+
+  it('guards ungrounded list replies that smuggle in price or stock facts', () => {
+    const multiItems = [
+      { id: 1, shortTitle: '修护面霜' },
+      { id: 2, shortTitle: '舒缓精华' },
+    ]
+
+    expect(
+      validateGroundedProductReply({
+        comment: '今天都有什么产品',
+        reply: '今天有1号修护面霜，现在99元',
+        items: multiItems,
+      }).ok,
+    ).toBe(false)
+
+    expect(
+      validateGroundedProductReply({
+        comment: '今天都有什么产品',
+        reply: '今天有1号修护面霜，现货充足',
+        items: multiItems,
+      }).ok,
+    ).toBe(false)
+  })
+
+  it('builds a concise product list reply', () => {
+    expect(
+      buildProductListReply('今天都有什么产品', [
+        { id: 1, shortTitle: '修护面霜' },
+        { id: 2, shortTitle: '舒缓精华' },
+        { id: 3, shortTitle: '补水喷雾' },
+        { id: 4, shortTitle: '清洁泥膜' },
+      ]),
+    ).toBe('今天有1号修护面霜、2号舒缓精华、3号补水喷雾等几款，您想先看哪号')
   })
 })
